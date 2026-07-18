@@ -5,8 +5,10 @@ from __future__ import annotations
 import logging
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.models import Page, PageStatus
+from src.review_shortcuts import review_shortcuts_html
 from src.runtime import application_database, application_document_service
 
 LOGGER = logging.getLogger(__name__)
@@ -161,19 +163,37 @@ if st.session_state.get("review_last_viewed_page_id") != page.id:
         LOGGER.exception("记录页面访问时间失败：page_id=%s", page.id)
         st.warning(f"页面可以继续编辑，但访问时间记录失败：{exc}")
 
-heading_columns = st.columns([5, 1, 1])
+progress = database.review_progress(document.id)
+heading_columns = st.columns([5, 1])
 heading_columns[0].markdown(f"### {document.title}")
 heading_columns[1].metric("当前页", f"第 {page.page_number} 页")
-heading_columns[2].markdown(
+progress_columns = st.columns(4)
+progress_columns[0].markdown(
     "<div style='margin-top:0.45rem'>"
     f"<span style='display:inline-block;padding:0.35rem 0.7rem;border-radius:999px;"
     "background:#e8f0fe;color:#174ea6;font-weight:700;white-space:nowrap'>"
     f"{page.status.label}</span></div>",
     unsafe_allow_html=True,
 )
+progress_columns[1].metric("已处理数", progress.processed)
+progress_columns[2].metric("总页数", progress.total)
+progress_columns[3].metric("剩余待处理数", progress.remaining)
 
 previous_page = database.get_adjacent_review_page(page.id, "previous", selected_document)
 next_page = database.get_adjacent_review_page(page.id, "next", selected_document)
+continuation_page = next_page
+if page.status not in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}:
+    continuation_page = review_queue[0] if review_queue else None
+if st.button(
+    "继续处理下一待复核页",
+    disabled=continuation_page is None,
+    use_container_width=True,
+):
+    if continuation_page is not None and _is_dirty(page.id):
+        st.session_state[_PENDING_TARGET_KEY] = continuation_page.id
+    elif continuation_page is not None:
+        _activate_page(continuation_page.id)
+    st.rerun()
 
 image_column, editor_column = st.columns([1, 1], gap="large")
 with image_column:
@@ -335,3 +355,9 @@ with editor_column:
 
 if page.status is PageStatus.FAILED:
     st.warning("该页处理失败；其他已完成页面和原 PDF 不受影响。")
+
+st.caption(
+    "快捷键：Ctrl+S 保存草稿；Ctrl+Enter 保存、复核并进入下一页；"
+    "Alt+Left / Alt+Right 切换待处理页（文本输入时不触发方向快捷键）。"
+)
+components.html(review_shortcuts_html(), height=0, width=0)

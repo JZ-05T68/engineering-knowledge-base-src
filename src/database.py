@@ -23,6 +23,7 @@ from src.models import (
     Page,
     PageStatus,
     Project,
+    ReviewProgress,
     SearchResult,
     Tag,
 )
@@ -918,6 +919,30 @@ class Database:
                 """
             ).fetchone()
         return DashboardStats(**{key: int(row[key]) for key in row.keys()})
+
+    def review_progress(self, document_id: int | None = None) -> ReviewProgress:
+        """Return live workflow progress globally or for one document."""
+
+        where = "WHERE document_id = ?" if document_id is not None else ""
+        parameters: tuple[object, ...] = (document_id,) if document_id is not None else ()
+        with self._connection() as connection:
+            row = connection.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN review_status = 'pending' THEN 1 ELSE 0 END) AS pending,
+                    SUM(CASE WHEN review_status = 'draft' THEN 1 ELSE 0 END) AS draft,
+                    SUM(CASE WHEN review_status = 'reviewed' THEN 1 ELSE 0 END) AS reviewed,
+                    SUM(CASE WHEN review_status = 'skipped' THEN 1 ELSE 0 END) AS skipped,
+                    SUM(CASE WHEN review_status = 'failed' THEN 1 ELSE 0 END) AS failed
+                FROM pages {where}
+                """,
+                parameters,
+            ).fetchone()
+        counts = {key: int(row[key] or 0) for key in row.keys()}
+        processed = counts["reviewed"] + counts["skipped"]
+        remaining = counts["pending"] + counts["draft"] + counts["failed"]
+        return ReviewProgress(processed=processed, remaining=remaining, **counts)
 
     def recent_edited_pages(self, limit: int = 5) -> list[Page]:
         with self._connection() as connection:

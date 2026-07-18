@@ -10,6 +10,7 @@ import src.runtime as runtime
 from src.database import Database
 from src.document_service import DocumentImportError, DocumentService
 from src.models import PageStatus
+from src.review_shortcuts import review_shortcuts_html
 
 
 def _build_review_app(
@@ -55,6 +56,7 @@ def test_review_ui_saves_draft_then_reviews_and_enters_next_page(
 
     assert not app.exception
     assert {
+        "继续处理下一待复核页",
         "保存草稿",
         "保存并标记已复核",
         "保存、复核并进入下一页",
@@ -62,6 +64,9 @@ def test_review_ui_saves_draft_then_reviews_and_enters_next_page(
         "上一待处理页",
         "下一待处理页",
     } <= {button.label for button in app.button}
+    assert {"当前页", "已处理数", "总页数", "剩余待处理数"} <= {
+        metric.label for metric in app.metric
+    }
 
     app.text_area(key="review_markdown_1").input("# 第一页草稿").run()
     _button(app, "保存草稿").click().run()
@@ -77,6 +82,17 @@ def test_review_ui_saves_draft_then_reviews_and_enters_next_page(
     assert first_page.status is PageStatus.REVIEWED
     assert app.session_state["review_active_page_id"] == 2
     assert not app.exception
+
+
+def test_shortcut_script_is_guarded_and_keeps_visible_buttons_authoritative() -> None:
+    html = review_shortcuts_html()
+
+    assert "保存草稿" in html
+    assert "保存、复核并进入下一页" in html
+    assert "下一待处理页" in html and "上一待处理页" in html
+    assert "isEditing" in html
+    assert "event.repeat" in html
+    assert "if (label && clickButton(label))" in html
 
 
 def test_review_ui_warns_before_navigation_with_unsaved_changes(

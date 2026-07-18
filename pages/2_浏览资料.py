@@ -111,6 +111,19 @@ st.caption(
     f"状态：{document.status_label}　|　SHA-256：{document.sha256[:12]}…"
 )
 
+next_document_review_page = next(iter(database.list_review_pages(document.id)), None)
+if st.button(
+    "继续处理下一待复核页",
+    type="primary",
+    disabled=next_document_review_page is None,
+    use_container_width=True,
+):
+    st.query_params.clear()
+    st.query_params["page_id"] = str(next_document_review_page.id)
+    st.switch_page("pages/4_待整理页面.py")
+if next_document_review_page is None:
+    st.caption("这份文档当前没有待处理、草稿待复核或处理失败的页面。")
+
 with st.expander("文档标签与所属项目"):
     association_columns = st.columns(2)
     selected_document_tags = association_columns[0].multiselect(

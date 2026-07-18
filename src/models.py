@@ -208,3 +208,17 @@ class DashboardStats:
         """Pages still present in the default review queue."""
 
         return self.pending_pages + self.draft_pages + self.failed_pages
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewProgress:
+    """Manual-review progress for the whole library or one document."""
+
+    processed: int
+    total: int
+    remaining: int
+    pending: int
+    draft: int
+    reviewed: int
+    skipped: int
+    failed: int

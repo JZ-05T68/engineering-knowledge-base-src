@@ -20,6 +20,7 @@ try:
     stats = database.dashboard_stats()
     recent_documents = database.list_documents(sort_by="imported_desc")[:5]
     recent_pages = database.recent_edited_pages(5)
+    next_review_page = next(iter(database.list_review_pages()), None)
 except Exception as exc:
     LOGGER.exception("应用初始化失败")
     st.error(f"应用初始化失败：{exc}")
@@ -40,6 +41,18 @@ for column, label, value in zip(
     strict=True,
 ):
     column.metric(label, value)
+
+if st.button(
+    "继续处理下一待复核页",
+    type="primary",
+    disabled=next_review_page is None,
+    use_container_width=True,
+):
+    st.query_params.clear()
+    st.query_params["page_id"] = str(next_review_page.id)
+    st.switch_page("pages/4_待整理页面.py")
+if next_review_page is None:
+    st.caption("当前没有待处理、草稿待复核或处理失败的页面。")
 
 left, right = st.columns(2, gap="large")
 with left:

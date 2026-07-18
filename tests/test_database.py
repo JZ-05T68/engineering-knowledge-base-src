@@ -273,6 +273,8 @@ def test_v2_database_with_78_pages_is_backed_up_and_migrated_losslessly(
         stats.failed_pages,
     ) == (74, 2, 1, 0, 1)
     assert stats.review_pages == 77
+    progress = database.review_progress(1)
+    assert (progress.processed, progress.total, progress.remaining) == (1, 78, 77)
     assert database.get_page_by_number(1, 2).status is PageStatus.DRAFT  # type: ignore[union-attr]
     assert database.get_page_by_number(1, 3).status is PageStatus.REVIEWED  # type: ignore[union-attr]
     assert database.get_page_by_number(1, 4).status is PageStatus.DRAFT  # type: ignore[union-attr]
