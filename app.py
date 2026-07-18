@@ -1,4 +1,4 @@
-"""Streamlit dashboard for Engineering Knowledge Base v0.0.3."""
+"""Streamlit dashboard for Engineering Knowledge Base v0.0.4."""
 
 from __future__ import annotations
 
@@ -10,8 +10,8 @@ from src.runtime import application_database, application_settings
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="工程知识库 v0.0.3", page_icon="📚", layout="wide")
-st.title("工程知识库 v0.0.3")
+st.set_page_config(page_title="工程知识库 v0.0.4", page_icon="📚", layout="wide")
+st.title("工程知识库 v0.0.4")
 st.caption("本地、单用户的页面级工程知识管理系统")
 
 try:
