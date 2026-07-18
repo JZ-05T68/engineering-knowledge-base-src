@@ -1,15 +1,25 @@
-# Engineering Knowledge Base v0.0.2
+# Engineering Knowledge Base v0.0.3
 
 一个本地优先、单用户的个人工程知识管理系统。它把 PDF 资料转化为可长期整理、检索和复用的页面级知识资产：**文档 → 理解 → 检索 → 复用 → 工程能力**。
 
 项目默认只监听 `127.0.0.1`，核心功能可离线使用，不需要账号、VPN、云存储、API Key 或付费服务。系统不包含注册、登录、权限、OAuth、JWT 或云同步。
 
-## v0.0.2 功能
+## v0.0.3 功能
 
 - 导入 PDF，使用 SHA-256 检测相同内容；同名但内容不同的文件可分别导入。
 - 原 PDF 保存到 `data/raw/`，每页以清晰 PNG 保存到 `data/pages/<文档编号>/`。
 - 提取 PDF 文本层；扫描、手写、文本不足或失败页面进入待复核列表。
-- 每页拥有独立 Markdown 笔记，支持编辑、预览、保存状态、清空和持久化。
+- 页面复核状态统一为 `pending`（待处理）、`draft`（草稿待复核）、
+  `reviewed`（人工复核完成）、`skipped`（暂不整理）和 `failed`（处理失败）。
+- 每页拥有独立 Markdown 笔记；普通保存只生成草稿，不会自动声称人工复核完成。
+- 待复核页面支持保存草稿、保存并复核、保存复核后进入下一页、暂时跳过，
+  以及上一/下一待处理页；队列默认包含待处理、草稿和失败页，不包含已复核与跳过页。
+- 切换页面前检查未保存修改；重复保存相同内容不会重复写文件或刷新更新时间；
+  保存失败时编辑框内容保持不变。
+- 待复核页顶部显示文档、页码、完整中文状态、已处理数、总页数和剩余待处理数。
+- 首页、浏览资料和待复核页面均提供“继续处理下一待复核页”入口。
+- 可选快捷键：`Ctrl+S` 保存草稿、`Ctrl+Enter` 保存复核并进入下一页、
+  `Alt+Left` / `Alt+Right` 切换待处理页；方向快捷键不会在文本输入时触发。
 - 双栏阅读器同时显示可滚动/缩放的页面原图与 Markdown 编辑区。
 - 文档和页面均可关联可复用标签及本地项目。
 - 文档可按名称、导入时间、更新时间、标签、项目和导入状态筛选。
@@ -19,7 +29,7 @@
 - 一键后台启动/停止、重复启动检测、PID 身份校验、本机健康检查和轮转日志。
 - 可选的 Windows 当前用户登录后自动启动；优先使用任务计划程序，受系统策略限制时回退到当前用户“启动”文件夹。
 
-v0.0.2 预留了 OCR 文本字段，但不接入云端 OCR，也不直接调用任何大模型 API。外部 AI 提示词仍是用户主动复制的纯文本。
+v0.0.3 继续保留 OCR 文本字段，但不接入云端 OCR，也不直接调用任何大模型 API。外部 AI 提示词仍是用户主动复制的纯文本。
 
 ## 环境要求
 
@@ -27,7 +37,7 @@ v0.0.2 预留了 OCR 文本字段，但不接入云端 OCR，也不直接调用�
 - Python 3.11
 - Python 自带 SQLite 支持 FTS5
 
-项目依赖均列在 `requirements.txt`。v0.0.2 没有新增第三方依赖，继续使用 Streamlit、PyMuPDF、Pillow、pydantic-settings、jieba、rapidfuzz、pytest 和 ruff。
+项目依赖均列在 `requirements.txt`。v0.0.3 没有新增第三方依赖，继续使用 Streamlit、PyMuPDF、Pillow、pydantic-settings、jieba、rapidfuzz、pytest 和 ruff。
 
 ## 首次安装
 
@@ -128,13 +138,22 @@ schtasks.exe /Query /TN EngineeringKnowledgeBase
 
 ### 升级
 
-启动 v0.0.2 时，程序读取 `schema_migrations`。检测到 v0.0.1 数据库后会先使用 SQLite 在线备份 API 创建：
+启动 v0.0.3 时，程序读取 `schema_migrations`。检测到 v0.0.1 或 v0.0.2 数据库后，
+会先使用 SQLite 在线备份 API 创建一致性备份。v0.0.2 升级时的文件形如：
 
 ```text
-data/database/backups/knowledge.v1.<时间戳>.db
+data/database/backups/knowledge.v2.<时间戳>.db
 ```
 
-随后在事务中升级到 schema v2。失败会回滚，原库和迁移前备份都保留；不得通过删除 `knowledge.db` 升级。
+随后在单个事务中升级到 schema v3，新增 `review_status`、`note_updated_at`、
+`reviewed_at` 和 `last_viewed_at`。v2 的原处理状态列会保留；旧待复核页迁移为
+`pending`，旧非空 Markdown 保守迁移为 `draft`，明确且不含自动笔记歧义的人工状态迁移为
+`reviewed`，失败页迁移为 `failed`。迁移会重建并校验 FTS5 索引，不删除文档、页面或用户文件。
+
+迁移失败会回滚整个 schema v3 事务，原数据库保持旧版本，迁移前备份也会保留。
+回滚方案是：先停止服务，把当前 `knowledge.db` 改名保留，再将对应
+`knowledge.v2.<时间戳>.db` 复制为 `knowledge.db`，最后重新启动旧版程序验证；
+不要通过删除数据库或覆盖整个 `data/` 目录来回滚。
 
 ### 手动备份
 

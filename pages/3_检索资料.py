@@ -13,7 +13,7 @@ from src.search_service import SearchService
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="检索资料｜工程知识库 v0.0.2", page_icon="🔎", layout="wide")
+st.set_page_config(page_title="检索资料｜工程知识库 v0.0.3", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("本地搜索文档标题、文件名、页面文本、OCR、Markdown 笔记、标签和项目。")
 

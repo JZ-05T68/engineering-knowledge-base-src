@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.runtime import application_database
 
-st.set_page_config(page_title="导入记录｜工程知识库 v0.0.2", page_icon="📋", layout="wide")
+st.set_page_config(page_title="导入记录｜工程知识库 v0.0.3", page_icon="📋", layout="wide")
 st.title("导入记录")
 st.caption("查看每次导入的状态、页数统计和错误；失败记录不会隐藏。")
 
@@ -17,7 +17,7 @@ except Exception as exc:
     st.stop()
 
 if not records:
-    st.info("v0.0.2 启用后还没有新的导入记录；旧文档已经保留。")
+    st.info("当前还没有新的导入记录；旧版本文档已经保留。")
     st.stop()
 
 for record in records:

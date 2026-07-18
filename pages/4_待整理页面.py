@@ -172,7 +172,7 @@ progress_columns[0].markdown(
     "<div style='margin-top:0.45rem'>"
     f"<span style='display:inline-block;padding:0.35rem 0.7rem;border-radius:999px;"
     "background:#e8f0fe;color:#174ea6;font-weight:700;white-space:nowrap'>"
-    f"{page.status.label}</span></div>",
+    f"当前状态：{page.status.label}</span></div>",
     unsafe_allow_html=True,
 )
 progress_columns[1].metric("已处理数", progress.processed)
