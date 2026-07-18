@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 
 class MigrationError(RuntimeError):
@@ -63,10 +63,18 @@ def migrate_database(database_path: Path) -> Path | None:
             current_version = 2
         if current_version < 3:
             _apply_version_three(connection)
+            current_version = 3
+        if current_version < 4:
+            _apply_version_four(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
             raise MigrationError(f"迁移后数据库完整性检查失败：{integrity}")
+        foreign_key_violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+        if foreign_key_violations:
+            raise MigrationError(
+                f"迁移后发现 {len(foreign_key_violations)} 条外键违规记录"
+            )
     except Exception as exc:
         connection.rollback()
         LOGGER.exception("数据库迁移失败，原数据库和迁移前备份均已保留")
@@ -406,6 +414,112 @@ def _apply_version_three(connection: sqlite3.Connection) -> None:
     except Exception:
         connection.rollback()
         raise
+
+
+def _apply_version_four(connection: sqlite3.Connection) -> None:
+    """Add durable evidence baskets without rewriting page or FTS data."""
+
+    fingerprint = _core_data_fingerprint(connection)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE evidence_baskets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL CHECK (
+                    length(trim(name)) > 0 AND length(name) <= 100
+                ),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE evidence_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                basket_id INTEGER NOT NULL
+                    REFERENCES evidence_baskets(id) ON DELETE CASCADE,
+                document_id INTEGER NOT NULL
+                    REFERENCES documents(id) ON DELETE CASCADE,
+                page_id INTEGER NOT NULL
+                    REFERENCES pages(id) ON DELETE CASCADE,
+                document_title TEXT NOT NULL CHECK (length(trim(document_title)) > 0),
+                filename TEXT NOT NULL CHECK (length(trim(filename)) > 0),
+                page_number INTEGER NOT NULL CHECK (page_number > 0),
+                review_status TEXT NOT NULL CHECK (review_status IN (
+                    'pending', 'draft', 'reviewed', 'skipped', 'failed'
+                )),
+                projects_json TEXT NOT NULL DEFAULT '[]',
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                evidence_text TEXT NOT NULL CHECK (length(trim(evidence_text)) > 0),
+                text_kind TEXT NOT NULL CHECK (text_kind IN (
+                    'original_material', 'user_excerpt'
+                )),
+                context TEXT NOT NULL DEFAULT '',
+                user_note TEXT NOT NULL DEFAULT '' CHECK (length(user_note) <= 4000),
+                source_text_sha256 TEXT NOT NULL CHECK (length(source_text_sha256) = 64),
+                source_locator TEXT NOT NULL CHECK (length(trim(source_locator)) > 0),
+                selection_sha256 TEXT NOT NULL CHECK (length(selection_sha256) = 64),
+                added_at TEXT NOT NULL,
+                position INTEGER NOT NULL CHECK (position > 0),
+                UNIQUE (basket_id, page_id, selection_sha256),
+                UNIQUE (basket_id, position)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_evidence_items_page ON evidence_items(page_id)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_evidence_items_document ON evidence_items(document_id)"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (4, ?)",
+            (_utc_now(),),
+        )
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v4 迁移改变了现有文档、页面或 FTS 数据")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v4")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _core_data_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:
+    """Return invariants that schema-only migrations must preserve exactly."""
+
+    document_count = connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+    page_count = connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0]
+    fts_count = connection.execute("SELECT COUNT(*) FROM page_search").fetchone()[0]
+    statuses = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT review_status, COUNT(*) FROM pages "
+            "GROUP BY review_status ORDER BY review_status"
+        ).fetchall()
+    )
+    document_paths = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT id, source_path FROM documents ORDER BY id"
+        ).fetchall()
+    )
+    page_paths = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT id, image_path FROM pages ORDER BY id"
+        ).fetchall()
+    )
+    return (
+        document_count,
+        page_count,
+        fts_count,
+        statuses,
+        document_paths,
+        page_paths,
+    )
 
 
 def _create_v2_tables(connection: sqlite3.Connection) -> None:

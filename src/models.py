@@ -94,6 +94,22 @@ class SearchSort(StrEnum):
         }[self]
 
 
+class EvidenceTextKind(StrEnum):
+    """Trust classification for text stored in an evidence item."""
+
+    ORIGINAL = "original_material"
+    USER_EXCERPT = "user_excerpt"
+
+    @property
+    def label(self) -> str:
+        """Return a clear Chinese label without overstating source verification."""
+
+        return {
+            self.ORIGINAL: "已匹配原始材料",
+            self.USER_EXCERPT: "用户摘录（未经原文匹配确认）",
+        }[self]
+
+
 @dataclass(frozen=True, slots=True)
 class SearchFilters:
     """Composable search filters; multiple tags and projects use AND semantics."""
@@ -243,6 +259,50 @@ class SearchResult:
     ocr_text: str = ""
     markdown_content: str = ""
     updated_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class SearchFacetCounts:
+    """Counts for search filters after applying every current condition."""
+
+    total: int
+    statuses: dict[PageStatus, int]
+    projects: dict[int, int]
+    tags: dict[int, int]
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceBasket:
+    """A durable, locally stored collection of page-level evidence."""
+
+    id: int
+    name: str
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceItem:
+    """One ordered, source-linked evidence selection in a basket."""
+
+    id: int
+    basket_id: int
+    document_id: int
+    page_id: int
+    document_title: str
+    filename: str
+    page_number: int
+    review_status: PageStatus
+    projects: tuple[str, ...]
+    tags: tuple[str, ...]
+    evidence_text: str
+    text_kind: EvidenceTextKind
+    context: str
+    user_note: str
+    source_text_sha256: str
+    source_locator: str
+    added_at: datetime
+    position: int
 
 
 @dataclass(frozen=True, slots=True)

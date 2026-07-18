@@ -94,6 +94,15 @@ def _create_v2_database(database_path: Path, page_count: int = 78) -> None:
         connection.commit()
 
 
+def _create_v3_database(database_path: Path, page_count: int = 8) -> None:
+    """Create a schema v3 database to exercise the v0.0.5 upgrade path."""
+
+    _create_v2_database(database_path, page_count=page_count)
+    with sqlite3.connect(database_path) as connection:
+        connection.row_factory = sqlite3.Row
+        migrations_module._apply_version_three(connection)
+
+
 def test_initialization_is_idempotent_and_schema_has_fts5(tmp_path: Path) -> None:
     database_path = tmp_path / "database" / "knowledge.db"
 
@@ -111,9 +120,15 @@ def test_initialization_is_idempotent_and_schema_has_fts5(tmp_path: Path) -> Non
             "SELECT COUNT(*) FROM schema_migrations"
         ).fetchone()[0]
 
-    assert {"documents", "pages", "page_search"} <= tables
+    assert {
+        "documents",
+        "pages",
+        "page_search",
+        "evidence_baskets",
+        "evidence_items",
+    } <= tables
     assert not any("user" in name.lower() or "account" in name.lower() for name in tables)
-    assert migration_count == 3
+    assert migration_count == 4
 
 
 def test_document_sha256_is_unique_and_metadata_persists(tmp_path: Path) -> None:
@@ -384,3 +399,68 @@ def test_failed_v3_migration_restores_v2_schema_and_data(
         assert "review_status" not in columns
         assert connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 8
         assert connection.execute("SELECT COUNT(*) FROM page_search").fetchone()[0] == 8
+
+
+def test_v3_to_v4_migration_preserves_core_data_and_adds_empty_evidence_tables(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "knowledge.db"
+    _create_v3_database(database_path)
+    with sqlite3.connect(database_path) as connection:
+        before = migrations_module._core_data_fingerprint(connection)
+
+    database = Database(database_path)
+
+    assert database.last_backup_path is not None
+    with sqlite3.connect(database_path) as connection:
+        after = migrations_module._core_data_fingerprint(connection)
+        version = connection.execute(
+            "SELECT MAX(version) FROM schema_migrations"
+        ).fetchone()[0]
+        basket_count = connection.execute(
+            "SELECT COUNT(*) FROM evidence_baskets"
+        ).fetchone()[0]
+        item_count = connection.execute(
+            "SELECT COUNT(*) FROM evidence_items"
+        ).fetchone()[0]
+        assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+    assert before == after
+    assert version == 4
+    assert (basket_count, item_count) == (0, 0)
+
+
+def test_failed_v4_migration_rolls_back_new_tables_and_keeps_v3_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "knowledge.db"
+    _create_v3_database(database_path)
+    original_fingerprint = migrations_module._core_data_fingerprint
+    calls = 0
+
+    def changed_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:
+        nonlocal calls
+        calls += 1
+        result = original_fingerprint(connection)
+        return result if calls == 1 else (*result, "simulated change")
+
+    monkeypatch.setattr(migrations_module, "_core_data_fingerprint", changed_fingerprint)
+
+    with pytest.raises(MigrationError, match="schema v4"):
+        Database(database_path)
+
+    with sqlite3.connect(database_path) as connection:
+        version = connection.execute(
+            "SELECT MAX(version) FROM schema_migrations"
+        ).fetchone()[0]
+        tables = {
+            row[0]
+            for row in connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+        assert connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 8
+    assert version == 3
+    assert "evidence_baskets" not in tables
+    assert "evidence_items" not in tables
+    assert len(list((tmp_path / "backups").glob("*.db"))) == 1
