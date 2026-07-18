@@ -17,6 +17,7 @@ from typing import Protocol
 from src.models import (
     Document,
     EvidenceBasket,
+    EvidenceContextKind,
     EvidenceItem,
     EvidenceTextKind,
     Page,
@@ -125,6 +126,11 @@ class EvidenceBasketService:
             EvidenceTextKind.ORIGINAL if is_original else EvidenceTextKind.USER_EXCERPT
         )
         clean_context = _clean_bounded(context, "上下文", MAX_CONTEXT_CHARS)
+        context_kind = (
+            EvidenceContextKind.USER_PROVIDED
+            if clean_context
+            else EvidenceContextKind.SYSTEM_GENERATED
+        )
         if not clean_context and source_text:
             clean_context = build_context_excerpt(
                 source_text,
@@ -145,6 +151,7 @@ class EvidenceBasketService:
                 evidence_text=selection,
                 text_kind=text_kind,
                 context=clean_context,
+                context_kind=context_kind,
                 user_note=note,
                 source_text_sha256=_sha256(source_text),
                 selection_sha256=_sha256(normalized_selection),
@@ -223,9 +230,34 @@ class EvidenceBasketService:
                     review_status=page.status,
                     projects=projects,
                     tags=tags,
+                    document_source_path=document.source_path,
+                    image_path=page.image_path,
+                    document_sha256=document.sha256,
                 )
             )
         return validated
+
+    def export_markdown(
+        self,
+        *,
+        basket_id: int | None = None,
+        title: str | None = None,
+        generated_at: datetime | None = None,
+    ) -> str:
+        """Validate every live source, then build an ordered Markdown package."""
+
+        from src.evidence_service import EvidenceBasketPackageBuilder
+
+        basket = self.default_basket() if basket_id is None else self._require_basket(basket_id)
+        items = self.validated_items(basket.id)
+        if not items:
+            raise EmptyEvidenceBasketError("证据篮为空，无法生成证据包。")
+        return EvidenceBasketPackageBuilder().build(
+            basket,
+            items,
+            title=title,
+            generated_at=generated_at,
+        )
 
     def _require_basket(self, basket_id: int) -> EvidenceBasket:
         basket = self._repository.get_basket(basket_id)
@@ -343,6 +375,7 @@ class _EvidenceRepository:
         evidence_text: str,
         text_kind: EvidenceTextKind,
         context: str,
+        context_kind: EvidenceContextKind,
         user_note: str,
         source_text_sha256: str,
         selection_sha256: str,
@@ -365,10 +398,10 @@ class _EvidenceRepository:
                 INSERT INTO evidence_items(
                     basket_id, document_id, page_id, document_title, filename,
                     page_number, review_status, projects_json, tags_json,
-                    evidence_text, text_kind, context, user_note,
+                    evidence_text, text_kind, context, context_kind, user_note,
                     source_text_sha256, source_locator, selection_sha256,
                     added_at, position
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     basket_id,
@@ -383,6 +416,7 @@ class _EvidenceRepository:
                     evidence_text,
                     text_kind.value,
                     context,
+                    context_kind.value,
                     user_note,
                     source_text_sha256,
                     locator,
@@ -536,6 +570,7 @@ def _item_from_row(row: sqlite3.Row) -> EvidenceItem:
         evidence_text=str(row["evidence_text"]),
         text_kind=EvidenceTextKind(str(row["text_kind"])),
         context=str(row["context"]),
+        context_kind=EvidenceContextKind(str(row["context_kind"])),
         user_note=str(row["user_note"]),
         source_text_sha256=str(row["source_text_sha256"]),
         source_locator=str(row["source_locator"]),

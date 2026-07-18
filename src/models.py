@@ -110,6 +110,22 @@ class EvidenceTextKind(StrEnum):
         }[self]
 
 
+class EvidenceContextKind(StrEnum):
+    """Provenance of context stored alongside an evidence selection."""
+
+    SYSTEM_GENERATED = "system_generated"
+    USER_PROVIDED = "user_provided"
+
+    @property
+    def label(self) -> str:
+        """Return the provenance label used in evidence exports."""
+
+        return {
+            self.SYSTEM_GENERATED: "系统生成的上下文 / 摘要",
+            self.USER_PROVIDED: "用户提供的上下文",
+        }[self]
+
+
 @dataclass(frozen=True, slots=True)
 class SearchFilters:
     """Composable search filters; multiple tags and projects use AND semantics."""
@@ -298,11 +314,15 @@ class EvidenceItem:
     evidence_text: str
     text_kind: EvidenceTextKind
     context: str
+    context_kind: EvidenceContextKind
     user_note: str
     source_text_sha256: str
     source_locator: str
     added_at: datetime
     position: int
+    document_source_path: Path | None = None
+    image_path: Path | None = None
+    document_sha256: str = ""
 
 
 @dataclass(frozen=True, slots=True)

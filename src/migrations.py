@@ -457,6 +457,9 @@ def _apply_version_four(connection: sqlite3.Connection) -> None:
                     'original_material', 'user_excerpt'
                 )),
                 context TEXT NOT NULL DEFAULT '',
+                context_kind TEXT NOT NULL CHECK (context_kind IN (
+                    'system_generated', 'user_provided'
+                )),
                 user_note TEXT NOT NULL DEFAULT '' CHECK (length(user_note) <= 4000),
                 source_text_sha256 TEXT NOT NULL CHECK (length(source_text_sha256) = 64),
                 source_locator TEXT NOT NULL CHECK (length(trim(source_locator)) > 0),

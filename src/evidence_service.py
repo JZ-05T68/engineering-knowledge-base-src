@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
-from src.models import PageStatus, SearchField, SearchResult
+from src.models import (
+    EvidenceBasket,
+    EvidenceItem,
+    EvidenceTextKind,
+    PageStatus,
+    SearchField,
+    SearchResult,
+)
 
 _UNREVIEWED_STATUSES = {
     PageStatus.PENDING,
@@ -13,6 +22,11 @@ _UNREVIEWED_STATUSES = {
     PageStatus.SKIPPED,
     PageStatus.FAILED,
 }
+_MARKDOWN_INLINE = re.compile(r"([\\`*_{}\[\]<>#+|])")
+
+
+class EvidencePackageError(RuntimeError):
+    """Raised when a trustworthy evidence package cannot be generated."""
 
 
 class EvidencePackageBuilder:
@@ -30,8 +44,8 @@ class EvidencePackageBuilder:
         timestamp = generated_at or datetime.now().astimezone()
         if timestamp.tzinfo is None:
             timestamp = timestamp.astimezone()
-        title = result.document_title.strip() or "未命名文档"
-        filename = result.filename.strip() or "未记录原始文件名"
+        title = _markdown_inline(result.document_title.strip() or "未命名文档")
+        filename = _markdown_inline(result.filename.strip() or "未记录原始文件名")
         match_fields = result.match_fields or _fallback_match_fields(result)
         matched_excerpt = (
             selected_excerpt.strip()
@@ -47,9 +61,11 @@ class EvidencePackageBuilder:
             f"- 页面复核状态：{result.status.label}（{result.status.value}）",
         ]
         if result.projects:
-            lines.append(f"- 所属项目：{'、'.join(result.projects)}")
+            lines.append(
+                f"- 所属项目：{_markdown_inline('、'.join(result.projects))}"
+            )
         if result.tags:
-            lines.append(f"- 标签：{'、'.join(result.tags)}")
+            lines.append(f"- 标签：{_markdown_inline('、'.join(result.tags))}")
         lines.extend(_path_lines(result))
         lines.extend(
             [
@@ -79,24 +95,152 @@ class EvidencePackageBuilder:
                 "",
                 "命中来源：" + "、".join(field.label for field in match_fields),
                 "",
-                matched_excerpt or "（没有可用的命中片段）",
+                _markdown_block(matched_excerpt or "（没有可用的命中片段）"),
                 "",
                 "## 原始材料内容",
                 "",
             ]
         )
         source_text, source_label = _original_material(result, matched_excerpt)
-        lines.extend([f"来源：{source_label}", "", source_text])
+        lines.extend([f"来源：{source_label}", "", _markdown_block(source_text)])
         if result.markdown_content.strip():
             lines.extend(
                 [
                     "",
                     "## 用户笔记",
                     "",
-                    result.markdown_content.strip(),
+                    _markdown_block(result.markdown_content.strip()),
                 ]
             )
         return "\n".join(lines).rstrip() + "\n"
+
+
+class EvidenceBasketPackageBuilder:
+    """Build one ordered, multi-document Markdown package from a basket."""
+
+    def build(
+        self,
+        basket: EvidenceBasket,
+        items: Sequence[EvidenceItem],
+        *,
+        title: str | None = None,
+        generated_at: datetime | None = None,
+    ) -> str:
+        """Return safe Markdown, rejecting empty or incomplete source records."""
+
+        if not items:
+            raise EvidencePackageError("证据篮为空，无法生成证据包。")
+        ordered_items = tuple(sorted(items, key=lambda item: (item.position, item.id)))
+        if any(item.basket_id != basket.id for item in ordered_items):
+            raise EvidencePackageError("证据条目与当前证据篮不一致，已停止导出。")
+        if any(item.page_number <= 0 for item in ordered_items):
+            raise EvidencePackageError("证据中存在异常页码，已停止导出。")
+
+        timestamp = generated_at or datetime.now().astimezone()
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.astimezone()
+        package_title = _markdown_inline(
+            (title or basket.name or "多页面工程证据包").strip()
+        )
+        document_count = len({item.document_id for item in ordered_items})
+        unreviewed_count = sum(
+            item.review_status is not PageStatus.REVIEWED for item in ordered_items
+        )
+        lines = [
+            f"# {package_title}",
+            "",
+            f"- 生成时间：{timestamp.isoformat(timespec='seconds')}",
+            f"- 证据条数：{len(ordered_items)}",
+            f"- 涉及文档数：{document_count}",
+            f"- 证据篮：{_markdown_inline(basket.name)}（basket_id={basket.id}）",
+        ]
+        if unreviewed_count >= 2:
+            lines.extend(
+                [
+                    "",
+                    f"> 整体复核警告：本证据包包含 {unreviewed_count} 条未处于“人工复核完成”"
+                    "状态的证据。引用前必须逐页核对原始页面图像。",
+                ]
+            )
+
+        for number, item in enumerate(ordered_items, start=1):
+            lines.extend(self._item_lines(number, item))
+        return "\n".join(lines).rstrip() + "\n"
+
+    @staticmethod
+    def _item_lines(number: int, item: EvidenceItem) -> list[str]:
+        title = _markdown_inline(item.document_title or "未命名文档")
+        filename = _markdown_inline(item.filename or "未记录原始文件名")
+        projects = _markdown_inline("、".join(item.projects) or "未关联项目")
+        tags = _markdown_inline("、".join(item.tags) or "未添加标签")
+        lines = [
+            "",
+            "---",
+            "",
+            f"## 证据 {number}：{title} · 第 {item.page_number} 页",
+            "",
+            f"- 原始文件名：{filename}",
+            f"- 页码：第 {item.page_number} 页",
+            f"- 项目：{projects}",
+            f"- 标签：{tags}",
+            "- 复核状态："
+            f"{item.review_status.label}（{item.review_status.value}）",
+            f"- 加入时间：{item.added_at.isoformat(timespec='seconds')}",
+            f"- 排序位置：{item.position}",
+            f"- 来源定位：{_markdown_inline(item.source_locator)}",
+        ]
+        if item.document_source_path is not None:
+            lines.append(
+                f"- 原始 PDF 绝对路径：{_absolute_path(item.document_source_path)}"
+            )
+        if item.image_path is not None:
+            lines.append(f"- 页面图像绝对路径：{_absolute_path(item.image_path)}")
+        if item.review_status is not PageStatus.REVIEWED:
+            lines.extend(
+                [
+                    "",
+                    "> 本条复核警告：该页尚未人工复核完成，不应将以下内容视为"
+                    "已经确认的事实。",
+                ]
+            )
+
+        lines.extend(["", "### 原始材料", ""])
+        if item.text_kind is EvidenceTextKind.ORIGINAL:
+            lines.extend(
+                [
+                    "可信度：该选区已在加入时匹配当前 PDF 文本层或 OCR 原始文本。",
+                    "",
+                    _markdown_block(item.evidence_text),
+                ]
+            )
+        else:
+            lines.append("（本条选区未匹配原始文本；不得视为已验证原文。）")
+
+        lines.extend(["", "### 用户摘录", ""])
+        if item.text_kind is EvidenceTextKind.USER_EXCERPT:
+            lines.extend(
+                [
+                    "可信度：用户摘录 / 整理内容，未经原文匹配确认。",
+                    "",
+                    _markdown_block(item.evidence_text),
+                ]
+            )
+        else:
+            lines.append("（无；本条选区已归入原始材料。）")
+
+        lines.extend(
+            [
+                "",
+                "### 用户笔记",
+                "",
+                _markdown_block(item.user_note) if item.user_note else "（无）",
+                "",
+                f"### {item.context_kind.label}",
+                "",
+                _markdown_block(item.context) if item.context else "（无）",
+            ]
+        )
+        return lines
 
 
 def _path_lines(result: SearchResult) -> list[str]:
@@ -148,4 +292,22 @@ def _original_material(result: SearchResult, matched_excerpt: str) -> tuple[str,
     return "（本页没有可用的原始文本，请核对页面图像。）", "页面图像"
 
 
-__all__ = ["EvidencePackageBuilder"]
+def _markdown_inline(value: str) -> str:
+    """Escape user-controlled text used in Markdown headings and list metadata."""
+
+    compact = " ".join((value or "").split())
+    return _MARKDOWN_INLINE.sub(r"\\\1", compact)
+
+
+def _markdown_block(value: str) -> str:
+    """Use an indented block so backticks/headings in user text stay inert."""
+
+    text = (value or "").rstrip()
+    return "\n".join(f"    {line}" for line in text.splitlines() or [""])
+
+
+__all__ = [
+    "EvidenceBasketPackageBuilder",
+    "EvidencePackageBuilder",
+    "EvidencePackageError",
+]
