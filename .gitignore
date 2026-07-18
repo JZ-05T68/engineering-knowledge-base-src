@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyd
+.venv/
+venv/
+
+# Test and lint caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environment
+.env
+
+# Local knowledge-base data (keep directory placeholders)
+data/raw/*
+!data/raw/.gitkeep
+data/pages/*
+!data/pages/.gitkeep
+data/markdown/*
+!data/markdown/.gitkeep
+data/database/*
+!data/database/.gitkeep
+logs/*
+!logs/.gitkeep
+runtime/*
+!runtime/.gitkeep
+
+# Streamlit and editor artifacts
+.streamlit/secrets.toml
+.vscode/
+.idea/
+
+# Operating system files
+.DS_Store
+Thumbs.db

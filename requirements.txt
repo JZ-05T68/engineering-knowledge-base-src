@@ -1,0 +1,9 @@
+streamlit
+PyMuPDF
+Pillow
+python-dotenv
+pydantic-settings
+jieba
+rapidfuzz
+pytest
+ruff
