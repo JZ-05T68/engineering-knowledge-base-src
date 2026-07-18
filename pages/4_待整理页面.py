@@ -17,7 +17,7 @@ _SELECTOR_KEY = "review_page_selector"
 _PENDING_TARGET_KEY = "review_pending_target_id"
 _FLASH_KEY = "review_flash"
 
-st.set_page_config(page_title="待复核页面｜工程知识库 v0.0.7", page_icon="📝", layout="wide")
+st.set_page_config(page_title="待复核页面｜工程知识库 v0.0.8", page_icon="📝", layout="wide")
 st.title("待复核页面")
 st.caption("连续保存草稿、人工复核或暂时跳过；所有内容仅保存在本机。")
 
@@ -94,7 +94,14 @@ if active_page is None and requested_page_id is not None:
 if active_page is None and review_queue:
     active_page = review_queue[0]
 if active_page is None:
-    st.success("当前筛选范围内没有待复核页面。")
+    if documents:
+        st.success("当前筛选范围内没有待复核页面。可以查看已经整理过的资料。")
+        if st.button("📖 查看已复核资料", use_container_width=True):
+            st.switch_page("pages/2_浏览资料.py")
+    else:
+        st.info("还没有文档或待复核页面。请先导入第一份 PDF。")
+        if st.button("📥 前往导入资料", use_container_width=True):
+            st.switch_page("pages/1_导入资料.py")
     st.stop()
 
 if _ACTIVE_PAGE_KEY not in st.session_state or (

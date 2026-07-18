@@ -1,4 +1,4 @@
-"""Streamlit dashboard for Engineering Knowledge Base v0.0.7."""
+"""Streamlit dashboard for Engineering Knowledge Base v0.0.8."""
 
 from __future__ import annotations
 
@@ -14,8 +14,8 @@ from src.runtime import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="工程知识库 v0.0.7", page_icon="📚", layout="wide")
-st.title("工程知识库 v0.0.7")
+st.set_page_config(page_title="工程知识库 v0.0.8", page_icon="📚", layout="wide")
+st.title("工程知识库 v0.0.8")
 st.caption("本地、单用户的页面级工程知识管理系统")
 
 try:
@@ -46,6 +46,18 @@ for column, label, value in zip(
     strict=True,
 ):
     column.metric(label, value)
+
+if stats.documents == 0:
+    st.info("知识库还是空的。按下面三个步骤建立第一批可检索、可复用的工程资料。")
+    st.markdown(
+        """
+1. **导入第一份 PDF**：保留原件并逐页生成 PNG。
+2. **复核并整理页面**：补充 Markdown，确认页面状态、标签和项目。
+3. **搜索资料并加入证据篮**：收集具体选区，生成可追溯的证据包。
+"""
+    )
+    if st.button("📥 导入第一份 PDF", use_container_width=True):
+        st.switch_page("pages/1_导入资料.py")
 
 main_actions = st.columns(2)
 if main_actions[0].button(
@@ -78,7 +90,7 @@ with left:
                 st.query_params["document"] = str(document.id)
                 st.switch_page("pages/2_浏览资料.py")
     else:
-        st.info("还没有导入文档。")
+        st.info("还没有导入文档。请先导入第一份 PDF。")
 
 with right:
     st.subheader("最近编辑")
@@ -95,7 +107,7 @@ with right:
                 )
                 st.switch_page("pages/2_浏览资料.py")
     else:
-        st.info("还没有编辑过页面笔记。")
+        st.info("还没有编辑过页面笔记。导入后可从待复核页面开始整理。")
 
 st.subheader("开始使用")
 st.markdown(

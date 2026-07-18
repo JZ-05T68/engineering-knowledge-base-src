@@ -10,7 +10,7 @@ from src.runtime import application_database
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="标签管理｜工程知识库 v0.0.7", page_icon="🏷️", layout="wide")
+st.set_page_config(page_title="标签管理｜工程知识库 v0.0.8", page_icon="🏷️", layout="wide")
 st.title("标签管理")
 st.caption("同名标签会自动复用；删除标签只删除关联，不删除文档、页面或笔记。")
 
@@ -35,7 +35,7 @@ if submitted:
 
 tags = database.list_tags()
 if not tags:
-    st.info("还没有标签。")
+    st.info("还没有标签。使用上方表单创建第一个标签；以后可在文档或页面上复用。")
     st.stop()
 
 tag_by_id = {tag.id: tag for tag in tags}

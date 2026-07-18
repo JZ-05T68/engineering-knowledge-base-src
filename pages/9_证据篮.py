@@ -11,7 +11,7 @@ from src.runtime import application_evidence_basket_service
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="证据篮｜工程知识库 v0.0.7", page_icon="🧺", layout="wide")
+st.set_page_config(page_title="证据篮｜工程知识库 v0.0.8", page_icon="🧺", layout="wide")
 st.title("证据篮")
 st.caption("持久收集多个页面的具体选区，核对来源后按当前顺序生成 Markdown 证据包。")
 
@@ -38,6 +38,11 @@ summary[2].metric(
 
 if not items:
     st.info("证据篮为空。可从“检索资料”或“浏览资料”页面加入具体证据选区。")
+    empty_actions = st.columns(2)
+    if empty_actions[0].button("🔎 前往检索资料", use_container_width=True):
+        st.switch_page("pages/3_检索资料.py")
+    if empty_actions[1].button("📖 前往浏览资料", use_container_width=True):
+        st.switch_page("pages/2_浏览资料.py")
 else:
     for index, item in enumerate(items):
         with st.container(border=True):

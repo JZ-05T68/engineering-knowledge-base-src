@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.runtime import application_settings
 
-st.set_page_config(page_title="运行说明｜工程知识库 v0.0.7", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="运行说明｜工程知识库 v0.0.8", page_icon="⚙️", layout="wide")
 st.title("设置与运行说明")
 
 settings = application_settings()
@@ -37,4 +37,6 @@ st.markdown(
 - 服务仅绑定 `127.0.0.1`，不会默认向局域网开放。
 """
 )
-st.info("v0.0.7 不包含账号、登录、云同步、付费 API、向量数据库或联网必需功能。")
+st.info("v0.0.8 不包含账号、登录、云同步、付费 API、向量数据库或联网必需功能。")
+if st.button("🛡️ 打开系统维护、备份与诊断", use_container_width=True):
+    st.switch_page("pages/10_系统维护.py")

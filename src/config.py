@@ -26,8 +26,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_title: str = "工程知识库 v0.0.7"
-    app_version: str = "0.0.7"
+    app_title: str = "工程知识库 v0.0.8"
+    app_version: str = "0.0.8"
     host: Literal["127.0.0.1"] = "127.0.0.1"
     port: int = Field(default=8501, ge=1, le=65535)
 
@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     markdown_dir: Path = PROJECT_ROOT / "data" / "markdown"
     database_dir: Path = PROJECT_ROOT / "data" / "database"
     database_path: Path = PROJECT_ROOT / "data" / "database" / "knowledge.db"
+    backups_dir: Path = PROJECT_ROOT / "backups"
     logs_dir: Path = PROJECT_ROOT / "logs"
     log_path: Path = PROJECT_ROOT / "logs" / "engineering-kb.log"
     runtime_dir: Path = PROJECT_ROOT / "runtime"
@@ -54,6 +55,7 @@ class Settings(BaseSettings):
             self.pages_dir,
             self.markdown_dir,
             self.database_dir,
+            self.backups_dir,
             self.logs_dir,
             self.runtime_dir,
         ):

@@ -23,6 +23,8 @@ data/markdown/*
 !data/markdown/.gitkeep
 data/database/*
 !data/database/.gitkeep
+backups/*
+!backups/.gitkeep
 logs/*
 !logs/.gitkeep
 runtime/*

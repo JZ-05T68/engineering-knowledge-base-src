@@ -44,7 +44,7 @@ from src.search_state import (
 LOGGER = logging.getLogger(__name__)
 RESULTS_PER_PAGE = 10
 
-st.set_page_config(page_title="检索资料｜工程知识库 v0.0.7", page_icon="🔎", layout="wide")
+st.set_page_config(page_title="检索资料｜工程知识库 v0.0.8", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
 st.markdown(
@@ -241,6 +241,11 @@ except Exception as exc:
     LOGGER.exception("初始化检索服务失败")
     st.error(f"初始化检索服务失败：{exc}")
     st.stop()
+
+if not all_documents:
+    st.info("知识库中还没有文档，因此暂无可检索内容。请先导入第一份 PDF。")
+    if st.button("📥 前往导入资料", use_container_width=True):
+        st.switch_page("pages/1_导入资料.py")
 
 document_names = {
     document.id: document.title.strip() or document.filename.strip() or f"文档 {document.id}"

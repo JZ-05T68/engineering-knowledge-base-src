@@ -36,7 +36,7 @@ from src.search_state import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.7", page_icon="📖", layout="wide")
+st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.8", page_icon="📖", layout="wide")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -203,7 +203,12 @@ if query_document:
     if all(document.id != requested_document.id for document in documents):
         documents = [requested_document, *documents]
 if not documents:
-    st.info("没有符合筛选条件的文档。")
+    if database.list_documents():
+        st.info("没有符合当前筛选条件的文档。请调整或清除上方筛选。")
+    else:
+        st.info("还没有可浏览的文档。请先导入第一份 PDF。")
+        if st.button("📥 前往导入资料", use_container_width=True):
+            st.switch_page("pages/1_导入资料.py")
     st.stop()
 
 document_by_id = {document.id: document for document in documents}

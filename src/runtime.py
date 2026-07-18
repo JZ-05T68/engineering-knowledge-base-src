@@ -9,8 +9,10 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from src.backup_service import BackupService
 from src.config import Settings, get_settings
 from src.database import Database
+from src.diagnostic_service import DiagnosticService
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.pdf_service import PdfService
@@ -102,3 +104,43 @@ def application_evidence_basket_service() -> EvidenceBasketService:
     """Return the process-wide durable evidence basket service."""
 
     return EvidenceBasketService(application_database())
+
+
+@lru_cache(maxsize=1)
+def application_backup_service() -> BackupService:
+    """Return the verified local backup service for formal application paths."""
+
+    settings = application_settings()
+    return BackupService(
+        app_version=settings.app_version,
+        data_dir=settings.data_dir,
+        raw_dir=settings.raw_dir,
+        pages_dir=settings.pages_dir,
+        markdown_dir=settings.markdown_dir,
+        database_path=settings.database_path,
+        backups_dir=settings.backups_dir,
+        host=settings.host,
+        port=settings.port,
+        minimum_text_length=settings.minimum_text_length,
+        pdf_render_dpi=settings.pdf_render_dpi,
+    )
+
+
+def application_diagnostic_service() -> DiagnosticService:
+    """Build a fresh read-only diagnostics service for current formal paths."""
+
+    settings = application_settings()
+    return DiagnosticService(
+        app_version=settings.app_version,
+        project_root=Path(__file__).resolve().parents[1],
+        data_dir=settings.data_dir,
+        raw_dir=settings.raw_dir,
+        pages_dir=settings.pages_dir,
+        markdown_dir=settings.markdown_dir,
+        database_path=settings.database_path,
+        backups_dir=settings.backups_dir,
+        logs_dir=settings.logs_dir,
+        log_path=settings.log_path,
+        host=settings.host,
+        port=settings.port,
+    )
