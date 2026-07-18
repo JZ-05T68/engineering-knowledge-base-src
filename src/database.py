@@ -24,6 +24,7 @@ from src.models import (
     PageStatus,
     Project,
     ReviewProgress,
+    SearchFacetCounts,
     SearchField,
     SearchFilters,
     SearchResult,
@@ -1000,18 +1001,20 @@ class Database:
         )
         filter_clauses, filter_parameters = _search_filter_clauses(active_filters)
         where_clauses = [f"({match_clause})", *filter_clauses]
+        relevance_expression, relevance_parameters = _relevance_expression(literal_terms)
         order_by = _search_order_by(sort_by)
         try:
             with self._connection() as connection:
                 rows = connection.execute(
                     f"""
                     WITH content_matches AS (
-                        SELECT rowid, bm25(page_search, 1.0, 1.1, 1.2) AS search_rank
+                        SELECT rowid, bm25(page_search, 1.0, 0.9, 1.1) AS search_rank
                         FROM page_search WHERE page_search MATCH ?
                     )
                     SELECT p.*, d.title AS document_title, d.filename,
                         d.source_path AS document_source_path, d.sha256 AS document_sha256,
-                        d.updated_at AS document_updated_at, cm.search_rank
+                        d.updated_at AS document_updated_at, cm.search_rank,
+                        {relevance_expression} AS relevance_score
                     FROM pages p
                     JOIN documents d ON d.id = p.document_id
                     LEFT JOIN content_matches cm ON cm.rowid = p.id
@@ -1021,6 +1024,7 @@ class Database:
                     """,
                     (
                         normalized_query,
+                        *relevance_parameters,
                         *match_parameters,
                         *filter_parameters,
                         safe_limit,
@@ -1040,7 +1044,7 @@ class Database:
                         row, literal_terms, tags, projects
                     )
                     content = _matched_content(row, matched_fields, tags, projects)
-                    rank = row["search_rank"]
+                    rank = row["relevance_score"]
                     results.append(
                         SearchResult(
                             page_id=page_id,
@@ -1051,7 +1055,7 @@ class Database:
                             image_path=Path(row["image_path"]),
                             content=content,
                             snippet="",
-                            rank=float(rank) if rank is not None else 100.0,
+                            rank=float(rank),
                             status=PageStatus(row["review_status"]),
                             match_type="、".join(
                                 field.label for field in matched_fields
@@ -1072,6 +1076,102 @@ class Database:
         except sqlite3.OperationalError:
             LOGGER.warning("忽略无效的 FTS5 检索表达式：%r", query, exc_info=True)
             return []
+
+    def search_facet_counts(
+        self,
+        *,
+        terms: Sequence[str] = (),
+        filters: SearchFilters | None = None,
+    ) -> SearchFacetCounts:
+        """Count all facets in one query using the complete current conditions.
+
+        Facets intentionally include their own active condition. Thus selecting
+        project A makes every displayed count describe pages that already satisfy
+        project A, which keeps counts directly comparable to the visible result set.
+        """
+
+        literal_terms = tuple(
+            dict.fromkeys(term.casefold().strip() for term in terms if term.strip())
+        )
+        active_filters = filters or SearchFilters()
+        clauses, parameters = _search_filter_clauses(active_filters)
+        if literal_terms:
+            fields = active_filters.match_fields or tuple(SearchField)
+            match_clause, match_parameters = _search_match_clause(fields, literal_terms)
+            clauses.insert(0, f"({match_clause})")
+            parameters = [*match_parameters, *parameters]
+        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"""
+                WITH filtered(page_id, document_id, review_status) AS (
+                    SELECT p.id, p.document_id, p.review_status
+                    FROM pages p
+                    JOIN documents d ON d.id = p.document_id
+                    {where}
+                ),
+                status_values(value) AS (
+                    VALUES ('pending'), ('draft'), ('reviewed'), ('skipped'), ('failed')
+                ),
+                effective_tags(page_id, tag_id) AS (
+                    SELECT f.page_id, dt.tag_id
+                    FROM filtered f
+                    JOIN document_tags dt ON dt.document_id = f.document_id
+                    UNION
+                    SELECT f.page_id, pt.tag_id
+                    FROM filtered f
+                    JOIN page_tags pt ON pt.page_id = f.page_id
+                ),
+                effective_projects(page_id, project_id) AS (
+                    SELECT f.page_id, pd.project_id
+                    FROM filtered f
+                    JOIN project_documents pd ON pd.document_id = f.document_id
+                    UNION
+                    SELECT f.page_id, pp.project_id
+                    FROM filtered f
+                    JOIN project_pages pp ON pp.page_id = f.page_id
+                )
+                SELECT 'total' AS facet, '' AS facet_key, COUNT(*) AS result_count
+                FROM filtered
+                UNION ALL
+                SELECT 'status', sv.value, COUNT(f.page_id)
+                FROM status_values sv
+                LEFT JOIN filtered f ON f.review_status = sv.value
+                GROUP BY sv.value
+                UNION ALL
+                SELECT 'tag', CAST(t.id AS TEXT), COUNT(DISTINCT et.page_id)
+                FROM tags t
+                LEFT JOIN effective_tags et ON et.tag_id = t.id
+                GROUP BY t.id
+                UNION ALL
+                SELECT 'project', CAST(pr.id AS TEXT), COUNT(DISTINCT ep.page_id)
+                FROM projects pr
+                LEFT JOIN effective_projects ep ON ep.project_id = pr.id
+                GROUP BY pr.id
+                """,
+                parameters,
+            ).fetchall()
+        total = 0
+        statuses = {status: 0 for status in PageStatus}
+        tags: dict[int, int] = {}
+        projects: dict[int, int] = {}
+        for row in rows:
+            facet = str(row["facet"])
+            count = int(row["result_count"])
+            if facet == "total":
+                total = count
+            elif facet == "status":
+                statuses[PageStatus(str(row["facet_key"]))] = count
+            elif facet == "tag":
+                tags[int(row["facet_key"])] = count
+            elif facet == "project":
+                projects[int(row["facet_key"])] = count
+        return SearchFacetCounts(
+            total=total,
+            statuses=statuses,
+            projects=projects,
+            tags=tags,
+        )
 
     @staticmethod
     def _tags_for_connection(connection: sqlite3.Connection, page_id: int) -> list[Tag]:
@@ -1377,7 +1477,7 @@ def _search_order_by(sort_by: SearchSort | str) -> str:
         normalized = SearchSort.RELEVANCE
     return {
         SearchSort.RELEVANCE: (
-            "cm.search_rank IS NULL, cm.search_rank ASC, p.document_id, p.page_number"
+            "relevance_score ASC, p.document_id, p.page_number"
         ),
         SearchSort.DOCUMENT_PAGE: (
             "d.title COLLATE NOCASE ASC, p.page_number ASC, p.id ASC"
@@ -1390,6 +1490,33 @@ def _search_order_by(sort_by: SearchSort | str) -> str:
             "p.updated_at DESC, p.document_id, p.page_number"
         ),
     }[normalized]
+
+
+def _relevance_expression(terms: Sequence[str]) -> tuple[str, list[object]]:
+    """Build an explainable metadata/content boost independent of the UI."""
+
+    weighted_fields = (
+        (SearchField.DOCUMENT_TITLE, 30.0),
+        (SearchField.FILENAME, 18.0),
+        (SearchField.TAG, 14.0),
+        (SearchField.PROJECT, 12.0),
+        (SearchField.MARKDOWN, 7.0),
+        (SearchField.OCR_TEXT, 5.0),
+        (SearchField.EXTRACTED_TEXT, 4.0),
+    )
+    parts = ["COALESCE(cm.search_rank, 0.0)"]
+    parameters: list[object] = []
+    for field, weight in weighted_fields:
+        clause, field_parameters = _search_match_clause((field,), terms)
+        parts.append(f"CASE WHEN ({clause}) THEN -{weight} ELSE 0.0 END")
+        parameters.extend(field_parameters)
+    if terms:
+        phrase_clause, phrase_parameters = _search_match_clause(
+            tuple(SearchField), (terms[0],)
+        )
+        parts.append(f"CASE WHEN ({phrase_clause}) THEN -10.0 ELSE 0.0 END")
+        parameters.extend(phrase_parameters)
+    return " + ".join(parts), parameters
 
 
 def _matching_fields(

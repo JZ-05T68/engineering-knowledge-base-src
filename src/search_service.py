@@ -6,7 +6,7 @@ import logging
 from dataclasses import replace
 from typing import Protocol
 
-from src.models import SearchFilters, SearchResult, SearchSort
+from src.models import SearchFacetCounts, SearchFilters, SearchResult, SearchSort
 from src.text_utils import (
     build_context_excerpt,
     extract_search_terms,
@@ -29,6 +29,14 @@ class SearchDatabase(Protocol):
         sort_by: SearchSort | str = SearchSort.RELEVANCE,
     ) -> list[SearchResult]:
         """Return filtered, ranked page matches for a safe FTS5 expression."""
+
+    def search_facet_counts(
+        self,
+        *,
+        terms: tuple[str, ...] = (),
+        filters: SearchFilters | None = None,
+    ) -> SearchFacetCounts:
+        """Return counts for the complete current search and filter state."""
 
 
 class SearchService:
@@ -102,6 +110,19 @@ class SearchService:
 
         length = max_chars if max_chars is not None else self._snippet_length
         return build_context_excerpt(content, terms, max_chars=length)
+
+    def facet_counts(
+        self,
+        query: str,
+        *,
+        filters: SearchFilters | None = None,
+    ) -> SearchFacetCounts:
+        """Count filter values consistently, including when the query is empty."""
+
+        return self._database.search_facet_counts(
+            terms=self.query_terms(query),
+            filters=filters or SearchFilters(),
+        )
 
     def highlighted_snippet(self, result: SearchResult, query: str) -> str:
         """Return an escaped HTML snippet containing only safe ``mark`` tags."""
