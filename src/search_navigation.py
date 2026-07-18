@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from src.models import Document, Page, SearchResult
+from src.search_state import SearchPageState, encode_return_state
 
 
 class NavigationDatabase(Protocol):
@@ -56,15 +57,23 @@ def validate_search_target(
     return SearchNavigationTarget(document=document, page=page, warnings=tuple(warnings))
 
 
-def reader_query_params(result: SearchResult, query: str) -> dict[str, str]:
-    """Return explicit reader coordinates and a bounded query hint."""
+def reader_query_params(
+    result: SearchResult,
+    query: str,
+    *,
+    return_state: SearchPageState | None = None,
+) -> dict[str, str]:
+    """Return exact reader coordinates plus an optional complete return state."""
 
-    return {
+    params = {
         "document": str(result.document_id),
         "page": str(result.page_number),
         "from_search": "1",
         "search_query": query[:500],
     }
+    if return_state is not None:
+        params["search_return"] = encode_return_state(return_state)
+    return params
 
 
 __all__ = [

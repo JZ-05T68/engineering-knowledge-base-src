@@ -69,9 +69,10 @@ def test_search_cards_filter_clear_evidence_basket_and_navigation_state(
     app = AppTest.from_file(str(page_path)).run(timeout=10)
 
     assert not app.exception
-    assert {"检索", "清空筛选"} <= {button.label for button in app.button}
+    assert "搜索 / 应用筛选" in {button.label for button in app.button}
+    assert not app.toggle(key="search_filters_open").value
     app.text_input(key="search_query_input").input("液压泵").run()
-    _button(app, "检索").click().run()
+    app.button(key="apply_search_filters").click().run()
 
     assert not app.exception
     assert any("液压泵维护手册 · 第 2 页" in item.value for item in app.markdown)
@@ -80,7 +81,7 @@ def test_search_cards_filter_clear_evidence_basket_and_navigation_state(
         button.label for button in app.button
     }
     assert "加入证据篮" in {button.label for button in app.button}
-    assert any("当前组合条件匹配 1 页" in item.value for item in app.caption)
+    assert any("当前上下文匹配 1 页" in item.value for item in app.caption)
 
     _button(app, "加入证据篮").click().run()
     stored_items = EvidenceBasketService(database).list_items()
@@ -93,10 +94,11 @@ def test_search_cards_filter_clear_evidence_basket_and_navigation_state(
     assert "document_id=" in app.session_state["evidence_packages"][page_id]
     assert app.code
 
+    app.toggle(key="search_filters_open").set_value(True).run()
     app.multiselect(key="search_status_values").select(PageStatus.REVIEWED.value).run()
-    _button(app, "检索").click().run()
-    assert any("没有符合关键词与筛选条件" in item.value for item in app.info)
-    _button(app, "清空筛选").click().run()
+    app.button(key="apply_search_filters").click().run()
+    assert any("没有结果" in item.value for item in app.info)
+    app.button(key="clear_filters_keep_query").click().run()
     assert app.session_state["search_status_values"] == []
     assert app.session_state["knowledge_results"]
 

@@ -1030,16 +1030,13 @@ class Database:
                         safe_limit,
                     ),
                 ).fetchall()
+                page_metadata = self._metadata_for_pages_connection(
+                    connection, tuple(int(row["id"]) for row in rows)
+                )
                 results: list[SearchResult] = []
                 for row in rows:
                     page_id = int(row["id"])
-                    tags = tuple(
-                        tag.name for tag in self._tags_for_connection(connection, page_id)
-                    )
-                    projects = tuple(
-                        project.name
-                        for project in self._projects_for_connection(connection, page_id)
-                    )
+                    tags, projects = page_metadata.get(page_id, ((), ()))
                     matched_fields = _matching_fields(
                         row, literal_terms, tags, projects
                     )
@@ -1083,24 +1080,28 @@ class Database:
         terms: Sequence[str] = (),
         filters: SearchFilters | None = None,
     ) -> SearchFacetCounts:
-        """Count all facets in one query using the complete current conditions.
+        """Count contextual facets in one aggregate query.
 
-        Facets intentionally include their own active condition. Thus selecting
-        project A makes every displayed count describe pages that already satisfy
-        project A, which keeps counts directly comparable to the visible result set.
+        Document and status counts ignore their own OR-style dimension so valid
+        alternatives do not incorrectly collapse to zero. Project and tag counts
+        retain existing selections because adding either dimension uses AND
+        semantics: each count therefore predicts the remaining result set after
+        that candidate is added.
         """
 
         literal_terms = tuple(
             dict.fromkeys(term.casefold().strip() for term in terms if term.strip())
         )
         active_filters = filters or SearchFilters()
-        clauses, parameters = _search_filter_clauses(active_filters)
-        if literal_terms:
-            fields = active_filters.match_fields or tuple(SearchField)
-            match_clause, match_parameters = _search_match_clause(fields, literal_terms)
-            clauses.insert(0, f"({match_clause})")
-            parameters = [*match_parameters, *parameters]
-        where = "WHERE " + " AND ".join(clauses) if clauses else ""
+        filtered_where, filtered_parameters = _search_context_where(
+            active_filters, literal_terms
+        )
+        document_where, document_parameters = _search_context_where(
+            active_filters, literal_terms, omit={"document"}
+        )
+        status_where, status_parameters = _search_context_where(
+            active_filters, literal_terms, omit={"status"}
+        )
         with self._connection() as connection:
             rows = connection.execute(
                 f"""
@@ -1108,7 +1109,19 @@ class Database:
                     SELECT p.id, p.document_id, p.review_status
                     FROM pages p
                     JOIN documents d ON d.id = p.document_id
-                    {where}
+                    {filtered_where}
+                ),
+                document_context(page_id, document_id) AS (
+                    SELECT p.id, p.document_id
+                    FROM pages p
+                    JOIN documents d ON d.id = p.document_id
+                    {document_where}
+                ),
+                status_context(page_id, review_status) AS (
+                    SELECT p.id, p.review_status
+                    FROM pages p
+                    JOIN documents d ON d.id = p.document_id
+                    {status_where}
                 ),
                 status_values(value) AS (
                     VALUES ('pending'), ('draft'), ('reviewed'), ('skipped'), ('failed')
@@ -1134,10 +1147,15 @@ class Database:
                 SELECT 'total' AS facet, '' AS facet_key, COUNT(*) AS result_count
                 FROM filtered
                 UNION ALL
-                SELECT 'status', sv.value, COUNT(f.page_id)
+                SELECT 'status', sv.value, COUNT(sc.page_id)
                 FROM status_values sv
-                LEFT JOIN filtered f ON f.review_status = sv.value
+                LEFT JOIN status_context sc ON sc.review_status = sv.value
                 GROUP BY sv.value
+                UNION ALL
+                SELECT 'document', CAST(d.id AS TEXT), COUNT(dc.page_id)
+                FROM documents d
+                LEFT JOIN document_context dc ON dc.document_id = d.id
+                GROUP BY d.id
                 UNION ALL
                 SELECT 'tag', CAST(t.id AS TEXT), COUNT(DISTINCT et.page_id)
                 FROM tags t
@@ -1149,10 +1167,15 @@ class Database:
                 LEFT JOIN effective_projects ep ON ep.project_id = pr.id
                 GROUP BY pr.id
                 """,
-                parameters,
+                (
+                    *filtered_parameters,
+                    *document_parameters,
+                    *status_parameters,
+                ),
             ).fetchall()
         total = 0
         statuses = {status: 0 for status in PageStatus}
+        documents: dict[int, int] = {}
         tags: dict[int, int] = {}
         projects: dict[int, int] = {}
         for row in rows:
@@ -1162,6 +1185,8 @@ class Database:
                 total = count
             elif facet == "status":
                 statuses[PageStatus(str(row["facet_key"]))] = count
+            elif facet == "document":
+                documents[int(row["facet_key"])] = count
             elif facet == "tag":
                 tags[int(row["facet_key"])] = count
             elif facet == "project":
@@ -1169,9 +1194,60 @@ class Database:
         return SearchFacetCounts(
             total=total,
             statuses=statuses,
+            documents=documents,
             projects=projects,
             tags=tags,
         )
+
+    @staticmethod
+    def _metadata_for_pages_connection(
+        connection: sqlite3.Connection, page_ids: Sequence[int]
+    ) -> dict[int, tuple[tuple[str, ...], tuple[str, ...]]]:
+        """Load effective tags and projects for every result in one query."""
+
+        if not page_ids:
+            return {}
+        values = ",".join("(?)" for _ in page_ids)
+        rows = connection.execute(
+            f"""
+            WITH selected(page_id) AS (VALUES {values}),
+            metadata(page_id, kind, name) AS (
+                SELECT s.page_id, 'tag', t.name
+                FROM selected s
+                JOIN pages p ON p.id = s.page_id
+                JOIN document_tags dt ON dt.document_id = p.document_id
+                JOIN tags t ON t.id = dt.tag_id
+                UNION
+                SELECT s.page_id, 'tag', t.name
+                FROM selected s
+                JOIN page_tags pt ON pt.page_id = s.page_id
+                JOIN tags t ON t.id = pt.tag_id
+                UNION
+                SELECT s.page_id, 'project', pr.name
+                FROM selected s
+                JOIN pages p ON p.id = s.page_id
+                JOIN project_documents pd ON pd.document_id = p.document_id
+                JOIN projects pr ON pr.id = pd.project_id
+                UNION
+                SELECT s.page_id, 'project', pr.name
+                FROM selected s
+                JOIN project_pages pp ON pp.page_id = s.page_id
+                JOIN projects pr ON pr.id = pp.project_id
+            )
+            SELECT page_id, kind, name FROM metadata
+            ORDER BY page_id, kind, name COLLATE NOCASE
+            """,
+            tuple(page_ids),
+        ).fetchall()
+        tags: dict[int, list[str]] = {page_id: [] for page_id in page_ids}
+        projects: dict[int, list[str]] = {page_id: [] for page_id in page_ids}
+        for row in rows:
+            target = tags if row["kind"] == "tag" else projects
+            target[int(row["page_id"])].append(str(row["name"]))
+        return {
+            page_id: (tuple(tags[page_id]), tuple(projects[page_id]))
+            for page_id in page_ids
+        }
 
     @staticmethod
     def _tags_for_connection(connection: sqlite3.Connection, page_id: int) -> list[Tag]:
@@ -1426,22 +1502,24 @@ def _search_match_clause(
     return " OR ".join(clauses) or "0", parameters
 
 
-def _search_filter_clauses(filters: SearchFilters) -> tuple[list[str], list[object]]:
+def _search_filter_clauses(
+    filters: SearchFilters, *, omit: set[str] | frozenset[str] = frozenset()
+) -> tuple[list[str], list[object]]:
     """Build filter SQL using placeholders only; tag/project values use AND."""
 
     clauses: list[str] = []
     parameters: list[object] = []
     document_ids = _positive_ids(filters.document_ids)
-    if document_ids:
+    if document_ids and "document" not in omit:
         placeholders = ",".join("?" for _ in document_ids)
         clauses.append(f"p.document_id IN ({placeholders})")
         parameters.extend(document_ids)
     statuses = tuple(dict.fromkeys(PageStatus(value).value for value in filters.statuses))
-    if statuses:
+    if statuses and "status" not in omit:
         placeholders = ",".join("?" for _ in statuses)
         clauses.append(f"p.review_status IN ({placeholders})")
         parameters.extend(statuses)
-    for tag_id in _positive_ids(filters.tag_ids):
+    for tag_id in _positive_ids(filters.tag_ids) if "tag" not in omit else ():
         clauses.append(
             """EXISTS (
                 SELECT 1 FROM tags filter_tag
@@ -1454,7 +1532,9 @@ def _search_filter_clauses(filters: SearchFilters) -> tuple[list[str], list[obje
             )"""
         )
         parameters.append(tag_id)
-    for project_id in _positive_ids(filters.project_ids):
+    for project_id in (
+        _positive_ids(filters.project_ids) if "project" not in omit else ()
+    ):
         clauses.append(
             """EXISTS (
                 SELECT 1 FROM projects filter_project
@@ -1467,7 +1547,39 @@ def _search_filter_clauses(filters: SearchFilters) -> tuple[list[str], list[obje
             )"""
         )
         parameters.append(project_id)
+    if filters.has_note and "has_note" not in omit:
+        clauses.append("length(trim(p.markdown_content)) > 0")
+    if filters.evidence_basket_id is not None and "basket" not in omit:
+        basket_id = int(filters.evidence_basket_id)
+        if basket_id <= 0:
+            raise ValueError("证据篮编号必须大于 0")
+        clauses.append(
+            """EXISTS (
+                SELECT 1 FROM evidence_items filter_evidence
+                WHERE filter_evidence.basket_id = ?
+                    AND filter_evidence.page_id = p.id
+            )"""
+        )
+        parameters.append(basket_id)
     return clauses, parameters
+
+
+def _search_context_where(
+    filters: SearchFilters,
+    terms: Sequence[str],
+    *,
+    omit: set[str] | frozenset[str] = frozenset(),
+) -> tuple[str, list[object]]:
+    """Build one parameterized context used by search facet aggregation."""
+
+    clauses, parameters = _search_filter_clauses(filters, omit=omit)
+    if terms:
+        fields = filters.match_fields or tuple(SearchField)
+        match_clause, match_parameters = _search_match_clause(fields, terms)
+        clauses.insert(0, f"({match_clause})")
+        parameters = [*match_parameters, *parameters]
+    where = "WHERE " + " AND ".join(clauses) if clauses else ""
+    return where, parameters
 
 
 def _search_order_by(sort_by: SearchSort | str) -> str:

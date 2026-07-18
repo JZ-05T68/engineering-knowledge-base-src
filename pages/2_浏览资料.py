@@ -18,10 +18,11 @@ from src.runtime import (
     application_evidence_basket_service,
 )
 from src.search_service import SearchService
+from src.search_state import decode_return_state, search_state_query_params
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.5", page_icon="📖", layout="wide")
+st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.6", page_icon="📖", layout="wide")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -130,10 +131,16 @@ if from_search:
         st.query_params.get("search_query")
         or st.session_state.get("knowledge_query", "")
     )
+    search_return = st.query_params.get("search_return", "")
     search_banner, return_action = st.columns([5, 1])
     search_banner.info(f"当前页面来自检索：{search_query or '（未记录关键词）'}")
     if return_action.button("返回检索结果", type="primary", use_container_width=True):
-        st.query_params.clear()
+        if search_return:
+            return_state = decode_return_state(str(search_return))
+            st.query_params.from_dict(search_state_query_params(return_state))
+        else:
+            # Preserve the v0.0.5 behavior for old reader URLs.
+            st.query_params.clear()
         st.switch_page("pages/3_检索资料.py")
         st.stop()
 
@@ -286,6 +293,51 @@ except Exception as exc:
     st.error(f"读取当前页证据篮状态失败：{exc}")
     all_basket_items = []
     current_basket_items = []
+
+if current_basket_items:
+    with st.expander("管理当前页已有证据", expanded=False):
+        for stored_item in current_basket_items:
+            stored_note_key = f"reader_evidence_note_{stored_item.id}"
+            if stored_note_key not in st.session_state:
+                st.session_state[stored_note_key] = stored_item.user_note
+            st.text_area(
+                f"证据 {stored_item.id} 的备注",
+                key=stored_note_key,
+                height=80,
+            )
+            note_action, remove_action = st.columns(2)
+            if note_action.button(
+                "保存证据备注",
+                key=f"reader_save_evidence_note_{stored_item.id}",
+                use_container_width=True,
+            ):
+                try:
+                    basket_service.update_note(
+                        stored_item.id,
+                        str(st.session_state[stored_note_key]),
+                    )
+                except EvidenceBasketError as exc:
+                    st.error(f"保存证据备注失败：{exc}")
+                else:
+                    st.session_state["basket_flash"] = (
+                        "证据备注已保存，搜索返回状态保持不变。"
+                    )
+                    st.rerun()
+            if remove_action.button(
+                "移除这条证据",
+                key=f"reader_remove_evidence_{stored_item.id}",
+                help="只删除证据篮条目，不删除原始资料或页面笔记",
+                use_container_width=True,
+            ):
+                try:
+                    basket_service.remove_item(stored_item.id)
+                except EvidenceBasketError as exc:
+                    st.error(f"移除证据失败：{exc}")
+                else:
+                    st.session_state["basket_flash"] = (
+                        "已移除证据，搜索返回状态保持不变。"
+                    )
+                    st.rerun()
 
 evidence_entry, basket_entry = st.columns([4, 1])
 evidence_entry.caption(

@@ -92,8 +92,8 @@ def test_facet_counts_without_query_and_with_full_current_conditions(
         filters=SearchFilters(project_ids=(project_a.id, project_b.id)),
     )
 
-    # Facets include their own selected condition: every count describes a
-    # subset of the same currently filtered result set.
+    # AND-style tag/project counts retain their current selections, so each
+    # candidate predicts the result set after adding that value.
     assert tag_a_counts.total == 3
     assert tag_a_counts.tags == {tag_a.id: 3, tag_b.id: 1}
     assert both_tag_counts.total == 1
@@ -145,8 +145,12 @@ def test_facet_counts_keep_multi_term_or_and_status_document_filters(
     }
     assert reviewed_counts.total == 1
     assert reviewed_counts.statuses[PageStatus.REVIEWED] == 1
-    assert reviewed_counts.statuses[PageStatus.PENDING] == 0
+    assert reviewed_counts.statuses[PageStatus.PENDING] == 1
     assert document_counts.total == 1
+    assert document_counts.documents == {
+        first_document.id: 1,
+        second_document.id: 1,
+    }
 
 
 def test_relevance_prefers_title_filename_multi_field_and_exact_phrase(

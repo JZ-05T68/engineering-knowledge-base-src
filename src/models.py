@@ -135,6 +135,8 @@ class SearchFilters:
     tag_ids: tuple[int, ...] = ()
     statuses: tuple[PageStatus, ...] = ()
     match_fields: tuple[SearchField, ...] = ()
+    has_note: bool = False
+    evidence_basket_id: int | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,10 +281,11 @@ class SearchResult:
 
 @dataclass(frozen=True, slots=True)
 class SearchFacetCounts:
-    """Counts for search filters after applying every current condition."""
+    """Context-aware counts for the result set and selectable facet values."""
 
     total: int
     statuses: dict[PageStatus, int]
+    documents: dict[int, int]
     projects: dict[int, int]
     tags: dict[int, int]
 
