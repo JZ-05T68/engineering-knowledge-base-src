@@ -11,6 +11,7 @@ from streamlit.testing.v1 import AppTest
 import src.runtime as runtime
 from src.database import Database
 from src.document_service import DocumentService
+from src.evidence_basket_service import EvidenceBasketService
 from src.models import PageStatus
 
 
@@ -41,6 +42,7 @@ def _local_search_runtime(
         extracted_text="液压泵异常噪声需要检查吸油管路。",
         status=PageStatus.PENDING,
     )
+    database.update_document_page_count(document.id, 2)
     service = DocumentService(
         database,
         tmp_path / "raw",
@@ -49,13 +51,18 @@ def _local_search_runtime(
     )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(runtime, "application_document_service", lambda: service)
+    monkeypatch.setattr(
+        runtime,
+        "application_evidence_basket_service",
+        lambda: EvidenceBasketService(database),
+    )
     return database, service, document.id, page.id
 
 
-def test_search_cards_filter_clear_evidence_and_navigation_state(
+def test_search_cards_filter_clear_evidence_basket_and_navigation_state(
     tmp_path: Path, monkeypatch
 ) -> None:
-    _, _, document_id, page_id = _local_search_runtime(tmp_path, monkeypatch)
+    database, _, document_id, page_id = _local_search_runtime(tmp_path, monkeypatch)
     switched: list[str] = []
     monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
     page_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
@@ -72,6 +79,14 @@ def test_search_cards_filter_clear_evidence_and_navigation_state(
     assert {"打开页面", "生成 / 复制证据包"} <= {
         button.label for button in app.button
     }
+    assert "加入证据篮" in {button.label for button in app.button}
+    assert any("当前组合条件匹配 1 页" in item.value for item in app.caption)
+
+    _button(app, "加入证据篮").click().run()
+    stored_items = EvidenceBasketService(database).list_items()
+    assert len(stored_items) == 1
+    assert stored_items[0].page_id == page_id
+    assert stored_items[0].evidence_text == "液压泵异常噪声需要检查吸油管路。"
 
     _button(app, "生成 / 复制证据包").click().run()
     assert page_id in app.session_state["evidence_packages"]
@@ -113,10 +128,30 @@ def test_reader_uses_exact_query_target_and_returns_to_search(
     assert any("当前页面来自检索：异常噪声" in item.value for item in app.info)
     assert any(metric.label == "状态" for metric in app.metric)
     assert "返回检索结果" in {button.label for button in app.button}
+    assert "加入证据篮" in {button.label for button in app.button}
     _button(app, "返回检索结果").click().run()
 
     assert switched[-1] == "pages/3_检索资料.py"
     assert app.query_params == {}
+
+
+def test_reader_adds_user_selected_evidence_persistently(
+    tmp_path: Path, monkeypatch
+) -> None:
+    database, _, document_id, page_id = _local_search_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    app = AppTest.from_file(str(page_path))
+    app.query_params = {"document": str(document_id), "page": "2"}
+    app.run(timeout=10)
+
+    app.text_area(key=f"reader_basket_selection_{page_id}").input(
+        "液压泵异常噪声需要检查吸油管路。"
+    )
+    _button(app, "加入证据篮").click().run()
+
+    items = EvidenceBasketService(database).list_items()
+    assert len(items) == 1
+    assert items[0].page_id == page_id
 
 
 def test_reader_rejects_missing_page_instead_of_falling_back(

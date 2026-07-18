@@ -1,4 +1,4 @@
-"""Streamlit dashboard for Engineering Knowledge Base v0.0.4."""
+"""Streamlit dashboard for Engineering Knowledge Base v0.0.5."""
 
 from __future__ import annotations
 
@@ -6,17 +6,22 @@ import logging
 
 import streamlit as st
 
-from src.runtime import application_database, application_settings
+from src.runtime import (
+    application_database,
+    application_evidence_basket_service,
+    application_settings,
+)
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="工程知识库 v0.0.4", page_icon="📚", layout="wide")
-st.title("工程知识库 v0.0.4")
+st.set_page_config(page_title="工程知识库 v0.0.5", page_icon="📚", layout="wide")
+st.title("工程知识库 v0.0.5")
 st.caption("本地、单用户的页面级工程知识管理系统")
 
 try:
     settings = application_settings()
     database = application_database()
+    basket_items = application_evidence_basket_service().list_items()
     stats = database.dashboard_stats()
     recent_documents = database.list_documents(sort_by="imported_desc")[:5]
     recent_pages = database.recent_edited_pages(5)
@@ -42,7 +47,8 @@ for column, label, value in zip(
 ):
     column.metric(label, value)
 
-if st.button(
+main_actions = st.columns(2)
+if main_actions[0].button(
     "继续处理下一待复核页",
     type="primary",
     disabled=next_review_page is None,
@@ -51,6 +57,11 @@ if st.button(
     st.query_params.clear()
     st.query_params["page_id"] = str(next_review_page.id)
     st.switch_page("pages/4_待整理页面.py")
+if main_actions[1].button(
+    f"查看证据篮（{len(basket_items)}）",
+    use_container_width=True,
+):
+    st.switch_page("pages/9_证据篮.py")
 if next_review_page is None:
     st.caption("当前没有待处理、草稿待复核或处理失败的页面。")
 
@@ -93,6 +104,7 @@ st.markdown(
 - **浏览资料**：筛选文档，在清晰双栏界面中阅读页面、编辑 Markdown、添加标签和项目。
 - **待整理页面**：集中处理扫描件、手写页和失败页。
 - **检索资料**：搜索页面、笔记、文档标题、标签和项目，直接跳转到命中页面。
+- **证据篮**：持久收集多个页面的具体选区，排序并导出来源可追溯的 Markdown 证据包。
 """
 )
 st.info(

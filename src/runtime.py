@@ -12,6 +12,7 @@ from pathlib import Path
 from src.config import Settings, get_settings
 from src.database import Database
 from src.document_service import DocumentService
+from src.evidence_basket_service import EvidenceBasketService
 from src.pdf_service import PdfService
 
 
@@ -94,3 +95,10 @@ def application_document_service() -> DocumentService:
         markdown_dir=settings.markdown_dir,
         pdf_service=pdf_service,
     )
+
+
+@lru_cache(maxsize=1)
+def application_evidence_basket_service() -> EvidenceBasketService:
+    """Return the process-wide durable evidence basket service."""
+
+    return EvidenceBasketService(application_database())

@@ -206,36 +206,18 @@ class EvidenceBasketService:
         """Return current metadata only after all stored sources pass integrity checks."""
 
         items = self.list_items(basket_id)
-        validated: list[EvidenceItem] = []
-        for item in items:
-            document, page = self._validated_source(item.document_id, item.page_id)
-            if page.page_number != item.page_number:
-                raise EvidenceSourceError(
-                    f"证据 {item.id} 的页码已与来源记录不一致，已停止继续处理。"
-                )
-            source_hash = _sha256(_original_source_text(page))
-            if source_hash != item.source_text_sha256:
-                raise EvidenceSourceError(
-                    f"证据 {item.id} 的原始页面文本已发生变化，请重新核对并加入。"
-                )
-            tags = tuple(tag.name for tag in self._database.get_page_tags(page.id))
-            projects = tuple(
-                project.name for project in self._database.get_page_projects(page.id)
-            )
-            validated.append(
-                replace(
-                    item,
-                    document_title=document.title,
-                    filename=document.filename,
-                    review_status=page.status,
-                    projects=projects,
-                    tags=tags,
-                    document_source_path=document.source_path,
-                    image_path=page.image_path,
-                    document_sha256=document.sha256,
-                )
-            )
-        return validated
+        return [self._validated_snapshot(item) for item in items]
+
+    def validated_item(
+        self, item_id: int, *, basket_id: int | None = None
+    ) -> EvidenceItem:
+        """Validate and refresh one item for safe source navigation."""
+
+        items = self.list_items(basket_id)
+        item = next((candidate for candidate in items if candidate.id == item_id), None)
+        if item is None:
+            raise EvidenceBasketError(f"证据条目 {item_id} 不存在或不属于当前证据篮。")
+        return self._validated_snapshot(item)
 
     def export_markdown(
         self,
@@ -264,6 +246,33 @@ class EvidenceBasketService:
         if basket is None:
             raise EvidenceBasketError(f"证据篮 {basket_id} 不存在。")
         return basket
+
+    def _validated_snapshot(self, item: EvidenceItem) -> EvidenceItem:
+        document, page = self._validated_source(item.document_id, item.page_id)
+        if page.page_number != item.page_number:
+            raise EvidenceSourceError(
+                f"证据 {item.id} 的页码已与来源记录不一致，已停止继续处理。"
+            )
+        source_hash = _sha256(_original_source_text(page))
+        if source_hash != item.source_text_sha256:
+            raise EvidenceSourceError(
+                f"证据 {item.id} 的原始页面文本已发生变化，请重新核对并加入。"
+            )
+        tags = tuple(tag.name for tag in self._database.get_page_tags(page.id))
+        projects = tuple(
+            project.name for project in self._database.get_page_projects(page.id)
+        )
+        return replace(
+            item,
+            document_title=document.title,
+            filename=document.filename,
+            review_status=page.status,
+            projects=projects,
+            tags=tags,
+            document_source_path=document.source_path,
+            image_path=page.image_path,
+            document_sha256=document.sha256,
+        )
 
     def _validated_source(self, document_id: int, page_id: int) -> tuple[Document, Page]:
         document = self._database.get_document(document_id)

@@ -7,13 +7,21 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.evidence_basket_service import (
+    DuplicateEvidenceError,
+    EvidenceBasketError,
+)
 from src.models import ImportStatus, SearchResult
-from src.runtime import application_database, application_document_service
+from src.runtime import (
+    application_database,
+    application_document_service,
+    application_evidence_basket_service,
+)
 from src.search_service import SearchService
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.4", page_icon="📖", layout="wide")
+st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.5", page_icon="📖", layout="wide")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -32,12 +40,17 @@ def decode_markdown(file_bytes: bytes) -> str:
 try:
     database = application_database()
     document_service = application_document_service()
+    basket_service = application_evidence_basket_service()
     all_tags = database.list_tags()
     all_projects = database.list_projects()
 except Exception as exc:
     LOGGER.exception("读取资料失败")
     st.error(f"读取资料失败：{exc}")
     st.stop()
+
+basket_flash = st.session_state.pop("basket_flash", "")
+if basket_flash:
+    st.success(basket_flash)
 
 with st.expander("文档筛选与排序", expanded=True):
     filter_columns = st.columns(4)
@@ -264,6 +277,81 @@ if from_search and search_query:
                 ),
                 unsafe_allow_html=True,
             )
+
+try:
+    all_basket_items = basket_service.list_items()
+    current_basket_items = [item for item in all_basket_items if item.page_id == page.id]
+except Exception as exc:
+    LOGGER.exception("读取当前页证据篮状态失败：page_id=%s", page.id)
+    st.error(f"读取当前页证据篮状态失败：{exc}")
+    all_basket_items = []
+    current_basket_items = []
+
+evidence_entry, basket_entry = st.columns([4, 1])
+evidence_entry.caption(
+    f"当前页已加入 {len(current_basket_items)} 条选区证据；证据篮在服务重启后仍会保留。"
+)
+if basket_entry.button(
+    f"查看证据篮（{len(all_basket_items)}）",
+    key="open_basket_from_reader",
+    use_container_width=True,
+):
+    st.switch_page("pages/9_证据篮.py")
+
+with st.expander("将当前页选区加入证据篮", expanded=False):
+    original_source = page.extracted_text.strip() or page.ocr_text.strip()
+    suggestion_source = original_source or page.markdown_content.strip()
+    suggestion_terms = (
+        SearchService(database).query_terms(search_query)
+        if from_search and search_query
+        else ()
+    )
+    default_selection = SearchService(database).build_snippet(
+        suggestion_source,
+        suggestion_terms,
+        max_chars=600,
+    )
+    default_selection = default_selection.removeprefix("…").removesuffix("…").strip()
+    selection_key = f"reader_basket_selection_{page.id}"
+    note_key = f"reader_basket_note_{page.id}"
+    if selection_key not in st.session_state:
+        st.session_state[selection_key] = default_selection
+    if note_key not in st.session_state:
+        st.session_state[note_key] = ""
+    st.text_area(
+        "证据文本",
+        key=selection_key,
+        height=150,
+        placeholder="从原始提取文本或页面 Markdown 中复制具体段落",
+        help=(
+            "系统会核对该文本能否在 PDF 文本层或 OCR 文本中找到；无法匹配时会明确"
+            "标记为用户摘录，绝不会伪装成已验证原文。"
+        ),
+    )
+    st.text_area("用户备注（可选）", key=note_key, height=90)
+    if st.button(
+        "加入证据篮",
+        key=f"reader_add_basket_{page.id}",
+        type="primary",
+        use_container_width=True,
+    ):
+        try:
+            basket_service.add_item(
+                document_id=document.id,
+                page_id=page.id,
+                evidence_text=str(st.session_state[selection_key]),
+                user_note=str(st.session_state[note_key]),
+            )
+        except DuplicateEvidenceError as exc:
+            st.info(str(exc))
+        except EvidenceBasketError as exc:
+            st.error(f"加入证据篮失败：{exc}")
+        except Exception as exc:
+            LOGGER.exception("加入证据篮失败：page_id=%s", page.id)
+            st.error(f"加入证据篮失败：{exc}")
+        else:
+            st.session_state["basket_flash"] = "当前页选区已持久化加入证据篮。"
+            st.rerun()
 
 image_column, editor_column = st.columns([1.08, 1], gap="large")
 with image_column:

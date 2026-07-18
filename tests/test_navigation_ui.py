@@ -10,6 +10,7 @@ import src.runtime as runtime
 from src.config import Settings
 from src.database import Database
 from src.document_service import DocumentService
+from src.evidence_basket_service import EvidenceBasketService
 
 
 def _local_runtime(tmp_path: Path, monkeypatch) -> tuple[Database, DocumentService]:
@@ -45,6 +46,11 @@ def _local_runtime(tmp_path: Path, monkeypatch) -> tuple[Database, DocumentServi
     )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(runtime, "application_document_service", lambda: service)
+    monkeypatch.setattr(
+        runtime,
+        "application_evidence_basket_service",
+        lambda: EvidenceBasketService(database),
+    )
     monkeypatch.setattr(runtime, "application_settings", lambda: settings)
     return database, service
 
