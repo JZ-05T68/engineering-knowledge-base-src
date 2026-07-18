@@ -286,6 +286,22 @@ class DocumentService:
         page_directory = self.markdown_dir / str(document_id)
         markdown_path = page_directory / f"page_{page_number:04d}.md"
         temporary_path = page_directory / f".{markdown_path.name}.{uuid4().hex}.tmp"
+        target_status = PageStatus.REVIEWED if mark_reviewed else PageStatus.DRAFT
+        if (
+            page.markdown_content == markdown_content
+            and page.markdown_path == markdown_path
+            and page.status is target_status
+        ):
+            try:
+                if markdown_path.read_text(encoding="utf-8") == markdown_content:
+                    return page
+            except OSError:
+                LOGGER.warning(
+                    "页面 Markdown 文件需要修复：document_id=%s page_number=%s",
+                    document_id,
+                    page_number,
+                    exc_info=True,
+                )
         try:
             page_directory.mkdir(parents=True, exist_ok=True)
             temporary_path.write_text(markdown_content, encoding="utf-8", newline="\n")
@@ -294,9 +310,7 @@ class DocumentService:
                 page.id,
                 markdown_content,
                 markdown_path,
-                review_status=(
-                    PageStatus.REVIEWED if mark_reviewed else PageStatus.DRAFT
-                ),
+                review_status=target_status,
             )
             LOGGER.info(
                 "页面 Markdown 已保存：document_id=%s page_number=%s",
@@ -317,6 +331,29 @@ class DocumentService:
             raise DocumentImportError(
                 f"保存文档 {document_id} 第 {page_number} 页的 Markdown 失败：{exc}"
             ) from exc
+
+    def save_page_markdown_and_next(
+        self,
+        document_id: int,
+        page_number: int,
+        markdown_content: str,
+        *,
+        queue_document_id: int | None = None,
+    ) -> tuple[Page, Page | None]:
+        """Save, explicitly review, and return the next page in queue order."""
+
+        updated = self.save_page_markdown(
+            document_id,
+            page_number,
+            markdown_content,
+            mark_reviewed=True,
+        )
+        next_page = self.database.get_adjacent_review_page(
+            updated.id,
+            "next",
+            queue_document_id,
+        )
+        return updated, next_page
 
     def clear_page_markdown(self, document_id: int, page_number: int) -> Page:
         """Explicitly clear one page note without altering source text or images."""
@@ -358,6 +395,19 @@ class DocumentService:
         """Explicitly defer a page so it leaves the default review queue."""
 
         return self.database.update_page(page_id, status=PageStatus.SKIPPED)
+
+    def skip_page_and_next(
+        self, page_id: int, *, queue_document_id: int | None = None
+    ) -> tuple[Page, Page | None]:
+        """Skip one page and return the next page remaining in the queue."""
+
+        updated = self.skip_page(page_id)
+        next_page = self.database.get_adjacent_review_page(
+            updated.id,
+            "next",
+            queue_document_id,
+        )
+        return updated, next_page
 
     def reprocess_page(self, page_id: int) -> Page:
         """Retry local rendering/text extraction for one failed page."""

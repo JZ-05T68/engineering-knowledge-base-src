@@ -417,6 +417,61 @@ class Database:
 
         return self.list_review_pages(document_id)
 
+    def get_adjacent_review_page(
+        self,
+        page_id: int,
+        direction: str,
+        document_id: int | None = None,
+    ) -> Page | None:
+        """Return the previous or next page in the stable default review queue."""
+
+        if direction not in {"previous", "next"}:
+            raise ValueError("待复核导航方向必须是 previous 或 next")
+        current = self.get_page(page_id)
+        if current is None:
+            raise RecordNotFoundError(f"页面不存在：{page_id}")
+        statuses = (
+            PageStatus.PENDING.value,
+            PageStatus.DRAFT.value,
+            PageStatus.FAILED.value,
+        )
+        if document_id is not None:
+            if current.document_id != document_id:
+                return None
+            comparison = "<" if direction == "previous" else ">"
+            order = "DESC" if direction == "previous" else "ASC"
+            query = f"""
+                SELECT * FROM pages
+                WHERE review_status IN (?, ?, ?)
+                    AND document_id = ? AND page_number {comparison} ?
+                ORDER BY page_number {order} LIMIT 1
+            """
+            parameters: tuple[object, ...] = (
+                *statuses,
+                document_id,
+                current.page_number,
+            )
+        else:
+            comparison = "<" if direction == "previous" else ">"
+            order = "DESC" if direction == "previous" else "ASC"
+            query = f"""
+                SELECT * FROM pages
+                WHERE review_status IN (?, ?, ?) AND (
+                    document_id {comparison} ? OR
+                    (document_id = ? AND page_number {comparison} ?)
+                )
+                ORDER BY document_id {order}, page_number {order} LIMIT 1
+            """
+            parameters = (
+                *statuses,
+                current.document_id,
+                current.document_id,
+                current.page_number,
+            )
+        with self._connection() as connection:
+            row = connection.execute(query, parameters).fetchone()
+        return _page_from_row(row) if row is not None else None
+
     def list_pages_by_tag(self, tag_id: int) -> list[Page]:
         """List pages directly associated with one tag."""
 
@@ -507,11 +562,25 @@ class Database:
     ) -> Page:
         """Save page Markdown with an explicit manual-review state."""
 
+        normalized_status = _coerce_page_status(review_status)
+        current = self.get_page(page_id)
+        if current is None:
+            raise RecordNotFoundError(f"页面不存在：{page_id}")
+        normalized_path = (
+            Path(markdown_path) if markdown_path is not None else None
+        )
+        if (
+            current.markdown_content == markdown_content
+            and current.markdown_path == normalized_path
+            and current.status is normalized_status
+        ):
+            return current
+
         return self.update_page(
             page_id,
             markdown_content=markdown_content,
             markdown_path=markdown_path,
-            status=review_status,
+            status=normalized_status,
         )
 
     def mark_page_viewed(self, page_id: int) -> Page:

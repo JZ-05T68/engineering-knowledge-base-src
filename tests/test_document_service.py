@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 import src.pdf_service as pdf_service_module
+from src.database import Database
 from src.document_service import DocumentImportError, DocumentService
 from src.models import PageStatus
 from src.pdf_service import PdfProcessingError, PdfService, ProcessedPage
@@ -227,7 +228,12 @@ def test_import_rejects_empty_pdf_and_accepts_chinese_name_with_spaces(tmp_path:
 
 def test_save_page_markdown_writes_utf8_and_updates_database(tmp_path: Path) -> None:
     database = FakeDatabase()
-    database.pages_by_number[(42, 2)] = SimpleNamespace(id=7)
+    database.pages_by_number[(42, 2)] = SimpleNamespace(
+        id=7,
+        markdown_content="",
+        markdown_path=None,
+        status=PageStatus.PENDING,
+    )
     service = make_service(tmp_path, database)
 
     updated_page = service.save_page_markdown(42, 2, "# 校对内容\n\n泵站参数。")
@@ -250,7 +256,12 @@ def test_note_save_failure_is_reported_and_user_file_is_preserved(tmp_path: Path
             raise OSError("database is read-only")
 
     database = FailingDatabase()
-    database.pages_by_number[(42, 1)] = SimpleNamespace(id=1)
+    database.pages_by_number[(42, 1)] = SimpleNamespace(
+        id=1,
+        markdown_content="",
+        markdown_path=None,
+        status=PageStatus.PENDING,
+    )
     service = make_service(tmp_path, database)
 
     with pytest.raises(DocumentImportError, match="保存.*失败"):
@@ -258,6 +269,132 @@ def test_note_save_failure_is_reported_and_user_file_is_preserved(tmp_path: Path
 
     saved = tmp_path / "markdown" / "42" / "page_0001.md"
     assert saved.read_text(encoding="utf-8") == "# 不应静默丢失"
+
+
+def test_markdown_draft_persists_after_database_and_service_restart(tmp_path: Path) -> None:
+    database_path = tmp_path / "database" / "knowledge.db"
+    database = Database(database_path)
+    document = database.create_document(
+        title="持久化手册",
+        filename="persistence.pdf",
+        source_path=tmp_path / "raw" / "persistence.pdf",
+        sha256="e" * 64,
+    )
+    database.create_page(
+        document_id=document.id,
+        page_number=1,
+        image_path=tmp_path / "pages" / "1" / "page_0001.png",
+    )
+    service = DocumentService(
+        database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+    )
+
+    saved_page = service.save_page_markdown(document.id, 1, "# 可恢复草稿\n\n本地保存。")
+    markdown_path = tmp_path / "markdown" / str(document.id) / "page_0001.md"
+    first_modified_time = markdown_path.stat().st_mtime_ns
+    duplicate_save = service.save_page_markdown(
+        document.id, 1, "# 可恢复草稿\n\n本地保存。"
+    )
+
+    assert saved_page.status is PageStatus.DRAFT
+    assert duplicate_save == saved_page
+    assert markdown_path.stat().st_mtime_ns == first_modified_time
+    assert database.dashboard_stats().draft_pages == 1
+
+    reopened_database = Database(database_path)
+    reopened_service = DocumentService(
+        reopened_database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+    )
+    reopened_page = reopened_database.get_page_by_number(document.id, 1)
+    assert reopened_page is not None
+    assert reopened_page.markdown_content == "# 可恢复草稿\n\n本地保存。"
+    assert reopened_page.status is PageStatus.DRAFT
+    assert reopened_service.database.search('"恢复"')[0].page_id == reopened_page.id
+
+
+def test_save_review_and_next_runs_continuously_until_queue_end(tmp_path: Path) -> None:
+    database = Database(tmp_path / "database" / "knowledge.db")
+    document = database.create_document(
+        title="连续复核手册",
+        filename="continuous.pdf",
+        source_path=tmp_path / "raw" / "continuous.pdf",
+        sha256="f" * 64,
+    )
+    pages = [
+        database.create_page(
+            document_id=document.id,
+            page_number=page_number,
+            image_path=tmp_path / "pages" / "1" / f"page_{page_number:04d}.png",
+        )
+        for page_number in range(1, 4)
+    ]
+    service = DocumentService(
+        database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+    )
+
+    first, next_page = service.save_page_markdown_and_next(
+        document.id, 1, "第一页", queue_document_id=document.id
+    )
+    assert first.status is PageStatus.REVIEWED
+    assert next_page == pages[1]
+    second, next_page = service.save_page_markdown_and_next(
+        document.id, 2, "第二页", queue_document_id=document.id
+    )
+    assert second.status is PageStatus.REVIEWED
+    assert next_page == pages[2]
+    third, next_page = service.save_page_markdown_and_next(
+        document.id, 3, "第三页", queue_document_id=document.id
+    )
+    assert third.status is PageStatus.REVIEWED
+    assert next_page is None
+    assert database.list_review_pages(document.id) == []
+    assert database.dashboard_stats().reviewed_pages == 3
+
+
+def test_skipped_page_leaves_default_queue_and_returns_next_page(tmp_path: Path) -> None:
+    database = Database(tmp_path / "database" / "knowledge.db")
+    document = database.create_document(
+        title="跳过测试",
+        filename="skip.pdf",
+        source_path=tmp_path / "raw" / "skip.pdf",
+        sha256="1" * 64,
+    )
+    first = database.create_page(
+        document_id=document.id,
+        page_number=1,
+        image_path=tmp_path / "pages" / "1" / "page_0001.png",
+    )
+    second = database.create_page(
+        document_id=document.id,
+        page_number=2,
+        image_path=tmp_path / "pages" / "1" / "page_0002.png",
+    )
+    service = DocumentService(
+        database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+    )
+
+    skipped, next_page = service.skip_page_and_next(
+        first.id, queue_document_id=document.id
+    )
+
+    assert skipped.status is PageStatus.SKIPPED
+    assert next_page == second
+    assert database.list_review_pages(document.id) == [second]
+    stats = database.dashboard_stats()
+    assert stats.skipped_pages == 1
+    assert stats.pending_pages == 1
 
 
 def test_single_page_failure_keeps_other_completed_pages(tmp_path: Path) -> None:
