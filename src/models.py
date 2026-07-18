@@ -48,6 +48,63 @@ class PageStatus(StrEnum):
         }[self]
 
 
+class SearchField(StrEnum):
+    """Searchable local field used for source-aware filtering and display."""
+
+    EXTRACTED_TEXT = "extracted_text"
+    OCR_TEXT = "ocr_text"
+    MARKDOWN = "markdown"
+    DOCUMENT_TITLE = "document_title"
+    FILENAME = "filename"
+    TAG = "tag"
+    PROJECT = "project"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in search filters and result cards."""
+
+        return {
+            self.EXTRACTED_TEXT: "页面提取文本",
+            self.OCR_TEXT: "OCR 文本",
+            self.MARKDOWN: "用户 Markdown 笔记",
+            self.DOCUMENT_TITLE: "文档标题",
+            self.FILENAME: "原始文件名",
+            self.TAG: "标签",
+            self.PROJECT: "项目",
+        }[self]
+
+
+class SearchSort(StrEnum):
+    """Supported, SQL-whitelisted search result orders."""
+
+    RELEVANCE = "relevance"
+    DOCUMENT_PAGE = "document_page"
+    VIEWED_DESC = "viewed_desc"
+    UPDATED_DESC = "updated_desc"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the search UI."""
+
+        return {
+            self.RELEVANCE: "相关度",
+            self.DOCUMENT_PAGE: "文档与页码",
+            self.VIEWED_DESC: "最近查看",
+            self.UPDATED_DESC: "最近修改",
+        }[self]
+
+
+@dataclass(frozen=True, slots=True)
+class SearchFilters:
+    """Composable search filters; multiple tags and projects use AND semantics."""
+
+    document_ids: tuple[int, ...] = ()
+    project_ids: tuple[int, ...] = ()
+    tag_ids: tuple[int, ...] = ()
+    statuses: tuple[PageStatus, ...] = ()
+    match_fields: tuple[SearchField, ...] = ()
+
+
 @dataclass(frozen=True, slots=True)
 class Document:
     """Metadata and import statistics for one locally stored source PDF."""
@@ -179,6 +236,13 @@ class SearchResult:
     match_type: str = "页面内容"
     tags: tuple[str, ...] = ()
     projects: tuple[str, ...] = ()
+    match_fields: tuple[SearchField, ...] = ()
+    document_source_path: Path | None = None
+    document_sha256: str = ""
+    extracted_text: str = ""
+    ocr_text: str = ""
+    markdown_content: str = ""
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)

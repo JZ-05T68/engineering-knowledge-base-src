@@ -24,7 +24,10 @@ from src.models import (
     PageStatus,
     Project,
     ReviewProgress,
+    SearchField,
+    SearchFilters,
     SearchResult,
+    SearchSort,
     Tag,
 )
 
@@ -32,6 +35,15 @@ LOGGER = logging.getLogger(__name__)
 _SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{64}$")
 _QUOTED_TERM: Final[re.Pattern[str]] = re.compile(r'"([^"]+)"')
 _UNSET: Final[object] = object()
+_SEARCH_FIELD_ORDER: Final[tuple[SearchField, ...]] = (
+    SearchField.MARKDOWN,
+    SearchField.OCR_TEXT,
+    SearchField.EXTRACTED_TEXT,
+    SearchField.DOCUMENT_TITLE,
+    SearchField.FILENAME,
+    SearchField.TAG,
+    SearchField.PROJECT,
+)
 _PROCESSING_STATUSES: Final[set[str]] = {
     "text_extracted",
     "ocr_completed",
@@ -953,60 +965,82 @@ class Database:
             ).fetchall()
         return [_page_from_row(row) for row in rows]
 
-    def search(self, query: str, limit: int = 20) -> list[SearchResult]:
-        """Search page text plus document, tag, and project metadata locally."""
+    def search(
+        self,
+        query: str,
+        limit: int = 20,
+        *,
+        terms: Sequence[str] | None = None,
+        filters: SearchFilters | None = None,
+        sort_by: SearchSort | str = SearchSort.RELEVANCE,
+    ) -> list[SearchResult]:
+        """Search all local fields with parameterized, composable filters.
+
+        FTS5 supplies ranking while literal field checks identify every matching
+        source. Multiple tags and projects are intentionally combined with AND.
+        """
 
         normalized_query = query.strip()
         if not normalized_query or limit <= 0:
             return []
         safe_limit = min(limit, 100)
-        terms = _QUOTED_TERM.findall(normalized_query) or normalized_query.split()
-        terms = [term.casefold() for term in terms if term.strip()]
-        if not terms:
+        literal_terms = tuple(
+            dict.fromkeys(
+                term.casefold().strip()
+                for term in (terms or _QUOTED_TERM.findall(normalized_query))
+                if term.strip()
+            )
+        )
+        if not literal_terms:
             return []
+        active_filters = filters or SearchFilters()
+        match_fields = active_filters.match_fields or tuple(SearchField)
+        match_clause, match_parameters = _search_match_clause(
+            match_fields, literal_terms
+        )
+        filter_clauses, filter_parameters = _search_filter_clauses(active_filters)
+        where_clauses = [f"({match_clause})", *filter_clauses]
+        order_by = _search_order_by(sort_by)
         try:
             with self._connection() as connection:
-                content_rows = connection.execute(
-                    """
+                rows = connection.execute(
+                    f"""
+                    WITH content_matches AS (
+                        SELECT rowid, bm25(page_search, 1.0, 1.1, 1.2) AS search_rank
+                        FROM page_search WHERE page_search MATCH ?
+                    )
                     SELECT p.*, d.title AS document_title, d.filename,
-                        bm25(page_search, 1.0, 1.1, 1.2) AS rank
-                    FROM page_search
-                    JOIN pages p ON p.id = page_search.rowid
+                        d.source_path AS document_source_path, d.sha256 AS document_sha256,
+                        d.updated_at AS document_updated_at, cm.search_rank
+                    FROM pages p
                     JOIN documents d ON d.id = p.document_id
-                    WHERE page_search MATCH ?
-                    ORDER BY rank, p.document_id, p.page_number LIMIT ?
+                    LEFT JOIN content_matches cm ON cm.rowid = p.id
+                    WHERE {' AND '.join(where_clauses)}
+                    ORDER BY {order_by}
+                    LIMIT ?
                     """,
-                    (normalized_query, safe_limit * 2),
+                    (
+                        normalized_query,
+                        *match_parameters,
+                        *filter_parameters,
+                        safe_limit,
+                    ),
                 ).fetchall()
-                metadata_rows = self._metadata_search_rows(connection, terms, safe_limit * 2)
                 results: list[SearchResult] = []
-                seen: set[int] = set()
-                for row in [*content_rows, *metadata_rows]:
+                for row in rows:
                     page_id = int(row["id"])
-                    if page_id in seen:
-                        continue
-                    seen.add(page_id)
-                    tags = tuple(tag.name for tag in self._tags_for_connection(connection, page_id))
+                    tags = tuple(
+                        tag.name for tag in self._tags_for_connection(connection, page_id)
+                    )
                     projects = tuple(
                         project.name
                         for project in self._projects_for_connection(connection, page_id)
                     )
-                    match_type = _match_type(row, terms, tags, projects)
-                    content = (
-                        str(row["markdown_content"]).strip()
-                        or str(row["ocr_text"]).strip()
-                        or str(row["extracted_text"]).strip()
-                        or " · ".join(
-                            value
-                            for value in (
-                                str(row["document_title"]),
-                                str(row["filename"]),
-                                *tags,
-                                *projects,
-                            )
-                            if value
-                        )
+                    matched_fields = _matching_fields(
+                        row, literal_terms, tags, projects
                     )
+                    content = _matched_content(row, matched_fields, tags, projects)
+                    rank = row["search_rank"]
                     results.append(
                         SearchResult(
                             page_id=page_id,
@@ -1017,56 +1051,27 @@ class Database:
                             image_path=Path(row["image_path"]),
                             content=content,
                             snippet="",
-                            rank=float(row["rank"]),
+                            rank=float(rank) if rank is not None else 100.0,
                             status=PageStatus(row["review_status"]),
-                            match_type=match_type,
+                            match_type="、".join(
+                                field.label for field in matched_fields
+                            )
+                            or "页面内容",
                             tags=tags,
                             projects=projects,
+                            match_fields=matched_fields,
+                            document_source_path=Path(row["document_source_path"]),
+                            document_sha256=str(row["document_sha256"]),
+                            extracted_text=str(row["extracted_text"]),
+                            ocr_text=str(row["ocr_text"]),
+                            markdown_content=str(row["markdown_content"]),
+                            updated_at=_parse_datetime(str(row["updated_at"])),
                         )
                     )
-                    if len(results) >= safe_limit:
-                        break
                 return results
         except sqlite3.OperationalError:
             LOGGER.warning("忽略无效的 FTS5 检索表达式：%r", query, exc_info=True)
             return []
-
-    def _metadata_search_rows(
-        self, connection: sqlite3.Connection, terms: Sequence[str], limit: int
-    ) -> list[sqlite3.Row]:
-        clauses: list[str] = []
-        parameters: list[object] = []
-        for term in terms:
-            pattern = f"%{term}%"
-            clauses.append(
-                """(
-                    lower(d.title) LIKE ? OR lower(d.filename) LIKE ? OR
-                    EXISTS (
-                        SELECT 1 FROM tags t
-                        LEFT JOIN document_tags dt ON dt.tag_id = t.id
-                        LEFT JOIN page_tags pt ON pt.tag_id = t.id
-                        WHERE lower(t.name) LIKE ? AND
-                            (dt.document_id = d.id OR pt.page_id = p.id)
-                    ) OR EXISTS (
-                        SELECT 1 FROM projects pr
-                        LEFT JOIN project_documents pd ON pd.project_id = pr.id
-                        LEFT JOIN project_pages pp ON pp.project_id = pr.id
-                        WHERE lower(pr.name) LIKE ? AND
-                            (pd.document_id = d.id OR pp.page_id = p.id)
-                    )
-                )"""
-            )
-            parameters.extend((pattern, pattern, pattern, pattern))
-        parameters.append(limit)
-        return connection.execute(
-            f"""
-            SELECT p.*, d.title AS document_title, d.filename, 100.0 AS rank
-            FROM pages p JOIN documents d ON d.id = p.document_id
-            WHERE {' OR '.join(clauses)}
-            ORDER BY d.updated_at DESC, p.page_number LIMIT ?
-            """,
-            parameters,
-        ).fetchall()
 
     @staticmethod
     def _tags_for_connection(connection: sqlite3.Connection, page_id: int) -> list[Tag]:
@@ -1268,23 +1273,181 @@ def _import_record_from_row(row: sqlite3.Row) -> ImportRecord:
     )
 
 
-def _match_type(
-    row: sqlite3.Row, terms: Sequence[str], tags: Sequence[str], projects: Sequence[str]
-) -> str:
-    fields = (
-        ("Markdown 笔记", str(row["markdown_content"])),
-        ("OCR 文本", str(row["ocr_text"])),
-        ("页面提取文本", str(row["extracted_text"])),
-        ("文档标题", str(row["document_title"])),
-        ("原始文件名", str(row["filename"])),
-        ("标签", " ".join(tags)),
-        ("项目", " ".join(projects)),
+def _search_match_clause(
+    fields: Sequence[SearchField], terms: Sequence[str]
+) -> tuple[str, list[object]]:
+    """Build a literal match expression from whitelisted field fragments."""
+
+    clauses: list[str] = []
+    parameters: list[object] = []
+    field_expressions = {
+        SearchField.EXTRACTED_TEXT: "lower(p.extracted_text) LIKE ? ESCAPE '\\'",
+        SearchField.OCR_TEXT: "lower(p.ocr_text) LIKE ? ESCAPE '\\'",
+        SearchField.MARKDOWN: "lower(p.markdown_content) LIKE ? ESCAPE '\\'",
+        SearchField.DOCUMENT_TITLE: "lower(d.title) LIKE ? ESCAPE '\\'",
+        SearchField.FILENAME: "lower(d.filename) LIKE ? ESCAPE '\\'",
+    }
+    for raw_field in dict.fromkeys(fields):
+        field = SearchField(raw_field)
+        patterns = [_like_pattern(term) for term in terms]
+        if field in field_expressions:
+            clauses.append(
+                "(" + " OR ".join(field_expressions[field] for _ in patterns) + ")"
+            )
+            parameters.extend(patterns)
+        elif field is SearchField.TAG:
+            term_clause = " OR ".join(
+                "lower(t.name) LIKE ? ESCAPE '\\'" for _ in patterns
+            )
+            clauses.append(
+                f"""EXISTS (
+                    SELECT 1 FROM tags t
+                    LEFT JOIN document_tags dt ON dt.tag_id = t.id
+                    LEFT JOIN page_tags pt ON pt.tag_id = t.id
+                    WHERE ({term_clause}) AND
+                        (dt.document_id = d.id OR pt.page_id = p.id)
+                )"""
+            )
+            parameters.extend(patterns)
+        elif field is SearchField.PROJECT:
+            term_clause = " OR ".join(
+                "lower(pr.name) LIKE ? ESCAPE '\\'" for _ in patterns
+            )
+            clauses.append(
+                f"""EXISTS (
+                    SELECT 1 FROM projects pr
+                    LEFT JOIN project_documents pd ON pd.project_id = pr.id
+                    LEFT JOIN project_pages pp ON pp.project_id = pr.id
+                    WHERE ({term_clause}) AND
+                        (pd.document_id = d.id OR pp.page_id = p.id)
+                )"""
+            )
+            parameters.extend(patterns)
+    return " OR ".join(clauses) or "0", parameters
+
+
+def _search_filter_clauses(filters: SearchFilters) -> tuple[list[str], list[object]]:
+    """Build filter SQL using placeholders only; tag/project values use AND."""
+
+    clauses: list[str] = []
+    parameters: list[object] = []
+    document_ids = _positive_ids(filters.document_ids)
+    if document_ids:
+        placeholders = ",".join("?" for _ in document_ids)
+        clauses.append(f"p.document_id IN ({placeholders})")
+        parameters.extend(document_ids)
+    statuses = tuple(dict.fromkeys(PageStatus(value).value for value in filters.statuses))
+    if statuses:
+        placeholders = ",".join("?" for _ in statuses)
+        clauses.append(f"p.review_status IN ({placeholders})")
+        parameters.extend(statuses)
+    for tag_id in _positive_ids(filters.tag_ids):
+        clauses.append(
+            """EXISTS (
+                SELECT 1 FROM tags filter_tag
+                LEFT JOIN document_tags filter_dt
+                    ON filter_dt.tag_id = filter_tag.id
+                LEFT JOIN page_tags filter_pt
+                    ON filter_pt.tag_id = filter_tag.id
+                WHERE filter_tag.id = ? AND
+                    (filter_dt.document_id = p.document_id OR filter_pt.page_id = p.id)
+            )"""
+        )
+        parameters.append(tag_id)
+    for project_id in _positive_ids(filters.project_ids):
+        clauses.append(
+            """EXISTS (
+                SELECT 1 FROM projects filter_project
+                LEFT JOIN project_documents filter_pd
+                    ON filter_pd.project_id = filter_project.id
+                LEFT JOIN project_pages filter_pp
+                    ON filter_pp.project_id = filter_project.id
+                WHERE filter_project.id = ? AND
+                    (filter_pd.document_id = p.document_id OR filter_pp.page_id = p.id)
+            )"""
+        )
+        parameters.append(project_id)
+    return clauses, parameters
+
+
+def _search_order_by(sort_by: SearchSort | str) -> str:
+    try:
+        normalized = SearchSort(sort_by)
+    except ValueError:
+        normalized = SearchSort.RELEVANCE
+    return {
+        SearchSort.RELEVANCE: (
+            "cm.search_rank IS NULL, cm.search_rank ASC, p.document_id, p.page_number"
+        ),
+        SearchSort.DOCUMENT_PAGE: (
+            "d.title COLLATE NOCASE ASC, p.page_number ASC, p.id ASC"
+        ),
+        SearchSort.VIEWED_DESC: (
+            "p.last_viewed_at IS NULL, p.last_viewed_at DESC, "
+            "p.document_id, p.page_number"
+        ),
+        SearchSort.UPDATED_DESC: (
+            "p.updated_at DESC, p.document_id, p.page_number"
+        ),
+    }[normalized]
+
+
+def _matching_fields(
+    row: sqlite3.Row,
+    terms: Sequence[str],
+    tags: Sequence[str],
+    projects: Sequence[str],
+) -> tuple[SearchField, ...]:
+    values = {
+        SearchField.MARKDOWN: str(row["markdown_content"]),
+        SearchField.OCR_TEXT: str(row["ocr_text"]),
+        SearchField.EXTRACTED_TEXT: str(row["extracted_text"]),
+        SearchField.DOCUMENT_TITLE: str(row["document_title"]),
+        SearchField.FILENAME: str(row["filename"]),
+        SearchField.TAG: "\n".join(tags),
+        SearchField.PROJECT: "\n".join(projects),
+    }
+    return tuple(
+        field
+        for field in _SEARCH_FIELD_ORDER
+        if any(term in values[field].casefold() for term in terms)
     )
-    for label, value in fields:
-        folded = value.casefold()
-        if any(term in folded for term in terms):
-            return label
-    return "页面内容"
+
+
+def _matched_content(
+    row: sqlite3.Row,
+    fields: Sequence[SearchField],
+    tags: Sequence[str],
+    projects: Sequence[str],
+) -> str:
+    values = {
+        SearchField.MARKDOWN: str(row["markdown_content"]),
+        SearchField.OCR_TEXT: str(row["ocr_text"]),
+        SearchField.EXTRACTED_TEXT: str(row["extracted_text"]),
+        SearchField.DOCUMENT_TITLE: str(row["document_title"]),
+        SearchField.FILENAME: str(row["filename"]),
+        SearchField.TAG: "、".join(tags),
+        SearchField.PROJECT: "、".join(projects),
+    }
+    for field in fields:
+        if values[field].strip():
+            return values[field]
+    return (
+        str(row["markdown_content"]).strip()
+        or str(row["ocr_text"]).strip()
+        or str(row["extracted_text"]).strip()
+        or str(row["document_title"]).strip()
+        or str(row["filename"]).strip()
+    )
+
+
+def _like_pattern(term: str) -> str:
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
+def _positive_ids(values: Sequence[int]) -> tuple[int, ...]:
+    return tuple(dict.fromkeys(int(value) for value in values if int(value) > 0))
 
 
 __all__ = [

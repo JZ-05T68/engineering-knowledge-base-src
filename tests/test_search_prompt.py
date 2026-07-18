@@ -16,7 +16,8 @@ class FakeDatabase:
         self.results = results or []
         self.calls: list[tuple[str, int]] = []
 
-    def search(self, query: str, limit: int = 20) -> list[SearchResult]:
+    def search(self, query: str, limit: int = 20, **options) -> list[SearchResult]:
+        del options
         self.calls.append((query, limit))
         return self.results[:limit]
 
