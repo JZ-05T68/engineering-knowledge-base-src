@@ -23,6 +23,64 @@ _MARKDOWN_MARKER: Final[re.Pattern[str]] = re.compile(
 _FTS_OPERATORS: Final[frozenset[str]] = frozenset({"and", "or", "not", "near"})
 
 
+def literal_match_spans(text: str, terms: Sequence[str]) -> tuple[tuple[int, int], ...]:
+    """Return non-overlapping literal matches, preferring longer overlapping terms."""
+
+    unique_terms = sorted(
+        {term for term in terms if term},
+        key=lambda value: (-len(value), value.casefold()),
+    )
+    if not text or not unique_terms:
+        return ()
+    pattern = re.compile(
+        "|".join(re.escape(term) for term in unique_terms),
+        flags=re.IGNORECASE,
+    )
+    return tuple((match.start(), match.end()) for match in pattern.finditer(text))
+
+
+def build_context_excerpts(
+    content: str,
+    terms: Sequence[str],
+    *,
+    max_chars: int = 180,
+    max_excerpts: int = 3,
+) -> tuple[str, ...]:
+    """Build distinct excerpts around literal matches without interpreting markup."""
+
+    text = to_plain_text(content)
+    if not text or max_chars < 1 or max_excerpts < 1:
+        return ()
+    spans = literal_match_spans(text, terms)
+    if not spans:
+        fallback = build_context_excerpt(text, terms, max_chars=max_chars)
+        return (fallback,) if fallback else ()
+
+    excerpts: list[str] = []
+    normalized_excerpts: list[str] = []
+    for match_start, _ in spans:
+        start = max(0, match_start - max_chars // 3)
+        end = min(len(text), start + max_chars)
+        if end - start < max_chars:
+            start = max(0, end - max_chars)
+        excerpt = text[start:end].strip()
+        if start > 0:
+            excerpt = f"…{excerpt}"
+        if end < len(text):
+            excerpt = f"{excerpt}…"
+        normalized = _WHITESPACE.sub(" ", excerpt).casefold()
+        if any(
+            normalized in existing or existing in normalized
+            for existing in normalized_excerpts
+        ):
+            continue
+        excerpts.append(excerpt)
+        normalized_excerpts.append(normalized)
+        if len(excerpts) >= max_excerpts:
+            break
+    return tuple(excerpts)
+
+
 def extract_search_terms(
     query: str,
     *,
@@ -146,7 +204,9 @@ def highlight_html(text: str, terms: Sequence[str]) -> str:
 
 __all__ = [
     "build_context_excerpt",
+    "build_context_excerpts",
     "extract_search_terms",
     "highlight_html",
+    "literal_match_spans",
     "to_plain_text",
 ]

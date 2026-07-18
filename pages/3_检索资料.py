@@ -12,12 +12,21 @@ from src.evidence_basket_service import (
     EvidenceBasketError,
 )
 from src.evidence_service import EvidencePackageBuilder
-from src.models import PageStatus, SearchField, SearchFilters, SearchSort
+from src.models import (
+    PageStatus,
+    SearchField,
+    SearchFilters,
+    SearchResult,
+    SearchSort,
+    SearchViewMode,
+)
 from src.prompt_builder import PromptBuilder
 from src.runtime import application_database, application_evidence_basket_service
 from src.search_navigation import (
     SearchNavigationError,
+    group_search_results,
     reader_query_params,
+    state_for_result,
     validate_search_target,
 )
 from src.search_service import SearchService
@@ -35,9 +44,9 @@ from src.search_state import (
 LOGGER = logging.getLogger(__name__)
 RESULTS_PER_PAGE = 10
 
-st.set_page_config(page_title="检索资料｜工程知识库 v0.0.6", page_icon="🔎", layout="wide")
+st.set_page_config(page_title="检索资料｜工程知识库 v0.0.7", page_icon="🔎", layout="wide")
 st.title("检索资料")
-st.caption("用更少的点击缩小结果，并始终保留可返回、可解释的本地搜索状态。")
+st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
 st.markdown(
     """
     <style>
@@ -46,6 +55,12 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+pending_search_params = st.session_state.pop("pending_search_query_params", None)
+if isinstance(pending_search_params, dict):
+    pending_search_state = parse_search_state(pending_search_params)
+    st.query_params.from_dict(search_state_query_params(pending_search_state))
+    st.rerun()
 
 
 def _state_signature(state: SearchPageState) -> tuple[object, ...]:
@@ -65,6 +80,10 @@ def _state_signature(state: SearchPageState) -> tuple[object, ...]:
         state.limit,
         state.result_page,
         state.filters_open,
+        state.view_mode,
+        state.expanded_document_id,
+        state.preview_page_id,
+        state.focus_result,
     )
 
 
@@ -85,6 +104,7 @@ def _set_widget_state(state: SearchPageState) -> None:
     st.session_state["search_sort_value"] = state.sort.value
     st.session_state["search_limit"] = state.limit
     st.session_state["search_filters_open"] = state.filters_open
+    st.session_state["search_view_mode"] = state.view_mode.value
 
 
 def _search_with_state(state: SearchPageState) -> None:
@@ -115,6 +135,7 @@ def _activate_state(
     *,
     remember_previous: bool = True,
     rerun: bool = True,
+    refresh_results: bool = True,
 ) -> None:
     """Activate, serialize, and execute one canonical search state."""
 
@@ -126,7 +147,8 @@ def _activate_state(
     st.session_state["search_url_signature"] = _state_signature(state)
     st.session_state["search_widgets_need_sync"] = True
     st.query_params.from_dict(search_state_query_params(state))
-    _search_with_state(state)
+    if refresh_results:
+        _search_with_state(state)
     if rerun:
         st.rerun()
 
@@ -166,6 +188,10 @@ def _state_from_widgets(active: SearchPageState, basket_id: int) -> SearchPageSt
         limit=int(st.session_state["search_limit"]),
         result_page=active.result_page if keep_page else 1,
         filters_open=active.filters_open,
+        view_mode=active.view_mode,
+        expanded_document_id=active.expanded_document_id if keep_page else None,
+        preview_page_id=active.preview_page_id if keep_page else None,
+        focus_result=active.focus_result if keep_page else None,
     )
 
 
@@ -287,6 +313,7 @@ for key, value in {
     "search_sort_value": active_state.sort.value,
     "search_limit": active_state.limit,
     "search_filters_open": active_state.filters_open,
+    "search_view_mode": active_state.view_mode.value,
     "search_document_finder": "",
     "search_project_finder": "",
     "search_tag_finder": "",
@@ -532,6 +559,30 @@ sort_columns[2].caption(
 if apply_search:
     _activate_state(_state_from_widgets(active_state, current_basket.id))
 
+view_mode_value = st.radio(
+    "搜索结果视图",
+    options=[mode.value for mode in SearchViewMode],
+    format_func=lambda value: SearchViewMode(value).label,
+    key="search_view_mode",
+    horizontal=True,
+    help="页面视图保持原有分页卡片；文档视图按当前有序结果稳定分组。",
+)
+if SearchViewMode(view_mode_value) is not active_state.view_mode:
+    next_mode = SearchViewMode(view_mode_value)
+    _activate_state(
+        replace(
+            active_state,
+            view_mode=next_mode,
+            expanded_document_id=(
+                active_state.expanded_document_id
+                if next_mode is SearchViewMode.DOCUMENT
+                else None
+            ),
+        ),
+        remember_previous=False,
+        refresh_results=False,
+    )
+
 search_error = st.session_state.pop("search_error", "")
 if search_error:
     st.error(search_error)
@@ -582,7 +633,7 @@ elif has_searched and not results:
     ):
         _activate_state(clear_search_filters(active_state, keep_query=False))
 
-if results:
+if results and active_state.view_mode is SearchViewMode.PAGE:
     loaded_count = len(results)
     page_count = (loaded_count + RESULTS_PER_PAGE - 1) // RESULTS_PER_PAGE
     current_page = min(max(active_state.result_page, 1), page_count)
@@ -593,7 +644,7 @@ if results:
         st.session_state["search_url_signature"] = _state_signature(active_state)
         st.query_params.from_dict(search_state_query_params(active_state))
     heading_columns = st.columns([4, 1, 1])
-    heading_columns[0].subheader(f"搜索结果（共 {effective_total} 页）")
+    heading_columns[0].subheader(f"搜索结果（共 {effective_total} 个页面）")
     if heading_columns[1].button(
         "← 上一组",
         disabled=current_page <= 1,
@@ -603,6 +654,7 @@ if results:
         _activate_state(
             replace(active_state, result_page=current_page - 1),
             remember_previous=False,
+            refresh_results=False,
         )
     if heading_columns[2].button(
         "下一组 →",
@@ -613,6 +665,7 @@ if results:
         _activate_state(
             replace(active_state, result_page=current_page + 1),
             remember_previous=False,
+            refresh_results=False,
         )
     st.caption(
         f"已加载 {loaded_count} 页；第 {current_page} / {page_count} 组；"
@@ -638,12 +691,15 @@ if results:
         if note_key not in st.session_state:
             st.session_state[note_key] = ""
         with st.container(border=True):
-            heading, open_action, basket_action, evidence_action = st.columns(
-                [4.2, 1, 1.1, 1.4]
+            heading, open_action, preview_action, basket_action, evidence_action = st.columns(
+                [4.1, 1, 1.35, 1.1, 1.4]
             )
             title = result.document_title.strip() or "未命名文档"
             filename = result.filename.strip() or "未记录原始文件名"
-            heading.markdown(f"### {index}. {title} · 第 {result.page_number} 页")
+            focus_label = "　← 返回位置" if active_state.focus_result == index else ""
+            heading.markdown(
+                f"### {index}. {title} · 第 {result.page_number} 页{focus_label}"
+            )
             heading.caption(f"原始文件：{filename}　|　页面状态：{result.status.label}")
             current_page_items = basket_items_by_page.get(result.page_id, [])
             if current_page_items:
@@ -661,16 +717,36 @@ if results:
                 except SearchNavigationError as exc:
                     st.error(f"无法打开该搜索结果：{exc}")
                 else:
-                    return_state = replace(active_state, result_page=current_page)
-                    st.session_state["search_result_page"] = current_page
-                    st.query_params.from_dict(
-                        reader_query_params(
-                            result,
-                            active_state.query,
-                            return_state=return_state,
-                        )
+                    return_state = state_for_result(
+                        active_state,
+                        result_index=index,
+                        document_id=result.document_id,
+                        results_per_page=RESULTS_PER_PAGE,
                     )
+                    st.session_state["search_result_page"] = current_page
+                    navigation_params = reader_query_params(
+                        result,
+                        active_state.query,
+                        return_state=return_state,
+                    )
+                    st.session_state["pending_reader_query_params"] = navigation_params
+                    st.query_params.from_dict(navigation_params)
                     st.switch_page("pages/2_浏览资料.py")
+            preview_open = active_state.preview_page_id == result.page_id
+            if preview_action.button(
+                "关闭快速预览" if preview_open else "打开快速预览",
+                key=f"toggle_preview_{result.page_id}",
+                use_container_width=True,
+            ):
+                _activate_state(
+                    replace(
+                        active_state,
+                        preview_page_id=None if preview_open else result.page_id,
+                        focus_result=index,
+                    ),
+                    remember_previous=False,
+                    refresh_results=False,
+                )
             if basket_action.button(
                 "加入证据篮",
                 key=f"add_basket_result_{result.page_id}",
@@ -708,12 +784,54 @@ if results:
             match_sources = result.match_type or "页面内容"
             st.caption(f"所属项目：{projects}　|　标签：{tags}")
             st.caption(f"命中字段 / 来源：{match_sources}")
-            st.markdown(
-                search_service.highlighted_snippet(result, active_state.query)
-                if result.snippet or result.content
-                else snippet,
-                unsafe_allow_html=True,
+            st.caption(
+                f"本页关键词字面命中 {result.match_count} 次（重叠词组按最长项计一次）；"
+                f"显示 {len(result.snippets)} 个去重片段。"
             )
+            if result.snippets:
+                for snippet_number, match_snippet in enumerate(result.snippets, start=1):
+                    st.caption(
+                        f"片段 {snippet_number} · {match_snippet.field.label} · "
+                        f"该字段命中 {match_snippet.match_count} 次"
+                    )
+                    st.markdown(
+                        search_service.highlighted_snippet(
+                            replace(result, snippet=match_snippet.text), active_state.query
+                        ),
+                        unsafe_allow_html=True,
+                    )
+            else:
+                st.caption("该页没有可用命中上下文；仍可打开阅读页核对页面图像。")
+            if preview_open:
+                st.markdown("#### 快速预览（仅加载当前这一页）")
+                preview_image, preview_text = st.columns([1, 2.4])
+                with preview_image:
+                    if result.image_path.is_file():
+                        st.image(str(result.image_path), caption=f"第 {result.page_number} 页")
+                    else:
+                        st.warning(f"页面图像缺失：{result.image_path}")
+                with preview_text:
+                    longer_text = (
+                        result.markdown_content.strip()
+                        or result.ocr_text.strip()
+                        or result.extracted_text.strip()
+                        or result.content.strip()
+                    )
+                    if longer_text:
+                        st.text(longer_text[:1800])
+                        if len(longer_text) > 1800:
+                            st.caption("快速预览最多显示 1800 字；完整内容请打开阅读页。")
+                    else:
+                        st.info("该页没有可用 Markdown、OCR 或提取文本。")
+                    st.caption(
+                        "页面笔记 / Markdown 已存在。"
+                        if result.markdown_content.strip()
+                        else "该页尚无 Markdown 笔记。"
+                    )
+                    st.caption(
+                        f"复核状态：{result.status.label}；"
+                        f"证据篮：{'已加入' if current_page_items else '未加入'}。"
+                    )
             with st.expander("查看完整命中内容"):
                 st.text(result.content or "（没有可用文本）")
             with st.expander("编辑加入证据篮的选区与备注"):
@@ -793,3 +911,260 @@ if results:
     prompt = st.session_state.get("knowledge_prompt")
     if prompt:
         st.text_area("提示词", value=prompt, height=500)
+
+
+def _render_group_result_card(result: SearchResult, result_index: int) -> None:
+    """Render one expanded document-group result with on-demand preview."""
+
+    selection_key = f"basket_selection_{result.page_id}"
+    note_key = f"basket_note_{result.page_id}"
+    st.session_state.setdefault(
+        selection_key, (result.snippet or result.content).strip(" …“”")
+    )
+    st.session_state.setdefault(note_key, "")
+    current_items = basket_items_by_page.get(result.page_id, [])
+    preview_open = active_state.preview_page_id == result.page_id
+    with st.container(border=True):
+        heading, open_action, preview_action, basket_action = st.columns(
+            [4.4, 1, 1.35, 1.1]
+        )
+        heading.markdown(
+            f"#### 全局第 {result_index} 项 · 第 {result.page_number} 页"
+            + ("　← 返回位置" if active_state.focus_result == result_index else "")
+        )
+        heading.caption(
+            f"状态：{result.status.label}　|　"
+            f"证据：{'已加入 ' + str(len(current_items)) + ' 条' if current_items else '未加入'}"
+        )
+        if open_action.button(
+            "打开页面",
+            key=f"open_result_{result.page_id}",
+            type="primary",
+            use_container_width=True,
+        ):
+            try:
+                target = validate_search_target(database, result)
+                if target.warnings:
+                    raise SearchNavigationError("；".join(target.warnings))
+            except SearchNavigationError as exc:
+                st.error(f"无法打开该搜索结果：{exc}")
+            else:
+                return_state = state_for_result(
+                    active_state,
+                    result_index=result_index,
+                    document_id=result.document_id,
+                    results_per_page=RESULTS_PER_PAGE,
+                )
+                navigation_params = reader_query_params(
+                    result, active_state.query, return_state=return_state
+                )
+                st.session_state["pending_reader_query_params"] = navigation_params
+                st.query_params.from_dict(navigation_params)
+                st.switch_page("pages/2_浏览资料.py")
+        if preview_action.button(
+            "关闭快速预览" if preview_open else "打开快速预览",
+            key=f"toggle_preview_{result.page_id}",
+            use_container_width=True,
+        ):
+            _activate_state(
+                replace(
+                    active_state,
+                    preview_page_id=None if preview_open else result.page_id,
+                    focus_result=result_index,
+                ),
+                remember_previous=False,
+                refresh_results=False,
+            )
+        if basket_action.button(
+            "加入证据篮",
+            key=f"add_basket_result_{result.page_id}",
+            use_container_width=True,
+        ):
+            try:
+                basket_service.add_item(
+                    document_id=result.document_id,
+                    page_id=result.page_id,
+                    evidence_text=str(st.session_state[selection_key]),
+                    user_note=str(st.session_state[note_key]),
+                    basket_id=current_basket.id,
+                )
+            except DuplicateEvidenceError as exc:
+                st.info(str(exc))
+            except EvidenceBasketError as exc:
+                st.error(f"加入证据篮失败：{exc}")
+            else:
+                st.session_state["basket_flash"] = "证据已持久化加入证据篮。"
+                st.rerun()
+
+        st.caption(
+            f"命中字段：{result.match_type or '页面内容'}；"
+            f"关键词字面命中 {result.match_count} 次；显示 {len(result.snippets)} 个去重片段。"
+        )
+        for snippet_number, match_snippet in enumerate(result.snippets, start=1):
+            st.caption(f"片段 {snippet_number} · {match_snippet.field.label}")
+            st.markdown(
+                search_service.highlighted_snippet(
+                    replace(result, snippet=match_snippet.text), active_state.query
+                ),
+                unsafe_allow_html=True,
+            )
+        if not result.snippets:
+            st.caption("没有可用文本上下文；可打开阅读页核对原图。")
+
+        if preview_open:
+            st.markdown("##### 快速预览（图像与长文本按需加载）")
+            preview_image, preview_text = st.columns([1, 2.4])
+            with preview_image:
+                if result.image_path.is_file():
+                    st.image(str(result.image_path), caption=f"第 {result.page_number} 页")
+                else:
+                    st.warning(f"页面图像缺失：{result.image_path}")
+            with preview_text:
+                longer_text = (
+                    result.markdown_content.strip()
+                    or result.ocr_text.strip()
+                    or result.extracted_text.strip()
+                    or result.content.strip()
+                )
+                if longer_text:
+                    st.text(longer_text[:1800])
+                else:
+                    st.info("该页没有可用 Markdown、OCR 或提取文本。")
+                st.caption(
+                    f"项目：{'、'.join(result.projects) or '未关联'}　|　"
+                    f"标签：{'、'.join(result.tags) or '未添加'}"
+                )
+                st.caption(
+                    "页面 Markdown 已存在。"
+                    if result.markdown_content.strip()
+                    else "该页尚无 Markdown。"
+                )
+            st.text_area("证据文本", key=selection_key, height=130)
+            st.text_area("证据备注（可选）", key=note_key, height=80)
+            evidence_packages = dict(st.session_state.get("evidence_packages", {}))
+            if st.button(
+                "生成 / 复制单页证据包",
+                key=f"evidence_result_{result.page_id}",
+                use_container_width=True,
+            ):
+                evidence_packages[result.page_id] = evidence_builder.build(result)
+                st.session_state["evidence_packages"] = evidence_packages
+            for stored_item in current_items:
+                stored_note_key = f"search_evidence_note_{stored_item.id}"
+                st.session_state.setdefault(stored_note_key, stored_item.user_note)
+                st.text_area(
+                    f"已存证据 {stored_item.id} 的备注",
+                    key=stored_note_key,
+                    height=75,
+                )
+                save_action, remove_action = st.columns(2)
+                if save_action.button(
+                    "保存证据备注",
+                    key=f"save_search_evidence_note_{stored_item.id}",
+                    use_container_width=True,
+                ):
+                    try:
+                        basket_service.update_note(
+                            stored_item.id,
+                            str(st.session_state[stored_note_key]),
+                            basket_id=current_basket.id,
+                        )
+                    except EvidenceBasketError as exc:
+                        st.error(f"保存证据备注失败：{exc}")
+                    else:
+                        st.session_state["basket_flash"] = "证据备注已保存。"
+                        st.rerun()
+                if remove_action.button(
+                    "从证据篮移除",
+                    key=f"remove_search_evidence_{stored_item.id}",
+                    use_container_width=True,
+                ):
+                    try:
+                        basket_service.remove_item(
+                            stored_item.id, basket_id=current_basket.id
+                        )
+                    except EvidenceBasketError as exc:
+                        st.error(f"移除证据失败：{exc}")
+                    else:
+                        st.session_state["basket_flash"] = "已移除一条证据。"
+                        st.rerun()
+            if result.page_id in evidence_packages:
+                st.code(evidence_packages[result.page_id], language="markdown")
+
+
+if results and active_state.view_mode is SearchViewMode.DOCUMENT:
+    loaded_count = len(results)
+    st.subheader(f"搜索结果（共 {effective_total} 个页面）")
+    st.caption(
+        f"已加载 {loaded_count} 页；排序：{active_state.sort.label}；"
+        "文档组按首个全局结果的位置排列，组内保持同一全局排序。"
+    )
+    if effective_total > loaded_count:
+        st.warning(
+            f"当前分组与导航覆盖前 {loaded_count} / {effective_total} 个结果；"
+            "完整组计数仍按全部匹配页计算，未加载页不会被误作可导航项。"
+        )
+    try:
+        exact_document_counts = search_service.document_counts(
+            active_state.query, filters=active_state.filters
+        )
+    except Exception as exc:
+        LOGGER.exception("读取文档分组计数失败")
+        st.warning(f"完整文档计数暂不可用，将显示已加载数量：{exc}")
+        exact_document_counts = {}
+    groups = group_search_results(results, document_counts=exact_document_counts)
+    result_positions = {
+        result.page_id: index for index, result in enumerate(results, start=1)
+    }
+    for group_number, group in enumerate(groups, start=1):
+        with st.container(border=True):
+            group_heading, group_action = st.columns([5, 1])
+            group_title = group.document_title.strip() or "异常文档记录"
+            group_heading.markdown(f"### {group_number}. {group_title}")
+            group_heading.caption(
+                f"来源：{group.filename.strip() or '未记录来源文件名'}　|　"
+                f"命中 {group.total_count} 个页面　|　"
+                f"最相关页：第 {group.best_result.page_number} 页"
+            )
+            fields = tuple(
+                dict.fromkeys(
+                    field for result in group.results for field in result.match_fields
+                )
+            )
+            projects = tuple(
+                dict.fromkeys(name for result in group.results for name in result.projects)
+            )
+            tags = tuple(
+                dict.fromkeys(name for result in group.results for name in result.tags)
+            )
+            group_heading.caption(
+                f"主要命中字段：{'、'.join(field.label for field in fields) or '无可用字段'}"
+            )
+            group_heading.caption(
+                f"项目：{'、'.join(projects) or '未关联'}　|　"
+                f"标签：{'、'.join(tags) or '未添加'}"
+            )
+            expanded = active_state.expanded_document_id == group.document_id
+            if group_action.button(
+                "收起命中页" if expanded else "展开命中页",
+                key=f"toggle_group_{group.document_id}",
+                use_container_width=True,
+            ):
+                _activate_state(
+                    replace(
+                        active_state,
+                        expanded_document_id=None if expanded else group.document_id,
+                        preview_page_id=None,
+                    ),
+                    remember_previous=False,
+                    refresh_results=False,
+                )
+            if expanded:
+                if group.total_count > len(group.results):
+                    st.info(
+                        f"本组当前加载 {len(group.results)} / {group.total_count} 页。"
+                    )
+                for result in group.results:
+                    _render_group_result_card(
+                        result, result_positions[result.page_id]
+                    )

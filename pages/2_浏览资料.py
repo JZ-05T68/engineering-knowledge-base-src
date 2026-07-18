@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from pathlib import Path
 
 import streamlit as st
@@ -11,18 +12,31 @@ from src.evidence_basket_service import (
     DuplicateEvidenceError,
     EvidenceBasketError,
 )
-from src.models import ImportStatus, SearchResult
+from src.models import ImportStatus, Page, SearchResult
 from src.runtime import (
     application_database,
     application_document_service,
     application_evidence_basket_service,
 )
+from src.search_navigation import (
+    document_hit_results,
+    locate_result,
+    reader_query_params,
+    state_for_result,
+    unique_ordered_results,
+)
 from src.search_service import SearchService
-from src.search_state import decode_return_state, search_state_query_params
+from src.search_state import (
+    SearchPageState,
+    active_filter_labels,
+    decode_return_state,
+    encode_return_state,
+    search_state_query_params,
+)
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.6", page_icon="📖", layout="wide")
+st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.7", page_icon="📖", layout="wide")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -42,6 +56,7 @@ try:
     database = application_database()
     document_service = application_document_service()
     basket_service = application_evidence_basket_service()
+    search_service = SearchService(database)
     all_tags = database.list_tags()
     all_projects = database.list_projects()
 except Exception as exc:
@@ -49,9 +64,54 @@ except Exception as exc:
     st.error(f"读取资料失败：{exc}")
     st.stop()
 
+
+def _open_search_result(
+    result: SearchResult,
+    *,
+    result_index: int,
+    return_state: SearchPageState,
+) -> None:
+    """Navigate to a loaded search result while retaining compact return state."""
+
+    next_return_state = state_for_result(
+        return_state,
+        result_index=result_index,
+        document_id=result.document_id,
+    )
+    st.query_params.from_dict(
+        reader_query_params(
+            result,
+            next_return_state.query,
+            return_state=next_return_state,
+        )
+    )
+    st.rerun()
+
 basket_flash = st.session_state.pop("basket_flash", "")
 if basket_flash:
     st.success(basket_flash)
+
+pending_reader_params = st.session_state.pop("pending_reader_query_params", None)
+if isinstance(pending_reader_params, dict):
+    try:
+        pending_document_id = int(pending_reader_params.get("document", 0))
+        pending_page_number = int(pending_reader_params.get("page", 0))
+    except (TypeError, ValueError):
+        pending_document_id = 0
+        pending_page_number = 0
+    if pending_document_id > 0 and pending_page_number > 0:
+        pending_reader_state = decode_return_state(
+            str(pending_reader_params.get("search_return", ""))
+        )
+        safe_pending_reader_params = {
+            "document": str(pending_document_id),
+            "page": str(pending_page_number),
+            "from_search": "1",
+            "search_query": pending_reader_state.query[:500],
+            "search_return": encode_return_state(pending_reader_state),
+        }
+        st.query_params.from_dict(safe_pending_reader_params)
+        st.rerun()
 
 with st.expander("文档筛选与排序", expanded=True):
     filter_columns = st.columns(4)
@@ -92,6 +152,43 @@ documents = database.list_documents(
 )
 query_document = st.query_params.get("document")
 from_search = st.query_params.get("from_search") == "1"
+search_return = str(st.query_params.get("search_return", ""))[:8_000]
+search_query_hint = str(st.query_params.get("search_query", ""))[:500]
+search_return_state: SearchPageState | None = None
+search_results: tuple[SearchResult, ...] = ()
+search_total = 0
+search_document_counts: dict[int, int] = {}
+search_context_error = ""
+if from_search:
+    search_return_state = (
+        decode_return_state(search_return)
+        if search_return
+        else SearchPageState(query=search_query_hint)
+    )
+    if not search_return_state.query and search_query_hint:
+        search_return_state = replace(
+            search_return_state, query=search_query_hint
+        )
+    try:
+        search_results = unique_ordered_results(
+            search_service.search(
+                search_return_state.query,
+                limit=search_return_state.limit,
+                filters=search_return_state.filters,
+                sort_by=search_return_state.sort,
+            )
+        )
+        search_total = search_service.facet_counts(
+            search_return_state.query,
+            filters=search_return_state.filters,
+        ).total
+        search_document_counts = search_service.document_counts(
+            search_return_state.query,
+            filters=search_return_state.filters,
+        )
+    except Exception as exc:
+        LOGGER.exception("重建阅读页搜索上下文失败")
+        search_context_error = str(exc)
 requested_document_id: int | None = None
 if query_document:
     try:
@@ -126,18 +223,41 @@ if document_changed:
     if "page" in st.query_params:
         del st.query_params["page"]
 
-if from_search:
-    search_query = (
-        st.query_params.get("search_query")
-        or st.session_state.get("knowledge_query", "")
+search_query = search_return_state.query if search_return_state is not None else ""
+if from_search and search_return_state is not None:
+    document_names = {
+        item.id: item.title.strip() or item.filename for item in documents
+    }
+    project_names = {item.id: item.name for item in all_projects}
+    tag_names = {item.id: item.name for item in all_tags}
+    context_filters = active_filter_labels(
+        search_return_state,
+        document_names=document_names,
+        project_names=project_names,
+        tag_names=tag_names,
     )
-    search_return = st.query_params.get("search_return", "")
     search_banner, return_action = st.columns([5, 1])
-    search_banner.info(f"当前页面来自检索：{search_query or '（未记录关键词）'}")
+    compact_filters = "；".join(item.label for item in context_filters[:4])
+    if len(context_filters) > 4:
+        compact_filters += f"；另 {len(context_filters) - 4} 项"
+    search_banner.info(
+        f"当前页面来自检索：{search_query or '（未记录关键词）'}　|　"
+        f"筛选：{compact_filters or '无'}　|　"
+        f"排序：{search_return_state.sort.label}"
+    )
+    if len(context_filters) > 4:
+        with search_banner.expander("查看全部搜索条件", expanded=False):
+            for item in context_filters:
+                st.caption(item.label)
+    if search_context_error:
+        search_banner.warning(
+            f"搜索上下文暂时无法重建，命中导航已安全停用：{search_context_error}"
+        )
     if return_action.button("返回检索结果", type="primary", use_container_width=True):
         if search_return:
-            return_state = decode_return_state(str(search_return))
-            st.query_params.from_dict(search_state_query_params(return_state))
+            return_params = search_state_query_params(search_return_state)
+            st.session_state["pending_search_query_params"] = return_params
+            st.query_params.from_dict(return_params)
         else:
             # Preserve the v0.0.5 behavior for old reader URLs.
             st.query_params.clear()
@@ -205,6 +325,15 @@ if not document_pages:
     st.warning("该文档还没有页面记录，可能在导入时发生了错误。")
     st.stop()
 
+try:
+    all_basket_items = basket_service.list_items()
+except Exception as exc:
+    LOGGER.exception("读取证据篮状态失败")
+    st.warning(f"暂时无法读取相邻页的证据状态：{exc}")
+    all_basket_items = []
+basket_page_ids = {item.page_id for item in all_basket_items}
+search_hit_page_ids = {result.page_id for result in search_results}
+
 page_by_number = {page.page_number: page for page in document_pages}
 query_page = st.query_params.get("page")
 if document_changed:
@@ -226,18 +355,50 @@ else:
 navigation = st.columns([1, 1, 3, 1, 1])
 page_numbers = list(page_by_number)
 initial_page_index = page_numbers.index(initial_page)
-if navigation[0].button(
-    "← 上一页", disabled=initial_page_index <= 0, use_container_width=True
-):
-    st.query_params["page"] = str(page_numbers[initial_page_index - 1])
+previous_page = (
+    page_by_number[page_numbers[initial_page_index - 1]]
+    if initial_page_index > 0
+    else None
+)
+next_page = (
+    page_by_number[page_numbers[initial_page_index + 1]]
+    if initial_page_index + 1 < len(page_numbers)
+    else None
+)
+
+
+def _open_adjacent_page(adjacent_page: Page) -> None:
+    """Open an ordinary neighbour and update focus if it is also a search hit."""
+
+    matched_result = next(
+        (result for result in search_results if result.page_id == adjacent_page.id),
+        None,
+    )
+    if matched_result is not None and search_return_state is not None:
+        result_index = next(
+            index
+            for index, result in enumerate(search_results, start=1)
+            if result.page_id == matched_result.page_id
+        )
+        _open_search_result(
+            matched_result,
+            result_index=result_index,
+            return_state=search_return_state,
+        )
+    st.query_params["page"] = str(adjacent_page.page_number)
     st.rerun()
+
+
+if navigation[0].button(
+    "← 普通上一页", disabled=initial_page_index <= 0, use_container_width=True
+) and previous_page is not None:
+    _open_adjacent_page(previous_page)
 if navigation[1].button(
-    "下一页 →",
+    "普通下一页 →",
     disabled=initial_page_index >= len(page_numbers) - 1,
     use_container_width=True,
-):
-    st.query_params["page"] = str(page_numbers[initial_page_index + 1])
-    st.rerun()
+) and next_page is not None:
+    _open_adjacent_page(next_page)
 page_number = navigation[2].selectbox(
     "页码",
     options=page_numbers,
@@ -254,9 +415,178 @@ except Exception as exc:
     st.warning(f"页面已打开，但无法记录最近查看时间：{exc}")
 navigation[3].metric("状态", page.status.label)
 navigation[4].metric("笔记", "有" if page.has_note else "无")
+st.caption(
+    f"当前文档记录位置：第 {initial_page_index + 1} / {len(page_numbers)} 页"
+    f"（PDF 页码 {page.page_number}）。"
+)
+
+
+def _adjacent_feedback(label: str, adjacent_page: object | None) -> str:
+    if adjacent_page is None:
+        return f"{label}：无"
+    hit_label = "命中当前搜索" if adjacent_page.id in search_hit_page_ids else "未命中当前搜索"
+    basket_label = "已加入证据篮" if adjacent_page.id in basket_page_ids else "未加入证据篮"
+    return f"{label}：第 {adjacent_page.page_number} 页 · {hit_label} · {basket_label}"
+
+
+st.caption(
+    _adjacent_feedback("普通上一页", previous_page)
+    + "　|　"
+    + _adjacent_feedback("普通下一页", next_page)
+)
+
+if from_search and search_return_state is not None:
+    st.markdown("### 搜索命中连续导航")
+    result_positions = {
+        result.page_id: index for index, result in enumerate(search_results, start=1)
+    }
+    global_position = locate_result(search_results, page.id)
+    if global_position is None:
+        st.info(
+            "当前页面不在重建后的搜索结果范围内。搜索条件可能已变化，"
+            "或该页位于当前加载上限之外；命中导航已安全停用。"
+        )
+    else:
+        if search_total > global_position.total:
+            st.caption(
+                f"搜索“{search_query}”完整匹配 {search_total} 页；"
+                f"当前为已加载导航范围第 {global_position.index} / "
+                f"{global_position.total} 个结果。"
+            )
+        else:
+            st.caption(
+                f"搜索“{search_query}”共命中 {search_total} 页；"
+                f"当前为第 {global_position.index} / {global_position.total} 个结果。"
+            )
+    global_actions = st.columns([1.2, 1.2, 1.2, 2.4])
+    previous_global = global_position.previous if global_position else None
+    next_global = global_position.next if global_position else None
+    if global_actions[0].button(
+        "全文结果上一项",
+        disabled=previous_global is None,
+        key="reader_global_previous_hit",
+        use_container_width=True,
+    ) and previous_global is not None:
+        _open_search_result(
+            previous_global,
+            result_index=result_positions[previous_global.page_id],
+            return_state=search_return_state,
+        )
+    if global_actions[1].button(
+        "全文结果下一项",
+        disabled=next_global is None,
+        key="reader_global_next_hit",
+        use_container_width=True,
+    ) and next_global is not None:
+        _open_search_result(
+            next_global,
+            result_index=result_positions[next_global.page_id],
+            return_state=search_return_state,
+        )
+    if global_actions[2].button(
+        "返回检索结果",
+        key="reader_return_search_near_navigation",
+        use_container_width=True,
+    ):
+        return_params = search_state_query_params(search_return_state)
+        st.session_state["pending_search_query_params"] = return_params
+        st.query_params.from_dict(return_params)
+        st.switch_page("pages/3_检索资料.py")
+        st.stop()
+
+    current_document_hits = document_hit_results(search_results, document.id)
+    current_document_total = search_document_counts.get(
+        document.id, len(current_document_hits)
+    )
+    current_document_index = next(
+        (
+            index
+            for index, result in enumerate(current_document_hits)
+            if result.page_id == page.id
+        ),
+        None,
+    )
+    st.markdown("#### 当前文档命中页（按页码顺序）")
+    st.caption(
+        f"本文件完整命中 {current_document_total} 页；"
+        f"当前导航范围内有 {len(current_document_hits)} 页。"
+    )
+    document_actions = st.columns([1.4, 1.4, 3.2])
+    previous_document_hit = (
+        current_document_hits[current_document_index - 1]
+        if current_document_index is not None and current_document_index > 0
+        else None
+    )
+    next_document_hit = (
+        current_document_hits[current_document_index + 1]
+        if current_document_index is not None
+        and current_document_index + 1 < len(current_document_hits)
+        else None
+    )
+    if document_actions[0].button(
+        "本文件上一命中页",
+        disabled=previous_document_hit is None,
+        key="reader_document_previous_hit",
+        use_container_width=True,
+    ) and previous_document_hit is not None:
+        _open_search_result(
+            previous_document_hit,
+            result_index=result_positions[previous_document_hit.page_id],
+            return_state=search_return_state,
+        )
+    if document_actions[1].button(
+        "本文件下一命中页",
+        disabled=next_document_hit is None,
+        key="reader_document_next_hit",
+        use_container_width=True,
+    ) and next_document_hit is not None:
+        _open_search_result(
+            next_document_hit,
+            result_index=result_positions[next_document_hit.page_id],
+            return_state=search_return_state,
+        )
+    if current_document_index is None and current_document_hits:
+        document_actions[2].info("当前页不是本文件命中页，可从下方列表跳转。")
+    elif not current_document_hits:
+        document_actions[2].info("当前搜索条件下，本文件没有已加载的命中页。")
+
+    if current_document_hits:
+        with st.expander("本文件命中页列表", expanded=True):
+            hit_batch_size = 10
+            hit_batch_count = (
+                len(current_document_hits) + hit_batch_size - 1
+            ) // hit_batch_size
+            hit_batch = 1
+            if hit_batch_count > 1:
+                hit_batch = st.selectbox(
+                    "命中页分组",
+                    options=list(range(1, hit_batch_count + 1)),
+                    format_func=lambda value: f"第 {value} / {hit_batch_count} 组",
+                    key=f"reader_hit_batch_{document.id}",
+                )
+            hit_start = (int(hit_batch) - 1) * hit_batch_size
+            with st.container(height=360, border=True):
+                for hit in current_document_hits[
+                    hit_start : hit_start + hit_batch_size
+                ]:
+                    current_label = "（当前页）" if hit.page_id == page.id else ""
+                    summary = " ".join((hit.snippet or "无可用文本摘要").split())
+                    button_label = (
+                        f"第 {hit.page_number} 页{current_label}｜{summary[:86]}"
+                    )
+                    if st.button(
+                        button_label,
+                        key=f"reader_open_hit_{hit.page_id}",
+                        disabled=hit.page_id == page.id,
+                        use_container_width=True,
+                    ):
+                        _open_search_result(
+                            hit,
+                            result_index=result_positions[hit.page_id],
+                            return_state=search_return_state,
+                        )
 
 if from_search and search_query:
-    search_service = SearchService(database)
     search_source = (
         page.markdown_content.strip()
         or page.ocr_text.strip()
@@ -285,14 +615,7 @@ if from_search and search_query:
                 unsafe_allow_html=True,
             )
 
-try:
-    all_basket_items = basket_service.list_items()
-    current_basket_items = [item for item in all_basket_items if item.page_id == page.id]
-except Exception as exc:
-    LOGGER.exception("读取当前页证据篮状态失败：page_id=%s", page.id)
-    st.error(f"读取当前页证据篮状态失败：{exc}")
-    all_basket_items = []
-    current_basket_items = []
+current_basket_items = [item for item in all_basket_items if item.page_id == page.id]
 
 if current_basket_items:
     with st.expander("管理当前页已有证据", expanded=False):

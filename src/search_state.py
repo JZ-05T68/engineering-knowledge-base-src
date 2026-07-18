@@ -8,7 +8,13 @@ from dataclasses import dataclass, replace
 from typing import Protocol
 from urllib.parse import parse_qs, urlencode
 
-from src.models import PageStatus, SearchField, SearchFilters, SearchSort
+from src.models import (
+    PageStatus,
+    SearchField,
+    SearchFilters,
+    SearchSort,
+    SearchViewMode,
+)
 
 MAX_QUERY_CHARS = 500
 MAX_RETURN_STATE_CHARS = 8_000
@@ -35,6 +41,10 @@ _STATE_KEYS = {
     "limit",
     "result_page",
     "filters_open",
+    "view",
+    "expanded_document",
+    "preview_page",
+    "focus_result",
 }
 
 
@@ -54,6 +64,10 @@ class SearchPageState:
     limit: int = 50
     result_page: int = 1
     filters_open: bool = False
+    view_mode: SearchViewMode = SearchViewMode.PAGE
+    expanded_document_id: int | None = None
+    preview_page_id: int | None = None
+    focus_result: int | None = None
 
     def with_first_page(self, **changes: object) -> SearchPageState:
         """Return a changed state whose result pagination restarts at page one."""
@@ -95,6 +109,15 @@ def parse_search_state(params: QueryParams | Mapping[str, object]) -> SearchPage
     result_page = _bounded_int(
         _first(params, "result_page"), default=1, minimum=1, maximum=100_000
     )
+    try:
+        view_mode = SearchViewMode(_first(params, "view") or SearchViewMode.PAGE.value)
+    except ValueError:
+        view_mode = SearchViewMode.PAGE
+    expanded_document_id = _positive_int(_first(params, "expanded_document"))
+    preview_page_id = _positive_int(_first(params, "preview_page"))
+    focus_result = _bounded_optional_int(
+        _first(params, "focus_result"), minimum=1, maximum=100_000
+    )
     return SearchPageState(
         query=query,
         filters=SearchFilters(
@@ -110,6 +133,10 @@ def parse_search_state(params: QueryParams | Mapping[str, object]) -> SearchPage
         limit=limit,
         result_page=result_page,
         filters_open=_first(params, "filters_open").casefold() in _TRUE_VALUES,
+        view_mode=view_mode,
+        expanded_document_id=expanded_document_id,
+        preview_page_id=preview_page_id,
+        focus_result=focus_result,
     )
 
 
@@ -140,6 +167,14 @@ def search_state_query_params(state: SearchPageState) -> dict[str, str]:
         params["result_page"] = str(state.result_page)
     if state.filters_open:
         params["filters_open"] = "1"
+    if state.view_mode is not SearchViewMode.PAGE:
+        params["view"] = state.view_mode.value
+    if state.expanded_document_id is not None:
+        params["expanded_document"] = str(state.expanded_document_id)
+    if state.preview_page_id is not None:
+        params["preview_page"] = str(state.preview_page_id)
+    if state.focus_result is not None:
+        params["focus_result"] = str(state.focus_result)
     return params
 
 
@@ -178,6 +213,9 @@ def clear_search_filters(
         query=state.query if keep_query else "",
         filters=SearchFilters(),
         result_page=1,
+        expanded_document_id=None,
+        preview_page_id=None,
+        focus_result=None,
     )
 
 
@@ -211,7 +249,14 @@ def remove_search_filter(
         filters = replace(filters, evidence_basket_id=None)
     else:
         return state
-    return replace(state, filters=filters, result_page=1)
+    return replace(
+        state,
+        filters=filters,
+        result_page=1,
+        expanded_document_id=None,
+        preview_page_id=None,
+        focus_result=None,
+    )
 
 
 def active_filter_labels(
@@ -317,6 +362,16 @@ def _bounded_int(value: str, *, default: int, minimum: int, maximum: int) -> int
     except (TypeError, ValueError):
         return default
     return max(minimum, min(parsed, maximum))
+
+
+def _bounded_optional_int(value: str, *, minimum: int, maximum: int) -> int | None:
+    if not value:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if minimum <= parsed <= maximum else None
 
 
 def _enum_values(enum_type: type, values: Sequence[str]) -> tuple:

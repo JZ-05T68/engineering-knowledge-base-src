@@ -1199,6 +1199,38 @@ class Database:
             tags=tags,
         )
 
+    def search_document_counts(
+        self,
+        *,
+        terms: Sequence[str] = (),
+        filters: SearchFilters | None = None,
+    ) -> dict[int, int]:
+        """Count complete filtered page matches by document in one query."""
+
+        literal_terms = tuple(
+            dict.fromkeys(term.casefold().strip() for term in terms if term.strip())
+        )
+        if not literal_terms:
+            return {}
+        where, parameters = _search_context_where(
+            filters or SearchFilters(), literal_terms
+        )
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"""
+                SELECT p.document_id, COUNT(*) AS result_count
+                FROM pages p
+                JOIN documents d ON d.id = p.document_id
+                {where}
+                GROUP BY p.document_id
+                """,
+                parameters,
+            ).fetchall()
+        return {
+            int(row["document_id"]): int(row["result_count"])
+            for row in rows
+        }
+
     @staticmethod
     def _metadata_for_pages_connection(
         connection: sqlite3.Connection, page_ids: Sequence[int]

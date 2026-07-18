@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from typing import Protocol
 
-from src.models import Document, Page, SearchResult
+from src.models import Document, Page, SearchResult, SearchViewMode
 from src.search_state import SearchPageState, encode_return_state
 
 
@@ -28,6 +29,29 @@ class SearchNavigationTarget:
     document: Document
     page: Page
     warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SearchDocumentGroup:
+    """A stable document group derived from one ordered page-result sequence."""
+
+    document_id: int
+    document_title: str
+    filename: str
+    results: tuple[SearchResult, ...]
+    best_result: SearchResult
+    total_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class SearchResultPosition:
+    """Current result position and safe neighbours inside one loaded scope."""
+
+    index: int
+    total: int
+    previous: SearchResult | None
+    current: SearchResult
+    next: SearchResult | None
 
 
 def validate_search_target(
@@ -76,9 +100,113 @@ def reader_query_params(
     return params
 
 
+def unique_ordered_results(results: Sequence[SearchResult]) -> tuple[SearchResult, ...]:
+    """Remove duplicate page IDs while preserving the database result order."""
+
+    unique: list[SearchResult] = []
+    seen_page_ids: set[int] = set()
+    for result in results:
+        if result.page_id <= 0 or result.page_id in seen_page_ids:
+            continue
+        seen_page_ids.add(result.page_id)
+        unique.append(result)
+    return tuple(unique)
+
+
+def locate_result(
+    results: Sequence[SearchResult], page_id: int
+) -> SearchResultPosition | None:
+    """Locate one page in the loaded global result scope without raising."""
+
+    ordered = unique_ordered_results(results)
+    for offset, result in enumerate(ordered):
+        if result.page_id == page_id:
+            return SearchResultPosition(
+                index=offset + 1,
+                total=len(ordered),
+                previous=ordered[offset - 1] if offset > 0 else None,
+                current=result,
+                next=ordered[offset + 1] if offset + 1 < len(ordered) else None,
+            )
+    return None
+
+
+def document_hit_results(
+    results: Sequence[SearchResult], document_id: int
+) -> tuple[SearchResult, ...]:
+    """Return this document's unique hits in ascending page-number order."""
+
+    hits = (
+        result
+        for result in unique_ordered_results(results)
+        if result.document_id == document_id
+    )
+    return tuple(sorted(hits, key=lambda result: (result.page_number, result.page_id)))
+
+
+def group_search_results(
+    results: Sequence[SearchResult],
+    *,
+    document_counts: dict[int, int] | None = None,
+) -> tuple[SearchDocumentGroup, ...]:
+    """Group unique results without changing group or in-group search order."""
+
+    grouped: dict[int, list[SearchResult]] = {}
+    for result in unique_ordered_results(results):
+        grouped.setdefault(result.document_id, []).append(result)
+    counts = document_counts or {}
+    groups: list[SearchDocumentGroup] = []
+    for document_id, document_results in grouped.items():
+        first = document_results[0]
+        best = min(
+            document_results,
+            key=lambda result: (result.rank, result.page_number, result.page_id),
+        )
+        groups.append(
+            SearchDocumentGroup(
+                document_id=document_id,
+                document_title=first.document_title,
+                filename=first.filename,
+                results=tuple(document_results),
+                best_result=best,
+                total_count=max(counts.get(document_id, 0), len(document_results)),
+            )
+        )
+    return tuple(groups)
+
+
+def state_for_result(
+    state: SearchPageState,
+    *,
+    result_index: int,
+    document_id: int,
+    results_per_page: int = 10,
+) -> SearchPageState:
+    """Record a compact return position without serializing result IDs."""
+
+    page = max(1, (max(result_index, 1) - 1) // max(results_per_page, 1) + 1)
+    return replace(
+        state,
+        result_page=page if state.view_mode is SearchViewMode.PAGE else state.result_page,
+        expanded_document_id=(
+            document_id
+            if state.view_mode is SearchViewMode.DOCUMENT
+            else state.expanded_document_id
+        ),
+        focus_result=max(result_index, 1),
+    )
+
+
 __all__ = [
     "SearchNavigationError",
     "SearchNavigationTarget",
+    "SearchDocumentGroup",
+    "SearchResultPosition",
+    "document_hit_results",
+    "group_search_results",
+    "locate_result",
     "reader_query_params",
+    "state_for_result",
+    "unique_ordered_results",
     "validate_search_target",
 ]

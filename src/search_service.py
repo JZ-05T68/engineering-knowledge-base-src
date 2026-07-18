@@ -6,11 +6,20 @@ import logging
 from dataclasses import replace
 from typing import Protocol
 
-from src.models import SearchFacetCounts, SearchFilters, SearchResult, SearchSort
+from src.models import (
+    SearchFacetCounts,
+    SearchField,
+    SearchFilters,
+    SearchResult,
+    SearchSnippet,
+    SearchSort,
+)
 from src.text_utils import (
     build_context_excerpt,
+    build_context_excerpts,
     extract_search_terms,
     highlight_html,
+    literal_match_spans,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -37,6 +46,14 @@ class SearchDatabase(Protocol):
         filters: SearchFilters | None = None,
     ) -> SearchFacetCounts:
         """Return counts for the complete current search and filter state."""
+
+    def search_document_counts(
+        self,
+        *,
+        terms: tuple[str, ...] = (),
+        filters: SearchFilters | None = None,
+    ) -> dict[int, int]:
+        """Return exact per-document counts for the complete filtered result set."""
 
 
 class SearchService:
@@ -124,6 +141,22 @@ class SearchService:
             filters=filters or SearchFilters(),
         )
 
+    def document_counts(
+        self,
+        query: str,
+        *,
+        filters: SearchFilters | None = None,
+    ) -> dict[int, int]:
+        """Count complete filtered matches by document without rerunning search."""
+
+        terms = self.query_terms(query)
+        if not terms:
+            return {}
+        return self._database.search_document_counts(
+            terms=terms,
+            filters=filters or SearchFilters(),
+        )
+
     def highlighted_snippet(self, result: SearchResult, query: str) -> str:
         """Return an escaped HTML snippet containing only safe ``mark`` tags."""
 
@@ -135,9 +168,64 @@ class SearchService:
     def _with_natural_snippet(
         self, result: SearchResult, terms: tuple[str, ...]
     ) -> SearchResult:
-        source = result.content.strip() or result.snippet
-        snippet = self.build_snippet(source, terms)
-        return replace(result, snippet=snippet)
+        source_values = {
+            SearchField.MARKDOWN: result.markdown_content,
+            SearchField.OCR_TEXT: result.ocr_text,
+            SearchField.EXTRACTED_TEXT: result.extracted_text,
+            SearchField.DOCUMENT_TITLE: result.document_title,
+            SearchField.FILENAME: result.filename,
+            SearchField.TAG: "、".join(result.tags),
+            SearchField.PROJECT: "、".join(result.projects),
+        }
+        snippets: list[SearchSnippet] = []
+        total_matches = 0
+        seen_excerpt_text: set[str] = set()
+        for field in result.match_fields:
+            source = source_values[field]
+            field_matches = len(literal_match_spans(source, terms))
+            total_matches += field_matches
+            remaining = 3 - len(snippets)
+            if remaining <= 0:
+                continue
+            for excerpt in build_context_excerpts(
+                source,
+                terms,
+                max_chars=self._snippet_length,
+                max_excerpts=remaining,
+            ):
+                normalized = " ".join(excerpt.casefold().split())
+                if normalized in seen_excerpt_text:
+                    continue
+                seen_excerpt_text.add(normalized)
+                snippets.append(
+                    SearchSnippet(
+                        field=field,
+                        text=excerpt,
+                        match_count=field_matches,
+                    )
+                )
+        fallback_source = result.content.strip() or result.snippet
+        fallback = self.build_snippet(fallback_source, terms)
+        if not snippets and fallback:
+            fallback_field = (
+                result.match_fields[0]
+                if result.match_fields
+                else SearchField.EXTRACTED_TEXT
+            )
+            snippets.append(
+                SearchSnippet(
+                    field=fallback_field,
+                    text=fallback,
+                    match_count=len(literal_match_spans(fallback_source, terms)),
+                )
+            )
+        primary = snippets[0].text if snippets else fallback
+        return replace(
+            result,
+            snippet=primary,
+            snippets=tuple(snippets),
+            match_count=total_matches,
+        )
 
 
 __all__ = ["SearchDatabase", "SearchService"]

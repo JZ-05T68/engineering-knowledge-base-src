@@ -94,6 +94,22 @@ class SearchSort(StrEnum):
         }[self]
 
 
+class SearchViewMode(StrEnum):
+    """Supported search-result layouts stored in the URL state."""
+
+    PAGE = "page"
+    DOCUMENT = "document"
+
+    @property
+    def label(self) -> str:
+        """Return the concise Chinese label shown by the view switcher."""
+
+        return {
+            self.PAGE: "按页面显示",
+            self.DOCUMENT: "按文档分组显示",
+        }[self]
+
+
 class EvidenceTextKind(StrEnum):
     """Trust classification for text stored in an evidence item."""
 
@@ -277,6 +293,17 @@ class SearchResult:
     ocr_text: str = ""
     markdown_content: str = ""
     updated_at: datetime | None = None
+    match_count: int = 0
+    snippets: tuple[SearchSnippet, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class SearchSnippet:
+    """One source-labelled, plain-text excerpt for a search result."""
+
+    field: SearchField
+    text: str
+    match_count: int
 
 
 @dataclass(frozen=True, slots=True)
