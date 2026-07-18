@@ -59,11 +59,11 @@ if st.button("导入 PDF", type="primary"):
         else:
             failed_count = sum(page.status is PageStatus.FAILED for page in result.pages)
             review_count = sum(
-                page.status in {PageStatus.PENDING_REVIEW, PageStatus.FAILED}
+                page.status in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
                 for page in result.pages
             )
             text_count = sum(
-                page.status in {PageStatus.TEXT_EXTRACTED, PageStatus.OCR_COMPLETED}
+                page.processing_status in {"text_extracted", "ocr_completed"}
                 for page in result.pages
             )
             message = (

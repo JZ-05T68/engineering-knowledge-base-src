@@ -77,6 +77,17 @@ class FakeDatabase:
         return SimpleNamespace(id=42, **values)
 
     def create_page(self, **values: Any) -> Any:
+        processing_status = values.get("processing_status")
+        if processing_status is None:
+            if values.get("processing_error"):
+                processing_status = "failed"
+            elif values.get("ocr_text"):
+                processing_status = "ocr_completed"
+            elif values.get("extracted_text"):
+                processing_status = "text_extracted"
+            else:
+                processing_status = "pending_review"
+        values["processing_status"] = processing_status
         self.page_values.append(values)
         page = SimpleNamespace(id=len(self.page_values), **values)
         self.pages_by_number[(values["document_id"], values["page_number"])] = page
@@ -95,15 +106,15 @@ class FakeDatabase:
         markdown_content: str,
         markdown_path: Path,
         *,
-        mark_ready: bool,
+        review_status: PageStatus,
     ) -> Any:
         self.markdown_update = {
             "page_id": page_id,
             "markdown_content": markdown_content,
             "markdown_path": markdown_path,
-            "mark_ready": mark_ready,
+            "review_status": review_status,
         }
-        return SimpleNamespace(id=page_id, status=PageStatus.READY, **self.markdown_update)
+        return SimpleNamespace(id=page_id, status=review_status, **self.markdown_update)
 
 
 def make_service(
@@ -146,8 +157,10 @@ def test_import_pdf_saves_original_images_and_metadata(tmp_path: Path) -> None:
     assert source_path.parent == tmp_path / "raw"
     assert source_path.read_bytes() == b"ignored prefix%PDF local test"
     assert (tmp_path / "pages" / "42" / "page_0001.png").is_file()
-    assert database.page_values[0]["status"] is PageStatus.READY
+    assert database.page_values[0]["status"] is PageStatus.PENDING
     assert database.page_values[1]["status"] is PageStatus.PENDING
+    assert database.page_values[0]["processing_status"] == "text_extracted"
+    assert database.page_values[1]["processing_status"] == "pending_review"
 
 
 def test_duplicate_import_does_not_write_or_process(tmp_path: Path) -> None:
@@ -225,8 +238,9 @@ def test_save_page_markdown_writes_utf8_and_updates_database(tmp_path: Path) -> 
         "page_id": 7,
         "markdown_content": "# 校对内容\n\n泵站参数。",
         "markdown_path": markdown_path,
-        "mark_ready": True,
+        "review_status": PageStatus.DRAFT,
     }
+    assert updated_page.status is PageStatus.DRAFT
     assert updated_page.id == 7
 
 
@@ -276,7 +290,7 @@ def test_single_page_failure_keeps_other_completed_pages(tmp_path: Path) -> None
     result = service.import_pdf(b"%PDF partial", "partial.pdf")
 
     assert len(result.pages) == 2
-    assert result.pages[0].status is PageStatus.TEXT_EXTRACTED
+    assert result.pages[0].status is PageStatus.PENDING
     assert result.pages[1].status is PageStatus.FAILED
     assert result.pages[1].processing_error == "第 2 页损坏"
 

@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 
 class MigrationError(RuntimeError):
@@ -60,6 +60,9 @@ def migrate_database(database_path: Path) -> Path | None:
             current_version = 1
         if current_version < 2:
             _apply_version_two(connection)
+            current_version = 2
+        if current_version < 3:
+            _apply_version_three(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -300,6 +303,106 @@ def _apply_version_two(connection: sqlite3.Connection) -> None:
         )
         connection.commit()
         LOGGER.info("数据库已迁移到 schema v2")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _apply_version_three(connection: sqlite3.Connection) -> None:
+    """Add the v0.0.3 manual-review lifecycle without losing v2 process state.
+
+    The historical ``status`` column is retained as the page-processing result.
+    ``review_status`` becomes the canonical user workflow state. Because v0.0.2
+    automatically marked any saved Markdown as manually reviewed, non-empty
+    legacy notes are conservatively migrated to ``draft`` rather than claiming
+    that a human explicitly confirmed them.
+    """
+
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        for trigger in ("pages_fts_insert", "pages_fts_delete", "pages_fts_update"):
+            connection.execute(f"DROP TRIGGER IF EXISTS {trigger}")
+        connection.execute("DROP TABLE IF EXISTS page_search")
+        connection.execute(
+            """
+            CREATE TABLE pages_v3 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+                page_number INTEGER NOT NULL CHECK (page_number > 0),
+                image_path TEXT NOT NULL CHECK (length(trim(image_path)) > 0),
+                extracted_text TEXT NOT NULL DEFAULT '',
+                ocr_text TEXT NOT NULL DEFAULT '',
+                markdown_content TEXT NOT NULL DEFAULT '',
+                markdown_path TEXT,
+                status TEXT NOT NULL CHECK (status IN (
+                    'text_extracted', 'ocr_completed', 'pending_review',
+                    'manually_reviewed', 'failed'
+                )),
+                review_status TEXT NOT NULL CHECK (review_status IN (
+                    'pending', 'draft', 'reviewed', 'skipped', 'failed'
+                )),
+                processing_error TEXT NOT NULL DEFAULT '',
+                search_extracted_text TEXT NOT NULL DEFAULT '',
+                search_ocr_text TEXT NOT NULL DEFAULT '',
+                search_markdown_content TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                note_updated_at TEXT,
+                reviewed_at TEXT,
+                last_viewed_at TEXT,
+                UNIQUE (document_id, page_number)
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO pages_v3(
+                id, document_id, page_number, image_path, extracted_text, ocr_text,
+                markdown_content, markdown_path, status, review_status,
+                processing_error, search_extracted_text, search_ocr_text,
+                search_markdown_content, created_at, updated_at, note_updated_at,
+                reviewed_at, last_viewed_at
+            )
+            SELECT
+                id, document_id, page_number, image_path, extracted_text, ocr_text,
+                markdown_content, markdown_path, status,
+                CASE
+                    WHEN status = 'failed' AND length(trim(markdown_content)) = 0
+                        THEN 'failed'
+                    WHEN length(trim(markdown_content)) > 0 THEN 'draft'
+                    WHEN status = 'manually_reviewed' THEN 'reviewed'
+                    ELSE 'pending'
+                END,
+                processing_error, search_extracted_text, search_ocr_text,
+                search_markdown_content, created_at, updated_at,
+                CASE WHEN length(trim(markdown_content)) > 0 THEN updated_at ELSE NULL END,
+                CASE
+                    WHEN status = 'manually_reviewed'
+                         AND length(trim(markdown_content)) = 0
+                    THEN updated_at ELSE NULL
+                END,
+                NULL
+            FROM pages
+            """
+        )
+        connection.execute("DROP TABLE pages")
+        connection.execute("ALTER TABLE pages_v3 RENAME TO pages")
+        connection.execute(
+            "CREATE INDEX idx_pages_document_page ON pages(document_id, page_number)"
+        )
+        connection.execute("CREATE INDEX idx_pages_status ON pages(status)")
+        connection.execute(
+            "CREATE INDEX idx_pages_review_status "
+            "ON pages(review_status, document_id, page_number)"
+        )
+        _create_v2_fts(connection)
+        connection.execute("INSERT INTO page_search(page_search) VALUES ('rebuild')")
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (3, ?)",
+            (_utc_now(),),
+        )
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v3")
     except Exception:
         connection.rollback()
         raise

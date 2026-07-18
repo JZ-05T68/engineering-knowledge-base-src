@@ -31,6 +31,20 @@ LOGGER = logging.getLogger(__name__)
 _SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{64}$")
 _QUOTED_TERM: Final[re.Pattern[str]] = re.compile(r'"([^"]+)"')
 _UNSET: Final[object] = object()
+_PROCESSING_STATUSES: Final[set[str]] = {
+    "text_extracted",
+    "ocr_completed",
+    "pending_review",
+    "manually_reviewed",
+    "failed",
+}
+_LEGACY_PAGE_STATUS_MAP: Final[dict[str, PageStatus]] = {
+    "ready": PageStatus.PENDING,
+    "text_extracted": PageStatus.PENDING,
+    "ocr_completed": PageStatus.PENDING,
+    "pending_review": PageStatus.PENDING,
+    "manually_reviewed": PageStatus.REVIEWED,
+}
 
 
 class DatabaseError(RuntimeError):
@@ -288,7 +302,8 @@ class Database:
         image_path: Path | str,
         extracted_text: str = "",
         ocr_text: str = "",
-        status: PageStatus | str = PageStatus.PENDING_REVIEW,
+        status: PageStatus | str = PageStatus.PENDING,
+        processing_status: str | None = None,
         processing_error: str = "",
         markdown_content: str = "",
         markdown_path: Path | str | None = None,
@@ -298,6 +313,18 @@ class Database:
         if page_number < 1:
             raise ValueError("页码必须从 1 开始")
         normalized_status = _coerce_page_status(status)
+        if markdown_content.strip() and normalized_status not in {
+            PageStatus.REVIEWED,
+            PageStatus.SKIPPED,
+        }:
+            normalized_status = PageStatus.DRAFT
+        normalized_processing_status = _coerce_processing_status(
+            processing_status,
+            extracted_text=extracted_text,
+            ocr_text=ocr_text,
+            processing_error=processing_error,
+            review_status=normalized_status,
+        )
         timestamp = _utc_now()
         try:
             with self._connection() as connection:
@@ -305,10 +332,11 @@ class Database:
                     """
                     INSERT INTO pages(
                         document_id, page_number, image_path, extracted_text,
-                        ocr_text, markdown_content, markdown_path, status,
+                        ocr_text, markdown_content, markdown_path, status, review_status,
                         processing_error, search_extracted_text, search_ocr_text,
-                        search_markdown_content, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        search_markdown_content, created_at, updated_at, note_updated_at,
+                        reviewed_at, last_viewed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         document_id,
@@ -318,6 +346,7 @@ class Database:
                         ocr_text,
                         markdown_content,
                         _optional_path(markdown_path),
+                        normalized_processing_status,
                         normalized_status.value,
                         processing_error[:2000],
                         _tokenize_for_fts(extracted_text),
@@ -325,6 +354,9 @@ class Database:
                         _tokenize_for_fts(markdown_content),
                         timestamp,
                         timestamp,
+                        timestamp if markdown_content.strip() else None,
+                        timestamp if normalized_status is PageStatus.REVIEWED else None,
+                        None,
                     ),
                 )
                 row = connection.execute(
@@ -362,10 +394,14 @@ class Database:
         return [_page_from_row(row) for row in rows]
 
     def list_review_pages(self, document_id: int | None = None) -> list[Page]:
-        """List pending and failed pages, optionally restricted to a document."""
+        """List the default review queue, optionally restricted to a document."""
 
-        parameters: list[object] = [PageStatus.PENDING_REVIEW.value, PageStatus.FAILED.value]
-        where = "status IN (?, ?)"
+        parameters: list[object] = [
+            PageStatus.PENDING.value,
+            PageStatus.DRAFT.value,
+            PageStatus.FAILED.value,
+        ]
+        where = "review_status IN (?, ?, ?)"
         if document_id is not None:
             where += " AND document_id = ?"
             parameters.append(document_id)
@@ -377,7 +413,7 @@ class Database:
         return [_page_from_row(row) for row in rows]
 
     def list_pending_pages(self, document_id: int | None = None) -> list[Page]:
-        """v0.0.1-compatible alias for pages needing manual review."""
+        """Compatibility alias for pages in the default manual-review queue."""
 
         return self.list_review_pages(document_id)
 
@@ -404,6 +440,7 @@ class Database:
         markdown_content: str | None = None,
         markdown_path: Path | str | None | object = _UNSET,
         status: PageStatus | str | None = None,
+        processing_status: str | None = None,
         processing_error: str | None = None,
         image_path: Path | str | None = None,
     ) -> Page:
@@ -420,12 +457,24 @@ class Database:
             if value is not None:
                 assignments.extend((f"{field} = ?", f"{search_field} = ?"))
                 values.extend((value, _tokenize_for_fts(value)))
+                if field == "markdown_content":
+                    assignments.append("note_updated_at = ?")
+                    values.append(_utc_now())
         if markdown_path is not _UNSET:
             assignments.append("markdown_path = ?")
             values.append(_optional_path(markdown_path))
         if status is not None:
+            normalized_status = _coerce_page_status(status)
+            assignments.extend(("review_status = ?", "reviewed_at = ?"))
+            values.extend(
+                (
+                    normalized_status.value,
+                    _utc_now() if normalized_status is PageStatus.REVIEWED else None,
+                )
+            )
+        if processing_status is not None:
             assignments.append("status = ?")
-            values.append(_coerce_page_status(status).value)
+            values.append(_validate_processing_status(processing_status))
         if processing_error is not None:
             assignments.append("processing_error = ?")
             values.append(processing_error[:2000])
@@ -454,16 +503,29 @@ class Database:
         markdown_content: str,
         markdown_path: Path | str | None,
         *,
-        mark_ready: bool = True,
+        review_status: PageStatus | str = PageStatus.DRAFT,
     ) -> Page:
-        """Save page Markdown and optionally mark the page manually reviewed."""
+        """Save page Markdown with an explicit manual-review state."""
 
         return self.update_page(
             page_id,
             markdown_content=markdown_content,
             markdown_path=markdown_path,
-            status=PageStatus.MANUALLY_REVIEWED if mark_ready else None,
+            status=review_status,
         )
+
+    def mark_page_viewed(self, page_id: int) -> Page:
+        """Record a page visit without changing its content modification time."""
+
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "UPDATE pages SET last_viewed_at = ? WHERE id = ?",
+                (_utc_now(), page_id),
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"页面不存在：{page_id}")
+            row = connection.execute("SELECT * FROM pages WHERE id = ?", (page_id,)).fetchone()
+        return _page_from_row(row)
 
     # Import records ------------------------------------------------------
     def create_import_record(self, filename: str, title: str, sha256: str) -> ImportRecord:
@@ -771,9 +833,19 @@ class Database:
                     (SELECT COUNT(*) FROM pages
                         WHERE length(trim(markdown_content)) > 0) AS noted_pages,
                     (SELECT COUNT(*) FROM pages
-                        WHERE status IN ('pending_review', 'failed')) AS review_pages,
+                        WHERE review_status IN ('pending', 'draft', 'failed')) AS review_pages,
                     (SELECT COUNT(*) FROM tags) AS tags,
-                    (SELECT COUNT(*) FROM projects) AS projects
+                    (SELECT COUNT(*) FROM projects) AS projects,
+                    (SELECT COUNT(*) FROM pages
+                        WHERE review_status = 'pending') AS pending_pages,
+                    (SELECT COUNT(*) FROM pages
+                        WHERE review_status = 'draft') AS draft_pages,
+                    (SELECT COUNT(*) FROM pages
+                        WHERE review_status = 'reviewed') AS reviewed_pages,
+                    (SELECT COUNT(*) FROM pages
+                        WHERE review_status = 'skipped') AS skipped_pages,
+                    (SELECT COUNT(*) FROM pages
+                        WHERE review_status = 'failed') AS failed_pages
                 """
             ).fetchone()
         return DashboardStats(**{key: int(row[key]) for key in row.keys()})
@@ -782,7 +854,7 @@ class Database:
         with self._connection() as connection:
             rows = connection.execute(
                 """SELECT * FROM pages WHERE length(trim(markdown_content)) > 0
-                ORDER BY updated_at DESC LIMIT ?""",
+                ORDER BY COALESCE(note_updated_at, updated_at) DESC LIMIT ?""",
                 (max(1, min(limit, 20)),),
             ).fetchall()
         return [_page_from_row(row) for row in rows]
@@ -852,7 +924,7 @@ class Database:
                             content=content,
                             snippet="",
                             rank=float(row["rank"]),
-                            status=PageStatus(row["status"]),
+                            status=PageStatus(row["review_status"]),
                             match_type=match_type,
                             tags=tags,
                             projects=projects,
@@ -946,10 +1018,41 @@ def _parse_datetime(value: str | None) -> datetime | None:
 
 def _coerce_page_status(status: PageStatus | str) -> PageStatus:
     try:
-        return status if isinstance(status, PageStatus) else PageStatus(status)
+        if isinstance(status, PageStatus):
+            return status
+        if status in _LEGACY_PAGE_STATUS_MAP:
+            return _LEGACY_PAGE_STATUS_MAP[status]
+        return PageStatus(status)
     except ValueError as exc:
         allowed = ", ".join(item.value for item in PageStatus)
         raise ValueError(f"页面状态必须是：{allowed}") from exc
+
+
+def _validate_processing_status(status: str) -> str:
+    normalized = status.strip()
+    if normalized not in _PROCESSING_STATUSES:
+        allowed = ", ".join(sorted(_PROCESSING_STATUSES))
+        raise ValueError(f"页面处理状态必须是：{allowed}")
+    return normalized
+
+
+def _coerce_processing_status(
+    status: str | None,
+    *,
+    extracted_text: str,
+    ocr_text: str,
+    processing_error: str,
+    review_status: PageStatus,
+) -> str:
+    if status is not None:
+        return _validate_processing_status(status)
+    if processing_error or review_status is PageStatus.FAILED:
+        return "failed"
+    if ocr_text.strip():
+        return "ocr_completed"
+    if extracted_text.strip():
+        return "text_extracted"
+    return "pending_review"
 
 
 def _coerce_import_status(status: ImportStatus | str) -> ImportStatus:
@@ -1017,10 +1120,14 @@ def _page_from_row(row: sqlite3.Row) -> Page:
         ocr_text=str(row["ocr_text"]),
         markdown_content=str(row["markdown_content"]),
         markdown_path=Path(markdown_path) if markdown_path is not None else None,
-        status=PageStatus(row["status"]),
+        status=PageStatus(row["review_status"]),
         processing_error=str(row["processing_error"]),
         created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
         updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
+        note_updated_at=_parse_datetime(row["note_updated_at"]),
+        reviewed_at=_parse_datetime(row["reviewed_at"]),
+        last_viewed_at=_parse_datetime(row["last_viewed_at"]),
+        processing_status=str(row["status"]),
     )
 
 

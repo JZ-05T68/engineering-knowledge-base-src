@@ -94,12 +94,13 @@ class DocumentService:
                             total_pages=recorded_page_count,
                             processed_pages=len(existing_pages),
                             text_pages=sum(
-                                page.status
-                                in {PageStatus.TEXT_EXTRACTED, PageStatus.OCR_COMPLETED}
+                                page.processing_status
+                                in {"text_extracted", "ocr_completed"}
                                 for page in existing_pages
                             ),
                             review_pages=sum(
-                                page.status in {PageStatus.PENDING_REVIEW, PageStatus.FAILED}
+                                page.status
+                                in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
                                 for page in existing_pages
                             ),
                             failed_pages=sum(
@@ -212,9 +213,9 @@ class DocumentService:
             if processed_page.processing_error:
                 status = PageStatus.FAILED
             elif processed_page.needs_review:
-                status = PageStatus.PENDING_REVIEW
+                status = PageStatus.PENDING
             else:
-                status = PageStatus.TEXT_EXTRACTED
+                status = PageStatus.PENDING
             page = self.database.create_page(
                 document_id=document.id,
                 page_number=processed_page.page_number,
@@ -229,11 +230,12 @@ class DocumentService:
 
         failed_pages = sum(page.status is PageStatus.FAILED for page in pages)
         text_pages = sum(
-            page.status in {PageStatus.TEXT_EXTRACTED, PageStatus.OCR_COMPLETED}
+            page.processing_status in {"text_extracted", "ocr_completed"}
             for page in pages
         )
         review_pages = sum(
-            page.status in {PageStatus.PENDING_REVIEW, PageStatus.FAILED} for page in pages
+            page.status in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
+            for page in pages
         )
         if failed_pages == len(processed_pages):
             import_status = ImportStatus.FAILED
@@ -263,9 +265,14 @@ class DocumentService:
         return updated_document, tuple(pages)
 
     def save_page_markdown(
-        self, document_id: int, page_number: int, markdown_content: str
+        self,
+        document_id: int,
+        page_number: int,
+        markdown_content: str,
+        *,
+        mark_reviewed: bool = False,
     ) -> Page:
-        """Persist Markdown for one page and synchronize its searchable DB content."""
+        """Persist Markdown as a draft, or as reviewed only when explicitly requested."""
 
         if document_id <= 0 or page_number <= 0:
             raise ValueError("文档编号和页码必须大于 0。")
@@ -287,7 +294,9 @@ class DocumentService:
                 page.id,
                 markdown_content,
                 markdown_path,
-                mark_ready=bool(markdown_content.strip()),
+                review_status=(
+                    PageStatus.REVIEWED if mark_reviewed else PageStatus.DRAFT
+                ),
             )
             LOGGER.info(
                 "页面 Markdown 已保存：document_id=%s page_number=%s",
@@ -316,11 +325,11 @@ class DocumentService:
         if page is None:
             raise DocumentImportError(f"找不到文档 {document_id} 的第 {page_number} 页。")
         if page.extracted_text.strip():
-            status = PageStatus.TEXT_EXTRACTED
+            status = PageStatus.PENDING
         elif page.ocr_text.strip():
-            status = PageStatus.OCR_COMPLETED
+            status = PageStatus.PENDING
         else:
-            status = PageStatus.PENDING_REVIEW
+            status = PageStatus.PENDING
         updated = self.database.update_page(
             page.id,
             markdown_content="",
@@ -341,9 +350,14 @@ class DocumentService:
 
         return self.database.update_page(
             page_id,
-            status=PageStatus.MANUALLY_REVIEWED,
+            status=PageStatus.REVIEWED,
             processing_error="",
         )
+
+    def skip_page(self, page_id: int) -> Page:
+        """Explicitly defer a page so it leaves the default review queue."""
+
+        return self.database.update_page(page_id, status=PageStatus.SKIPPED)
 
     def reprocess_page(self, page_id: int) -> Page:
         """Retry local rendering/text extraction for one failed page."""
@@ -368,18 +382,18 @@ class DocumentService:
             return self.database.update_page(
                 page.id,
                 status=PageStatus.FAILED,
+                processing_status="failed",
                 processing_error=processed.processing_error,
             )
-        status = (
-            PageStatus.PENDING_REVIEW
-            if processed.needs_review
-            else PageStatus.TEXT_EXTRACTED
+        processing_status = (
+            "pending_review" if processed.needs_review else "text_extracted"
         )
         return self.database.update_page(
             page.id,
             extracted_text=processed.extracted_text,
             image_path=processed.image_path,
-            status=status,
+            status=PageStatus.PENDING,
+            processing_status=processing_status,
             processing_error="",
         )
 
@@ -443,11 +457,12 @@ class DocumentService:
             return None
         failed_pages = sum(page.status is PageStatus.FAILED for page in pages)
         text_pages = sum(
-            page.status in {PageStatus.TEXT_EXTRACTED, PageStatus.OCR_COMPLETED}
+            page.processing_status in {"text_extracted", "ocr_completed"}
             for page in pages
         )
         review_pages = sum(
-            page.status in {PageStatus.PENDING_REVIEW, PageStatus.FAILED} for page in pages
+            page.status in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
+            for page in pages
         )
         return self._finish_import_record(
             record,

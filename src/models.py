@@ -19,27 +19,31 @@ class ImportStatus(StrEnum):
 
 
 class PageStatus(StrEnum):
-    """Processing and review state of an imported PDF page."""
+    """Manual review state of an imported PDF page."""
 
-    TEXT_EXTRACTED = "text_extracted"
-    OCR_COMPLETED = "ocr_completed"
-    PENDING_REVIEW = "pending_review"
-    MANUALLY_REVIEWED = "manually_reviewed"
+    PENDING = "pending"
+    DRAFT = "draft"
+    REVIEWED = "reviewed"
+    SKIPPED = "skipped"
     FAILED = "failed"
 
-    # v0.0.1 source compatibility for callers and existing tests.
-    READY = "text_extracted"
-    PENDING = "pending_review"
+    # Source-level aliases retained for v0.0.1/v0.0.2 callers. Persisted legacy
+    # values are translated by schema v3 and ``_coerce_page_status``.
+    READY = "pending"
+    TEXT_EXTRACTED = "pending"
+    OCR_COMPLETED = "pending"
+    PENDING_REVIEW = "pending"
+    MANUALLY_REVIEWED = "reviewed"
 
     @property
     def label(self) -> str:
         """Return the concise Chinese label shown in the local UI."""
 
         return {
-            self.TEXT_EXTRACTED: "已提取文本",
-            self.OCR_COMPLETED: "OCR 完成",
-            self.PENDING_REVIEW: "待人工复核",
-            self.MANUALLY_REVIEWED: "已人工整理",
+            self.PENDING: "待处理",
+            self.DRAFT: "草稿待复核",
+            self.REVIEWED: "人工复核完成",
+            self.SKIPPED: "暂不整理",
             self.FAILED: "处理失败",
         }[self]
 
@@ -92,6 +96,10 @@ class Page:
     processing_error: str
     created_at: datetime
     updated_at: datetime
+    note_updated_at: datetime | None = None
+    reviewed_at: datetime | None = None
+    last_viewed_at: datetime | None = None
+    processing_status: str = "pending_review"
 
     @property
     def searchable_content(self) -> str:
@@ -175,7 +183,7 @@ class SearchResult:
 
 @dataclass(frozen=True, slots=True)
 class DashboardStats:
-    """Small set of counts used by the v0.0.2 home page."""
+    """Local dashboard counts, including the complete review-state breakdown."""
 
     documents: int
     pages: int
@@ -183,3 +191,20 @@ class DashboardStats:
     review_pages: int
     tags: int
     projects: int
+    pending_pages: int = 0
+    draft_pages: int = 0
+    reviewed_pages: int = 0
+    skipped_pages: int = 0
+    failed_pages: int = 0
+
+    @property
+    def processed_pages(self) -> int:
+        """Pages whose manual-review workflow is complete or intentionally deferred."""
+
+        return self.reviewed_pages + self.skipped_pages
+
+    @property
+    def remaining_pages(self) -> int:
+        """Pages still present in the default review queue."""
+
+        return self.pending_pages + self.draft_pages + self.failed_pages

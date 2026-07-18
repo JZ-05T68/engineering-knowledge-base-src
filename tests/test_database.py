@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from src import migrations as migrations_module
 from src.database import Database, DuplicateDocumentError, RecordNotFoundError
 from src.migrations import MigrationError
 from src.models import ImportStatus, PageStatus
@@ -19,6 +20,78 @@ def _create_document(database: Database, suffix: str = "a"):
         source_path=Path("data/raw/hydraulics.pdf"),
         sha256=suffix * 64,
     )
+
+
+def _create_v2_database(database_path: Path, page_count: int = 78) -> None:
+    """Create a representative v0.0.2 database without opening app user data."""
+
+    timestamp = "2026-07-12T00:00:00+00:00"
+    with sqlite3.connect(database_path) as connection:
+        connection.execute(
+            """CREATE TABLE schema_migrations(
+                version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL
+            )"""
+        )
+        migrations_module._apply_version_one(connection)
+        migrations_module._apply_version_two(connection)
+        connection.execute(
+            """
+            INSERT INTO documents(
+                id, title, filename, source_path, sha256, page_count,
+                created_at, updated_at, import_status, processed_page_count,
+                text_page_count, review_page_count, import_error, imported_at
+            ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, 'completed', ?, 0, ?, '', ?)
+            """,
+            (
+                "v0.0.2 工程手册",
+                "legacy-v2.pdf",
+                "data/raw/legacy-v2.pdf",
+                "d" * 64,
+                page_count,
+                timestamp,
+                timestamp,
+                page_count,
+                page_count,
+                timestamp,
+            ),
+        )
+        for page_number in range(1, page_count + 1):
+            status = "pending_review"
+            markdown = ""
+            if page_number == 2:
+                markdown = "# 未确认草稿"
+            elif page_number == 3:
+                status = "manually_reviewed"
+            elif page_number == 4:
+                status = "manually_reviewed"
+                markdown = "# v2 自动标记的笔记"
+            elif page_number == 5:
+                status = "failed"
+            connection.execute(
+                """
+                INSERT INTO pages(
+                    id, document_id, page_number, image_path, extracted_text,
+                    ocr_text, markdown_content, markdown_path, status,
+                    processing_error, search_extracted_text, search_ocr_text,
+                    search_markdown_content, created_at, updated_at
+                ) VALUES (?, 1, ?, ?, ?, '', ?, ?, ?, ?, ?, '', ?, ?, ?)
+                """,
+                (
+                    page_number,
+                    page_number,
+                    f"data/pages/1/page_{page_number:04d}.png",
+                    f"第 {page_number} 页保留文本",
+                    markdown,
+                    f"data/markdown/1/page_{page_number:04d}.md" if markdown else None,
+                    status,
+                    "旧失败" if status == "failed" else "",
+                    f"第 {page_number} 页 保留 文本",
+                    markdown,
+                    timestamp,
+                    timestamp,
+                ),
+            )
+        connection.commit()
 
 
 def test_initialization_is_idempotent_and_schema_has_fts5(tmp_path: Path) -> None:
@@ -40,7 +113,7 @@ def test_initialization_is_idempotent_and_schema_has_fts5(tmp_path: Path) -> Non
 
     assert {"documents", "pages", "page_search"} <= tables
     assert not any("user" in name.lower() or "account" in name.lower() for name in tables)
-    assert migration_count == 2
+    assert migration_count == 3
 
 
 def test_document_sha256_is_unique_and_metadata_persists(tmp_path: Path) -> None:
@@ -72,7 +145,7 @@ def test_page_review_update_and_chinese_fts_search(tmp_path: Path) -> None:
         page_number=1,
         image_path=Path("data/pages/1/page_0001.png"),
         extracted_text="液压泵需要定期检查压力和温度。",
-        status=PageStatus.READY,
+        status=PageStatus.REVIEWED,
     )
     pending_page = database.create_page(
         document_id=document.id,
@@ -91,16 +164,24 @@ def test_page_review_update_and_chinese_fts_search(tmp_path: Path) -> None:
     assert text_matches[0].page_number == 1
     assert "液压泵" in text_matches[0].content
 
-    reviewed_page = database.update_page_markdown(
+    draft_page = database.update_page_markdown(
         pending_page.id,
         "# 手写检修记录\n\n更换了密封件。",
         Path("data/markdown/1/page_0002.md"),
     )
 
-    assert reviewed_page.status is PageStatus.MANUALLY_REVIEWED
-    assert reviewed_page.markdown_path == Path("data/markdown/1/page_0002.md")
-    assert database.list_pending_pages(document.id) == []
+    assert draft_page.status is PageStatus.DRAFT
+    assert draft_page.note_updated_at is not None
+    assert draft_page.reviewed_at is None
+    assert draft_page.markdown_path == Path("data/markdown/1/page_0002.md")
+    assert database.list_pending_pages(document.id) == [draft_page]
     assert database.search('"检修"')[0].page_id == pending_page.id
+
+    reviewed_page = database.update_page(pending_page.id, status=PageStatus.REVIEWED)
+    assert reviewed_page.reviewed_at is not None
+    assert database.list_pending_pages(document.id) == []
+    stats = database.dashboard_stats()
+    assert (stats.pending_pages, stats.draft_pages, stats.reviewed_pages) == (0, 0, 2)
 
     reopened = Database(database_path)
     assert reopened.get_page(pending_page.id) == reviewed_page
@@ -169,6 +250,38 @@ def test_v1_database_is_backed_up_and_migrated_without_losing_data(tmp_path: Pat
     assert page.extracted_text == "旧版提取文本"
     assert page.status is PageStatus.TEXT_EXTRACTED
     assert database.search('"旧版"')[0].page_id == 1
+
+
+def test_v2_database_with_78_pages_is_backed_up_and_migrated_losslessly(
+    tmp_path: Path,
+) -> None:
+    database_path = tmp_path / "knowledge.db"
+    _create_v2_database(database_path)
+
+    database = Database(database_path)
+
+    assert database.last_backup_path is not None
+    assert database.last_backup_path.is_file()
+    assert len(database.list_documents()) == 1
+    assert len(database.list_pages(1)) == 78
+    stats = database.dashboard_stats()
+    assert (
+        stats.pending_pages,
+        stats.draft_pages,
+        stats.reviewed_pages,
+        stats.skipped_pages,
+        stats.failed_pages,
+    ) == (74, 2, 1, 0, 1)
+    assert stats.review_pages == 77
+    assert database.get_page_by_number(1, 2).status is PageStatus.DRAFT  # type: ignore[union-attr]
+    assert database.get_page_by_number(1, 3).status is PageStatus.REVIEWED  # type: ignore[union-attr]
+    assert database.get_page_by_number(1, 4).status is PageStatus.DRAFT  # type: ignore[union-attr]
+    assert database.search('"保留"')
+
+    with sqlite3.connect(database.last_backup_path) as connection:
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM documents").fetchone()[0] == 1
+        assert connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 78
 
 
 def test_tags_projects_import_records_and_metadata_search(tmp_path: Path) -> None:
@@ -244,3 +357,28 @@ def test_failed_migration_rolls_back_and_keeps_backup(tmp_path: Path) -> None:
         assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 1
         columns = {row[1] for row in connection.execute("PRAGMA table_info(documents)")}
     assert "import_status" not in columns
+
+
+def test_failed_v3_migration_restores_v2_schema_and_data(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database_path = tmp_path / "knowledge.db"
+    _create_v2_database(database_path, page_count=8)
+
+    def fail_fts_rebuild(connection: sqlite3.Connection) -> None:
+        del connection
+        raise sqlite3.OperationalError("simulated v3 FTS rebuild failure")
+
+    monkeypatch.setattr(migrations_module, "_create_v2_fts", fail_fts_rebuild)
+
+    with pytest.raises(MigrationError, match="迁移失败"):
+        Database(database_path)
+
+    backups = list((tmp_path / "backups").glob("*.db"))
+    assert len(backups) == 1
+    with sqlite3.connect(database_path) as connection:
+        assert connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0] == 2
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(pages)")}
+        assert "review_status" not in columns
+        assert connection.execute("SELECT COUNT(*) FROM pages").fetchone()[0] == 8
+        assert connection.execute("SELECT COUNT(*) FROM page_search").fetchone()[0] == 8
