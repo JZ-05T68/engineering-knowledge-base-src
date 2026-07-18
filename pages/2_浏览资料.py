@@ -7,12 +7,13 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.models import ImportStatus
+from src.models import ImportStatus, SearchResult
 from src.runtime import application_database, application_document_service
+from src.search_service import SearchService
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.3", page_icon="📖", layout="wide")
+st.set_page_config(page_title="浏览资料｜工程知识库 v0.0.4", page_icon="📖", layout="wide")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -75,18 +76,27 @@ documents = database.list_documents(
     project_ids=selected_project_ids,
     import_status=status_value,
 )
+query_document = st.query_params.get("document")
+from_search = st.query_params.get("from_search") == "1"
+requested_document_id: int | None = None
+if query_document:
+    try:
+        requested_document_id = int(query_document)
+    except ValueError:
+        st.error(f"无法打开指定文档：文档编号“{query_document}”无效。")
+        st.stop()
+    requested_document = database.get_document(requested_document_id)
+    if requested_document is None:
+        st.error(f"无法打开指定文档：数据库中不存在文档 {requested_document_id}。")
+        st.stop()
+    if all(document.id != requested_document.id for document in documents):
+        documents = [requested_document, *documents]
 if not documents:
     st.info("没有符合筛选条件的文档。")
     st.stop()
 
 document_by_id = {document.id: document for document in documents}
-query_document = st.query_params.get("document")
-try:
-    initial_document = int(query_document) if query_document else documents[0].id
-except ValueError:
-    initial_document = documents[0].id
-if initial_document not in document_by_id:
-    initial_document = documents[0].id
+initial_document = requested_document_id or documents[0].id
 document_id = st.selectbox(
     "选择文档",
     options=list(document_by_id),
@@ -96,7 +106,23 @@ document_id = st.selectbox(
     ),
 )
 document = document_by_id[document_id]
+document_changed = requested_document_id is not None and document_id != requested_document_id
 st.query_params["document"] = str(document.id)
+if document_changed:
+    if "page" in st.query_params:
+        del st.query_params["page"]
+
+if from_search:
+    search_query = (
+        st.query_params.get("search_query")
+        or st.session_state.get("knowledge_query", "")
+    )
+    search_banner, return_action = st.columns([5, 1])
+    search_banner.info(f"当前页面来自检索：{search_query or '（未记录关键词）'}")
+    if return_action.button("返回检索结果", type="primary", use_container_width=True):
+        st.query_params.clear()
+        st.switch_page("pages/3_检索资料.py")
+        st.stop()
 
 document_tags = database.get_document_tags(document.id)
 document_projects = database.get_document_projects(document.id)
@@ -110,6 +136,8 @@ st.caption(
     f"导入时间：{(document.imported_at or document.created_at).astimezone():%Y-%m-%d %H:%M}　|　"
     f"状态：{document.status_label}　|　SHA-256：{document.sha256[:12]}…"
 )
+if not document.source_path.is_file():
+    st.warning(f"原始 PDF 文件缺失：{document.source_path}。页面记录仍保留，未执行自动修复。")
 
 next_document_review_page = next(iter(database.list_review_pages(document.id)), None)
 if st.button(
@@ -159,35 +187,83 @@ if not document_pages:
 
 page_by_number = {page.page_number: page for page in document_pages}
 query_page = st.query_params.get("page")
-try:
-    initial_page = int(query_page) if query_page else document_pages[0].page_number
-except ValueError:
-    initial_page = document_pages[0].page_number
-if initial_page not in page_by_number:
+if document_changed:
+    query_page = None
+if query_page:
+    try:
+        initial_page = int(query_page)
+    except ValueError:
+        st.error(f"无法打开指定页面：页码“{query_page}”无效。")
+        st.stop()
+    if initial_page not in page_by_number:
+        st.error(
+            f"无法打开指定页面：文档“{document.title}”中不存在第 {initial_page} 页。"
+        )
+        st.stop()
+else:
     initial_page = document_pages[0].page_number
 
 navigation = st.columns([1, 1, 3, 1, 1])
-if navigation[0].button("← 上一页", disabled=initial_page <= 1, use_container_width=True):
-    st.query_params["page"] = str(initial_page - 1)
+page_numbers = list(page_by_number)
+initial_page_index = page_numbers.index(initial_page)
+if navigation[0].button(
+    "← 上一页", disabled=initial_page_index <= 0, use_container_width=True
+):
+    st.query_params["page"] = str(page_numbers[initial_page_index - 1])
     st.rerun()
 if navigation[1].button(
     "下一页 →",
-    disabled=initial_page >= len(document_pages),
+    disabled=initial_page_index >= len(page_numbers) - 1,
     use_container_width=True,
 ):
-    st.query_params["page"] = str(initial_page + 1)
+    st.query_params["page"] = str(page_numbers[initial_page_index + 1])
     st.rerun()
 page_number = navigation[2].selectbox(
     "页码",
-    options=list(page_by_number),
-    index=list(page_by_number).index(initial_page),
+    options=page_numbers,
+    index=initial_page_index,
     format_func=lambda value: f"第 {value} 页",
     label_visibility="collapsed",
 )
 st.query_params["page"] = str(page_number)
 page = page_by_number[page_number]
+try:
+    page = database.mark_page_viewed(page.id)
+except Exception as exc:
+    LOGGER.warning("记录页面查看时间失败：page_id=%s", page.id, exc_info=True)
+    st.warning(f"页面已打开，但无法记录最近查看时间：{exc}")
 navigation[3].metric("状态", page.status.label)
 navigation[4].metric("笔记", "有" if page.has_note else "无")
+
+if from_search and search_query:
+    search_service = SearchService(database)
+    search_source = (
+        page.markdown_content.strip()
+        or page.ocr_text.strip()
+        or page.extracted_text.strip()
+    )
+    if search_source:
+        search_terms = search_service.query_terms(search_query)
+        page_snippet = search_service.build_snippet(search_source, search_terms)
+        with st.expander("当前页关键词提示", expanded=True):
+            st.markdown(
+                search_service.highlighted_snippet(
+                    SearchResult(
+                        page_id=page.id,
+                        document_id=document.id,
+                        document_title=document.title,
+                        filename=document.filename,
+                        page_number=page.page_number,
+                        image_path=page.image_path,
+                        content=search_source,
+                        snippet=page_snippet,
+                        rank=0.0,
+                        status=page.status,
+                    ),
+                    search_query,
+                ),
+                unsafe_allow_html=True,
+            )
 
 image_column, editor_column = st.columns([1.08, 1], gap="large")
 with image_column:
