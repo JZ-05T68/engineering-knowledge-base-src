@@ -36,6 +36,26 @@ class ImportResult:
     import_record: ImportRecord | None = None
 
 
+def first_reviewable_import_page(result: ImportResult) -> Page | None:
+    """Return the first newly imported page that can enter the review queue.
+
+    A complete duplicate is intentionally excluded even when its existing
+    document still has reviewable pages: importing the same file must not look
+    like it created new review work.
+    """
+
+    if result.duplicate:
+        return None
+    return next(
+        (
+            page
+            for page in result.pages
+            if page.status in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
+        ),
+        None,
+    )
+
+
 class DocumentService:
     """Coordinate file storage, PDF processing, and database metadata writes."""
 
@@ -611,4 +631,9 @@ class DocumentService:
         return candidate
 
 
-__all__ = ["DocumentImportError", "DocumentService", "ImportResult"]
+__all__ = [
+    "DocumentImportError",
+    "DocumentService",
+    "ImportResult",
+    "first_reviewable_import_page",
+]

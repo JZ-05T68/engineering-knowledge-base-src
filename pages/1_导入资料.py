@@ -7,10 +7,19 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.document_service import first_reviewable_import_page
 from src.models import PageStatus
 from src.runtime import application_document_service
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _open_review_page(page_id: int) -> None:
+    """Navigate from a completed import without persisting extra session state."""
+
+    st.query_params["page_id"] = str(page_id)
+    st.switch_page("pages/4_待整理页面.py")
+
 
 st.set_page_config(page_title="导入资料｜工程知识库 v0.1.1", page_icon="📥", layout="wide")
 st.title("导入资料")
@@ -75,6 +84,16 @@ if st.button("导入 PDF", type="primary"):
                 st.warning(f"部分完成。{message} 其中 {failed_count} 页处理失败。")
             else:
                 st.success(f"导入完成。{message}")
+        review_target = first_reviewable_import_page(result)
+        if review_target is not None:
+            st.button(
+                "进入复核",
+                on_click=_open_review_page,
+                args=(review_target.id,),
+                help="打开本次导入的第一张待复核页面；不会自动修改页面状态。",
+            )
+        elif not result.duplicate:
+            st.caption("本次导入没有新增待复核页面，可以稍后从浏览或检索入口继续使用资料。")
 
 st.divider()
 st.markdown(
