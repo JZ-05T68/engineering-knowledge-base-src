@@ -140,15 +140,43 @@ st.query_params["page_id"] = str(page.id)
 
 flash = st.session_state.pop(_FLASH_KEY, None)
 if flash is not None:
+    # Selector callbacks may run while the post-save rerun is being hydrated.
+    # A completed action is authoritative and resolves any older navigation guard.
+    st.session_state[_PENDING_TARGET_KEY] = None
     level, message = flash
     getattr(st, level)(message)
 
 pending_target_id = st.session_state.get(_PENDING_TARGET_KEY)
+if pending_target_id is not None and not _is_dirty(page.id):
+    st.session_state.pop(_PENDING_TARGET_KEY, None)
+    pending_target_id = None
 if pending_target_id is not None:
     target = database.get_page(int(pending_target_id))
     target_label = _page_label(target, document_titles) if target else "目标页面"
     st.warning(f"当前页有未保存修改。是否放弃修改并切换到：{target_label}？")
-    stay_column, discard_column = st.columns(2)
+    save_column, stay_column, discard_column = st.columns(3)
+    if save_column.button("保存草稿并留在当前页", type="primary", use_container_width=True):
+        editor_key = _editor_key(page.id)
+        saved_key = _saved_key(page.id)
+        markdown_content = str(
+            st.session_state.get(editor_key, page.markdown_content)
+        )
+        try:
+            with st.spinner("正在保存到本机……"):
+                updated_page = document_service.save_page_markdown(
+                    document.id,
+                    page.page_number,
+                    markdown_content,
+                    mark_reviewed=False,
+                )
+        except Exception as exc:
+            LOGGER.exception("保存待复核页面失败：page_id=%s", page.id)
+            st.error(f"保存失败：{exc}。编辑框内容已保留，请重试。")
+        else:
+            st.session_state[saved_key] = updated_page.markdown_content
+            st.session_state.pop(_PENDING_TARGET_KEY, None)
+            st.session_state[_FLASH_KEY] = ("success", "Markdown 草稿已保存。")
+            st.rerun()
     if stay_column.button("留在当前页", use_container_width=True):
         st.session_state.pop(_PENDING_TARGET_KEY, None)
         st.rerun()
@@ -305,6 +333,10 @@ with editor_column:
             st.error(f"保存失败：{exc}。编辑框内容已保留，请重试。")
         else:
             st.session_state[saved_key] = updated_page.markdown_content
+            # A successful save resolves any earlier guarded navigation request.
+            # Keeping that request would show a false "未保存" warning after the
+            # database and Markdown file are already current.
+            st.session_state.pop(_PENDING_TARGET_KEY, None)
             if save_reviewed_next and destination is not None:
                 _activate_page(destination.id)
                 st.session_state[_FLASH_KEY] = (

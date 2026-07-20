@@ -100,16 +100,21 @@ if isinstance(pending_reader_params, dict):
         pending_document_id = 0
         pending_page_number = 0
     if pending_document_id > 0 and pending_page_number > 0:
-        pending_reader_state = decode_return_state(
-            str(pending_reader_params.get("search_return", ""))
-        )
         safe_pending_reader_params = {
             "document": str(pending_document_id),
             "page": str(pending_page_number),
-            "from_search": "1",
-            "search_query": pending_reader_state.query[:500],
-            "search_return": encode_return_state(pending_reader_state),
         }
+        if str(pending_reader_params.get("from_search", "1")) == "1":
+            pending_reader_state = decode_return_state(
+                str(pending_reader_params.get("search_return", ""))
+            )
+            safe_pending_reader_params.update(
+                {
+                    "from_search": "1",
+                    "search_query": pending_reader_state.query[:500],
+                    "search_return": encode_return_state(pending_reader_state),
+                }
+            )
         st.query_params.from_dict(safe_pending_reader_params)
         st.rerun()
 
@@ -275,7 +280,7 @@ summary_columns = st.columns([2, 1, 1, 1])
 summary_columns[0].markdown(f"### {document.title}")
 summary_columns[0].caption(f"原文件：{document.filename}")
 summary_columns[1].metric("总页数", document.page_count)
-summary_columns[2].metric("已处理", document.processed_page_count)
+summary_columns[2].metric("导入已处理页", document.processed_page_count)
 summary_columns[3].metric("待复核", document.review_page_count)
 st.caption(
     f"导入时间：{(document.imported_at or document.created_at).astimezone():%Y-%m-%d %H:%M}　|　"
@@ -763,6 +768,14 @@ with image_column:
 
 with editor_column:
     st.subheader("页面 Markdown 笔记")
+    if page.markdown_content.strip() and (
+        page.markdown_path is None or not page.markdown_path.exists()
+    ):
+        st.warning(
+            "页面笔记仍保存在数据库中，但对应 Markdown 文件缺失或未记录。"
+            "系统不会自动覆盖资料；请先在“系统维护”检查引用和备份。"
+            "确认内容无误后再次保存笔记，可显式重建本地 Markdown 文件。"
+        )
     editor_tab, preview_tab = st.tabs(["编辑", "预览"])
     with editor_tab:
         uploaded_markdown = st.file_uploader(

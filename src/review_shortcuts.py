@@ -46,7 +46,15 @@ def review_shortcuts_html() -> str:
                      event.key === "ArrowLeft") {
             label = "上一待处理页";
           }
-          if (label && clickButton(label)) {
+          if (label && isEditing &&
+              (label === "保存草稿" || label === "保存、复核并进入下一页")) {
+            // Streamlit synchronizes a focused text area during focus change. Let that
+            // browser event finish before invoking the same visible action as a click.
+            target.blur();
+            hostWindow.setTimeout(() => clickButton(label), 0);
+            event.preventDefault();
+            event.stopPropagation();
+          } else if (label && clickButton(label)) {
             event.preventDefault();
             event.stopPropagation();
           }

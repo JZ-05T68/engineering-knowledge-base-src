@@ -23,6 +23,7 @@ from typing import Final
 from src.backup_service import (
     BackupError,
     DatabaseSummary,
+    _is_link_like,
     list_backup_candidates,
     read_database_summary,
     validate_backup,
@@ -499,6 +500,9 @@ class DiagnosticService:
             value = Path(raw_value)
             if not value.is_absolute():
                 value = self.project_root / value
+            if _is_link_like(value):
+                missing.append(f"{label}/{value.name}（符号链接或重解析点）")
+                continue
             resolved = value.resolve(strict=False)
             try:
                 relative = resolved.relative_to(expected_root)
@@ -527,10 +531,13 @@ class DiagnosticService:
             ("pages", self.pages_dir),
             ("markdown", self.markdown_dir),
         ):
+            if _is_link_like(root):
+                links.append(f"符号链接或重解析点：{label}/")
+                continue
             for path, is_link in _walk_diagnostic_files(root):
                 relative = f"{label}/{path.relative_to(root).as_posix()}"
                 if is_link:
-                    links.append(f"符号链接：{relative}")
+                    links.append(f"符号链接或重解析点：{relative}")
                 elif path.name != ".gitkeep" and path.resolve(strict=False) not in referenced:
                     orphaned.append(relative)
         return tuple(sorted(orphaned)), tuple(sorted(links))
@@ -831,18 +838,18 @@ def _file_check(
 
 
 def _walk_diagnostic_files(root: Path) -> Iterable[tuple[Path, bool]]:
-    if not root.is_dir() or root.is_symlink():
+    if not root.is_dir() or _is_link_like(root):
         return
     for current, directories, filenames in os.walk(root, followlinks=False):
         current_path = Path(current)
         for directory in list(directories):
             candidate = current_path / directory
-            if candidate.is_symlink():
+            if _is_link_like(candidate):
                 directories.remove(directory)
                 yield candidate, True
         for filename in filenames:
             candidate = current_path / filename
-            yield candidate, candidate.is_symlink()
+            yield candidate, _is_link_like(candidate)
 
 
 def _normalized_recorded_path(value: str, project_root: Path) -> Path:

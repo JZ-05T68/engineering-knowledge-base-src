@@ -104,13 +104,16 @@ else:
                 except EvidenceBasketError as exc:
                     st.error(f"无法打开来源：{exc}")
                 else:
+                    source_params = {
+                        "document": str(source_item.document_id),
+                        "page": str(source_item.page_number),
+                        "from_search": "0",
+                    }
+                    # ``st.switch_page`` does not reliably carry query parameters
+                    # between pages. The reader revalidates this one-shot handoff.
+                    st.session_state["pending_reader_query_params"] = source_params
                     st.query_params.clear()
-                    st.query_params.update(
-                        {
-                            "document": str(source_item.document_id),
-                            "page": str(source_item.page_number),
-                        }
-                    )
+                    st.query_params.update(source_params)
                     st.switch_page("pages/2_浏览资料.py")
             if delete_column.button(
                 "删除",

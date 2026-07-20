@@ -224,6 +224,41 @@ def test_invalid_or_incomplete_backups_are_rejected(
     assert any(re.search(message, error) for error in validation.errors)
 
 
+def test_backup_root_windows_reparse_point_is_rejected_before_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service = _library(tmp_path / "source")
+    good = service.create_backup().backup_path
+    original_check = backup_module._is_windows_reparse_point
+
+    monkeypatch.setattr(
+        backup_module,
+        "_is_windows_reparse_point",
+        lambda path: path == good or original_check(path),
+    )
+
+    validation = validate_backup(good, expected_app_version="0.0.8")
+
+    assert not validation.valid
+    assert "重解析点" in validation.errors[0]
+
+
+def test_backup_service_rejects_link_like_configured_root_before_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backups_dir = tmp_path / "backups"
+    backups_dir.mkdir()
+    original_check = backup_module._is_windows_reparse_point
+    monkeypatch.setattr(
+        backup_module,
+        "_is_windows_reparse_point",
+        lambda path: path == backups_dir or original_check(path),
+    )
+
+    with pytest.raises(BackupError, match="备份目录.*重解析点"):
+        _service(tmp_path)
+
+
 def test_schema_and_application_version_incompatibility_are_rejected(
     tmp_path: Path,
 ) -> None:

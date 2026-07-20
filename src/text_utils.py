@@ -123,6 +123,15 @@ def extract_search_terms(
                 break
         if len(terms) >= max_terms:
             break
+    if any(_ONLY_CJK.fullmatch(term) and len(term) > 1 for term in terms):
+        # Multi-term OR queries should not be dominated by low-information
+        # segmentation fragments such as “的” or “不”. A deliberate one-character
+        # Chinese query remains supported because it has no longer CJK companion.
+        terms = [
+            term
+            for term in terms
+            if not (_ONLY_CJK.fullmatch(term) and len(term) == 1)
+        ]
     return tuple(terms)
 
 

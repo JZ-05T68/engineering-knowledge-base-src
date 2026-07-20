@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+import src.diagnostic_service as diagnostic_module
 from src.backup_service import BackupService
 from src.database import Database
 from src.diagnostic_service import (
@@ -170,6 +171,24 @@ def test_orphan_file_is_warning_and_is_never_deleted(tmp_path: Path) -> None:
     assert check.status is DiagnosticStatus.WARNING
     assert "pages/orphan.png" in check.details
     assert orphan.read_bytes() == b"orphan"
+
+
+def test_windows_reparse_point_root_is_reported_without_traversal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    diagnostic, _, paths = _environment(tmp_path)
+    original_check = diagnostic_module._is_link_like
+    monkeypatch.setattr(
+        diagnostic_module,
+        "_is_link_like",
+        lambda path: path == paths["pages"] or original_check(path),
+    )
+
+    snapshot = diagnostic.run()
+
+    check = _check(snapshot, "orphan_files")
+    assert check.status is DiagnosticStatus.ERROR
+    assert "符号链接或重解析点：pages/" in check.details
 
 
 def test_read_only_directory_and_low_disk_logic_are_separate_warnings(

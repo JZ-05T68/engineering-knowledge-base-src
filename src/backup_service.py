@@ -8,6 +8,7 @@ import logging
 import os
 import shutil
 import sqlite3
+import stat
 import time
 import uuid
 from collections.abc import Callable, Iterable, Mapping
@@ -146,6 +147,16 @@ class BackupService:
         minimum_text_length: int = 20,
         pdf_render_dpi: int = 150,
     ) -> None:
+        configured_paths = {
+            "data 目录": data_dir,
+            "原始 PDF 目录": raw_dir,
+            "页面 PNG 目录": pages_dir,
+            "Markdown 目录": markdown_dir,
+            "数据库文件": database_path,
+            "备份目录": backups_dir,
+        }
+        for label, configured_path in configured_paths.items():
+            _reject_link_like(configured_path.expanduser(), label)
         self.app_version = _normalized_version(app_version)
         self.data_dir = _resolved(data_dir)
         self.raw_dir = _resolved(raw_dir)
@@ -168,8 +179,9 @@ class BackupService:
         """Create and fully verify a directory backup before atomic finalization."""
 
         started = time.perf_counter()
-        root = _resolved(target_root or self.backups_dir)
-        _reject_symlink(root, "备份目标目录")
+        requested_root = target_root or self.backups_dir
+        _reject_link_like(requested_root, "备份目标目录")
+        root = _resolved(requested_root)
         if _is_within(root, self.data_dir) or _is_within(self.data_dir, root):
             raise BackupError("备份目标必须位于正式 data 目录之外。")
         root.mkdir(parents=True, exist_ok=True)
@@ -494,7 +506,7 @@ class BackupService:
             return
         for directory_name in ("raw", "pages", "markdown"):
             source = getattr(self, f"{directory_name}_dir") / ".gitkeep"
-            if source.is_file() and not source.is_symlink():
+            if source.is_file() and not _is_link_like(source):
                 target = stage_data / self._layout[directory_name] / ".gitkeep"
                 target.parent.mkdir(parents=True, exist_ok=True)
                 _copy_regular_file(source, target)
@@ -505,8 +517,8 @@ class BackupService:
             target = target_database_dir / name
             if not source.exists() or target.exists():
                 continue
-            if source.is_symlink():
-                raise BackupError(f"拒绝保留符号链接：{source}")
+            if _is_link_like(source):
+                raise BackupError(f"拒绝保留符号链接或重解析点：{source}")
             if source.is_dir():
                 _copy_regular_tree(source, target)
             else:
@@ -559,7 +571,7 @@ class BackupService:
                 continue
             suffix = _relative_suffix(str(record["path"]), str(key_paths[kind]))
             target = _safe_destination(target_roots[kind], suffix)
-            if not target.is_file() or target.is_symlink():
+            if not target.is_file() or _is_link_like(target):
                 raise BackupError(f"恢复后关键文件缺失：{kind}/{suffix}")
             if target.stat().st_size != int(record["size"]):
                 raise BackupError(f"恢复后文件大小不一致：{kind}/{suffix}")
@@ -570,8 +582,10 @@ class BackupService:
 def read_database_summary(database_path: Path) -> DatabaseSummary:
     """Inspect an existing SQLite database without creating or modifying it."""
 
-    path = _resolved(database_path)
-    if not path.is_file() or path.is_symlink():
+    requested_path = database_path.expanduser()
+    _reject_link_like(requested_path, "数据库文件")
+    path = _resolved(requested_path)
+    if not path.is_file() or _is_link_like(path):
         raise BackupError(f"数据库文件不存在或不是普通文件：{path}")
     try:
         uri = f"file:{path.as_posix()}?mode=ro"
@@ -614,13 +628,15 @@ def validate_backup(
     """Validate manifest types, inventory hashes, database, and source links."""
 
     started = time.perf_counter()
-    root = _resolved(backup_path)
+    requested_root = backup_path.expanduser()
+    root = requested_root.absolute()
     errors: list[str] = []
     warnings: list[str] = []
     manifest: Mapping[str, object] | None = None
     summary: DatabaseSummary | None = None
     try:
-        _reject_symlink(root, "备份目录")
+        _reject_link_like(requested_root, "备份目录")
+        root = _resolved(requested_root)
         if not root.is_dir():
             raise BackupError(f"备份目录不存在：{root}")
         manifest = _load_and_validate_manifest(root / MANIFEST_NAME)
@@ -702,14 +718,17 @@ def validate_backup(
 def list_backup_candidates(backups_dir: Path) -> list[Path]:
     """List finalized-looking backup directories newest first, without validating."""
 
-    root = _resolved(backups_dir)
-    if not root.is_dir() or root.is_symlink():
+    requested_root = backups_dir.expanduser()
+    if _is_link_like(requested_root):
+        return []
+    root = _resolved(requested_root)
+    if not root.is_dir() or _is_link_like(root):
         return []
     candidates = [
         path
         for path in root.iterdir()
         if path.is_dir()
-        and not path.is_symlink()
+        and not _is_link_like(path)
         and not path.name.startswith(".")
         and (path / MANIFEST_NAME).is_file()
     ]
@@ -719,7 +738,7 @@ def list_backup_candidates(backups_dir: Path) -> list[Path]:
 def sha256_file(path: Path) -> str:
     """Return a regular file's SHA-256 without following symbolic links."""
 
-    if path.is_symlink() or not path.is_file():
+    if _is_link_like(path) or not path.is_file():
         raise BackupError(f"拒绝读取非普通文件：{path}")
     digest = hashlib.sha256()
     with path.open("rb") as handle:
@@ -729,7 +748,7 @@ def sha256_file(path: Path) -> str:
 
 
 def _sqlite_snapshot(source_path: Path, destination_path: Path) -> None:
-    if source_path.is_symlink() or not source_path.is_file():
+    if _is_link_like(source_path) or not source_path.is_file():
         raise BackupError(f"正式数据库不存在或不是普通文件：{source_path}")
     try:
         uri = f"file:{source_path.as_posix()}?mode=ro"
@@ -778,7 +797,7 @@ def _require_manifest_statistics(
 
 
 def _load_and_validate_manifest(path: Path) -> Mapping[str, object]:
-    if path.is_symlink() or not path.is_file():
+    if _is_link_like(path) or not path.is_file():
         raise BackupError("备份缺少 manifest.json，或该文件不是普通文件。")
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -874,7 +893,7 @@ def _validate_directory_totals(
 
 
 def _load_backup_config(path: Path) -> Mapping[str, object]:
-    if path.is_symlink() or not path.is_file():
+    if _is_link_like(path) or not path.is_file():
         raise BackupError("备份缺少恢复配置 config/settings.json。")
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -1038,17 +1057,17 @@ def _walk_regular_files(
 ) -> Iterable[tuple[Path, Path]]:
     if not root.exists():
         return
-    if root.is_symlink() or not root.is_dir():
+    if _is_link_like(root) or not root.is_dir():
         raise BackupError(f"目录不存在或不是普通目录：{root}")
     for current, directories, filenames in os.walk(root, followlinks=False):
         current_path = Path(current)
         for directory in list(directories):
             candidate = current_path / directory
-            if candidate.is_symlink():
-                raise BackupError(f"拒绝跟随符号链接目录：{candidate}")
+            if _is_link_like(candidate):
+                raise BackupError(f"拒绝跟随符号链接或重解析点目录：{candidate}")
         for filename in sorted(filenames):
             path = current_path / filename
-            if path.is_symlink() or not path.is_file():
+            if _is_link_like(path) or not path.is_file():
                 raise BackupError(f"拒绝复制非普通文件：{path}")
             relative = path.relative_to(root)
             if not include_manifest and path.name == ".gitkeep":
@@ -1065,7 +1084,7 @@ def _copy_regular_tree(source: Path, target: Path) -> None:
 
 
 def _copy_regular_file(source: Path, target: Path) -> None:
-    if source.is_symlink() or not source.is_file():
+    if _is_link_like(source) or not source.is_file():
         raise BackupError(f"拒绝复制非普通文件：{source}")
     if target.exists():
         raise BackupError(f"目标文件已存在，不会覆盖：{target}")
@@ -1105,7 +1124,7 @@ def _safe_destination(root: Path, relative: str) -> Path:
 
 def _safe_existing_backup_file(root: Path, relative: str) -> Path:
     path = _safe_destination(root, relative)
-    if path.is_symlink() or not path.is_file():
+    if _is_link_like(path) or not path.is_file():
         raise BackupError(f"备份关键文件缺失或不是普通文件：{relative}")
     return path
 
@@ -1134,9 +1153,26 @@ def _is_within(path: Path, root: Path) -> bool:
     return True
 
 
-def _reject_symlink(path: Path, label: str) -> None:
-    if path.exists() and path.is_symlink():
-        raise BackupError(f"{label}不能是符号链接：{path}")
+def _is_windows_reparse_point(path: Path) -> bool:
+    """Return whether ``path`` is a Windows reparse point such as a junction."""
+
+    try:
+        attributes = int(getattr(path.lstat(), "st_file_attributes", 0))
+    except OSError:
+        return False
+    reparse_flag = int(getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+    return bool(attributes & reparse_flag)
+
+
+def _is_link_like(path: Path) -> bool:
+    """Reject symlinks and Windows junctions before resolving their targets."""
+
+    return path.is_symlink() or _is_windows_reparse_point(path)
+
+
+def _reject_link_like(path: Path, label: str) -> None:
+    if _is_link_like(path):
+        raise BackupError(f"{label}不能是符号链接或 Windows 重解析点：{path}")
 
 
 def _remove_tree_within(path: Path, allowed_parent: Path) -> None:
@@ -1144,8 +1180,8 @@ def _remove_tree_within(path: Path, allowed_parent: Path) -> None:
     parent = _resolved(allowed_parent)
     if resolved == parent or not _is_within(resolved, parent):
         raise BackupError(f"拒绝清理超出临时范围的目录：{resolved}")
-    if resolved.is_symlink():
-        raise BackupError(f"拒绝清理符号链接目录：{resolved}")
+    if _is_link_like(resolved):
+        raise BackupError(f"拒绝清理符号链接或重解析点目录：{resolved}")
     shutil.rmtree(resolved)
 
 

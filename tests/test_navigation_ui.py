@@ -67,3 +67,25 @@ def test_home_and_browser_show_review_continuation_entry(tmp_path: Path, monkeyp
     assert not browser.exception
     assert any(button.label == "继续处理下一待复核页" for button in home.button)
     assert any(button.label == "继续处理下一待复核页" for button in browser.button)
+
+
+def test_browser_warns_when_database_note_has_no_markdown_file(
+    tmp_path: Path, monkeypatch
+) -> None:
+    database, _ = _local_runtime(tmp_path, monkeypatch)
+    page = database.list_pages(1)[0]
+    database.update_page_markdown(
+        page.id,
+        "# 数据库仍有笔记",
+        tmp_path / "markdown" / "1" / "page_0001.md",
+    )
+
+    browser_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    browser = AppTest.from_file(str(browser_path)).run(timeout=10)
+
+    assert not browser.exception
+    assert any(
+        "对应 Markdown 文件缺失或未记录" in warning.value
+        for warning in browser.warning
+    )
+    assert any(metric.label == "导入已处理页" for metric in browser.metric)

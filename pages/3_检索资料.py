@@ -6,6 +6,7 @@ import logging
 from dataclasses import replace
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from src.evidence_basket_service import (
     DuplicateEvidenceError,
@@ -22,6 +23,7 @@ from src.models import (
 )
 from src.prompt_builder import PromptBuilder
 from src.runtime import application_database, application_evidence_basket_service
+from src.search_history import search_history_reload_html
 from src.search_navigation import (
     SearchNavigationError,
     group_search_results,
@@ -55,6 +57,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+components.html(search_history_reload_html(), height=0, width=0)
 
 pending_search_params = st.session_state.pop("pending_search_query_params", None)
 if isinstance(pending_search_params, dict):

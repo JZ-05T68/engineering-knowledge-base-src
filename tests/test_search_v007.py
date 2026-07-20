@@ -23,6 +23,7 @@ from src.models import (
     SearchSort,
     SearchViewMode,
 )
+from src.search_history import search_history_reload_html
 from src.search_navigation import (
     document_hit_results,
     group_search_results,
@@ -364,6 +365,14 @@ def test_search_ui_switches_group_view_restores_and_expands(ui_library) -> None:
     assert not restored.exception
     assert restored.radio(key="search_view_mode").value == SearchViewMode.DOCUMENT.value
     assert restored.button(key=f"toggle_group_{ids['first'].id}").label == "收起命中页"
+
+
+def test_search_history_listener_reloads_on_browser_back_and_forward() -> None:
+    html = search_history_reload_html()
+
+    assert 'addEventListener("popstate", handler)' in html
+    assert "hostWindow.location.reload()" in html
+    assert "__ekbSearchPopstateHandler" in html
 
 
 def test_real_page_switch_pending_params_are_revalidated_on_target(ui_library) -> None:

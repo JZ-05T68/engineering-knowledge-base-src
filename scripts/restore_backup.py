@@ -12,7 +12,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts import service_manager  # noqa: E402
-from src.backup_service import BackupError, BackupService, validate_backup  # noqa: E402
+from src.backup_service import (  # noqa: E402
+    BackupError,
+    BackupService,
+    _is_link_like,
+    validate_backup,
+)
 from src.config import Settings, get_settings  # noqa: E402
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
@@ -86,7 +91,10 @@ def _formal_service_is_running() -> bool:
 
 
 def _validate_isolated_target(target: Path, formal_data_dir: Path) -> Path:
-    resolved = target.resolve(strict=False)
+    requested = target.expanduser()
+    if _is_link_like(requested):
+        raise BackupError(f"隔离恢复目标不能是符号链接或 Windows 重解析点：{requested}")
+    resolved = requested.resolve(strict=False)
     forbidden = {
         Path(resolved.anchor).resolve(strict=False),
         Path.home().resolve(strict=False),
@@ -95,8 +103,6 @@ def _validate_isolated_target(target: Path, formal_data_dir: Path) -> Path:
     }
     if resolved in forbidden:
         raise BackupError(f"隔离恢复目标过于宽泛或与正式目录重合：{resolved}")
-    if resolved.exists() and resolved.is_symlink():
-        raise BackupError(f"隔离恢复目标不能是符号链接：{resolved}")
     return resolved
 
 
@@ -105,7 +111,9 @@ def main(argv: list[str] | None = None) -> int:
 
     arguments = build_parser().parse_args(argv)
     settings = get_settings()
-    backup_path = arguments.backup.resolve(strict=False)
+    # Validate the caller-provided path before resolution so Windows junctions
+    # cannot hide their reparse-point identity.
+    backup_path = arguments.backup.expanduser()
     validation = validate_backup(
         backup_path,
         expected_app_version=settings.app_version,

@@ -88,9 +88,15 @@ def test_basket_page_reorders_updates_notes_exports_and_returns_to_source(
     assert "证据条数：2" in export_app.session_state["basket_markdown_package"]
 
     source_app = AppTest.from_file(str(page_path)).run(timeout=10)
+    expected_source = service.list_items()[0]
     _button(source_app, "返回原始页").click().run()
     assert switched[-1] == "pages/2_浏览资料.py"
     assert source_app.query_params["document"] == [str(document_id)]
+    assert source_app.session_state["pending_reader_query_params"] == {
+        "document": str(document_id),
+        "page": str(expected_source.page_number),
+        "from_search": "0",
+    }
 
 
 def test_basket_page_delete_and_confirmed_clear(tmp_path: Path, monkeypatch) -> None:

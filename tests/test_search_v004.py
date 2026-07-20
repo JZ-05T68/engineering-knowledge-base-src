@@ -259,3 +259,12 @@ def test_extract_search_terms_retains_chinese_continuous_text_and_deduplicates()
     assert terms[0] == "液压系统故障"
     assert terms.count("pump") == 1
     assert len(terms) == len(set(terms))
+
+
+def test_extract_search_terms_drops_noise_single_cjk_only_in_multi_term_query() -> None:
+    terms = extract_search_terms("完全不存在的液压泵噪声")
+
+    assert "的" not in terms
+    assert "不" not in terms
+    assert "液压泵" in terms
+    assert extract_search_terms("泵") == ("泵",)

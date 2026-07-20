@@ -91,6 +91,8 @@ def test_shortcut_script_is_guarded_and_keeps_visible_buttons_authoritative() ->
     assert "保存、复核并进入下一页" in html
     assert "下一待处理页" in html and "上一待处理页" in html
     assert "isEditing" in html
+    assert "target.blur()" in html
+    assert "setTimeout(() => clickButton(label), 0)" in html
     assert "event.repeat" in html
     assert "if (label && clickButton(label))" in html
 
@@ -109,6 +111,25 @@ def test_review_ui_warns_before_navigation_with_unsaved_changes(
     first_page = database.get_page_by_number(document_id, 1)
     assert first_page is not None
     assert first_page.markdown_content == ""
+    assert not app.exception
+
+
+def test_review_ui_clears_stale_navigation_warning_after_successful_save(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, document_id = _build_review_app(tmp_path, monkeypatch)
+
+    app.text_area(key="review_markdown_1").input("保存后不应继续警告").run()
+    _button(app, "下一待处理页").click().run()
+    assert "review_pending_target_id" in app.session_state
+
+    _button(app, "保存草稿并留在当前页").click().run()
+
+    first_page = database.get_page_by_number(document_id, 1)
+    assert first_page is not None
+    assert first_page.markdown_content == "保存后不应继续警告"
+    assert app.session_state["review_pending_target_id"] is None
+    assert not any("放弃修改并切换" in warning.value for warning in app.warning)
     assert not app.exception
 
 
