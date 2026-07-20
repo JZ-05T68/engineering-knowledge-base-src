@@ -38,6 +38,50 @@ _LOG_PATTERN: Final[re.Pattern[str]] = re.compile(
 )
 
 
+def describe_operating_system() -> str:
+    """Return a stable OS label, correcting Windows 11's legacy release value.
+
+    Windows 11 still reports major release ``10`` through Python on many
+    systems.  The Windows build threshold is deterministic, while the raw
+    release and version remain in the diagnostic string for troubleshooting.
+    Other operating systems retain the previous ``system release (machine)``
+    representation.
+    """
+
+    system = platform.system()
+    release = platform.release()
+    machine = platform.machine()
+    if system.casefold() != "windows":
+        return f"{system} {release} ({machine})"
+
+    version = platform.version()
+    build = _windows_build(version)
+    if build is not None and build >= 22000:
+        friendly_name = "Windows 11"
+    elif build is not None and build >= 10240:
+        friendly_name = "Windows 10"
+    else:
+        friendly_name = f"Windows {release}".strip()
+    return (
+        f"{friendly_name} (release={release or 'unknown'}; "
+        f"version={version or 'unknown'}; "
+        f"build={build if build is not None else 'unknown'}; "
+        f"{machine or 'unknown'})"
+    )
+
+
+def _windows_build(version: str) -> int | None:
+    """Extract the Windows build component without raising on unusual input."""
+
+    numeric_parts = re.findall(r"\d+", version or "")
+    if len(numeric_parts) < 3:
+        return None
+    try:
+        return int(numeric_parts[2])
+    except ValueError:
+        return None
+
+
 class DiagnosticStatus(StrEnum):
     """Severity used by every independent diagnostic check."""
 
@@ -414,7 +458,7 @@ class DiagnosticService:
             app_version=self.app_version,
             schema_version=summary.schema_version if summary else 0,
             python_version=platform.python_version(),
-            operating_system=f"{platform.system()} {platform.release()} ({platform.machine()})",
+            operating_system=describe_operating_system(),
             database_path=self.database_path,
             data_dir=self.data_dir,
             logs_dir=self.logs_dir,

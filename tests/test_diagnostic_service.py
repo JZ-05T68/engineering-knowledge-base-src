@@ -15,6 +15,7 @@ from src.database import Database
 from src.diagnostic_service import (
     DiagnosticService,
     DiagnosticStatus,
+    describe_operating_system,
     generate_diagnostic_report,
     redact_path,
 )
@@ -102,6 +103,61 @@ def _diagnostic(
 
 def _check(snapshot, key: str):
     return next(check for check in snapshot.checks if check.key == key)
+
+
+@pytest.mark.parametrize(
+    ("version", "expected_name", "expected_build"),
+    (
+        ("10.0.19045", "Windows 10", "build=19045"),
+        ("10.0.22000", "Windows 11", "build=22000"),
+        ("10.0.26200.8894", "Windows 11", "build=26200"),
+    ),
+)
+def test_windows_product_name_uses_build_threshold_and_keeps_raw_details(
+    monkeypatch: pytest.MonkeyPatch,
+    version: str,
+    expected_name: str,
+    expected_build: str,
+) -> None:
+    monkeypatch.setattr(diagnostic_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(diagnostic_module.platform, "release", lambda: "10")
+    monkeypatch.setattr(diagnostic_module.platform, "version", lambda: version)
+    monkeypatch.setattr(diagnostic_module.platform, "machine", lambda: "AMD64")
+
+    description = describe_operating_system()
+
+    assert description.startswith(expected_name)
+    assert "release=10" in description
+    assert f"version={version}" in description
+    assert expected_build in description
+    assert "AMD64" in description
+
+
+def test_windows_product_name_falls_back_safely_when_build_is_unparseable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(diagnostic_module.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(diagnostic_module.platform, "release", lambda: "unknown-release")
+    monkeypatch.setattr(diagnostic_module.platform, "version", lambda: "not-a-build")
+    monkeypatch.setattr(diagnostic_module.platform, "machine", lambda: "AMD64")
+
+    description = describe_operating_system()
+
+    assert description.startswith("Windows unknown-release")
+    assert "release=unknown-release" in description
+    assert "version=not-a-build" in description
+    assert "build=unknown" in description
+
+
+def test_non_windows_operating_system_description_keeps_original_shape(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(diagnostic_module.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(diagnostic_module.platform, "release", lambda: "6.8.0")
+    monkeypatch.setattr(diagnostic_module.platform, "version", lambda: "ignored")
+    monkeypatch.setattr(diagnostic_module.platform, "machine", lambda: "x86_64")
+
+    assert describe_operating_system() == "Linux 6.8.0 (x86_64)"
 
 
 def test_normal_diagnostics_with_verified_backup_are_all_normal(tmp_path: Path) -> None:
