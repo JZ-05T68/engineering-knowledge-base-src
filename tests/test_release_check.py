@@ -73,20 +73,20 @@ def test_version_mismatch_fails_readme_changelog_and_page_consistency(
 ) -> None:
     (tmp_path / "pages").mkdir()
     (tmp_path / "README.md").write_text(
-        "# Engineering Knowledge Base v0.1.0\n", encoding="utf-8"
+        "# Engineering Knowledge Base v0.1.1\n", encoding="utf-8"
     )
-    (tmp_path / "CHANGELOG.md").write_text("## v0.1.0\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("## v0.1.1\n", encoding="utf-8")
     (tmp_path / "app.py").write_text(
-        'st.set_page_config(page_title="工程知识库 v0.1.0")', encoding="utf-8"
+        'st.set_page_config(page_title="工程知识库 v0.1.1")', encoding="utf-8"
     )
     (tmp_path / "pages" / "1_test.py").write_text(
-        'st.set_page_config(page_title="测试 v0.1.0 stale v0.0.8")', encoding="utf-8"
+        'st.set_page_config(page_title="测试 v0.1.1 stale v0.0.8")', encoding="utf-8"
     )
 
     result = version_consistency_check(
         tmp_path,
-        app_version="0.1.0",
-        app_title="工程知识库 v0.1.0",
+        app_version="0.1.1",
+        app_title="工程知识库 v0.1.1",
     )
 
     assert result.status is CheckStatus.FAIL

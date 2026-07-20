@@ -104,7 +104,7 @@ def empty_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         ("pages/5_标签管理.py", "创建第一个标签"),
         ("pages/6_项目管理.py", "创建第一个本地项目"),
         ("pages/9_证据篮.py", "证据篮为空"),
-        ("pages/10_系统维护.py", "还没有 v0.1.0 完整备份"),
+        ("pages/10_系统维护.py", "还没有 v0.1.1 完整备份"),
     ],
 )
 def test_major_pages_have_actionable_empty_states(

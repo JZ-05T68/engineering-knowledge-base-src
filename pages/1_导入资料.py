@@ -12,7 +12,7 @@ from src.runtime import application_document_service
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="导入资料｜工程知识库 v0.1.0", page_icon="📥", layout="wide")
+st.set_page_config(page_title="导入资料｜工程知识库 v0.1.1", page_icon="📥", layout="wide")
 st.title("导入资料")
 st.caption("PDF 原件、逐页 PNG、文本和导入记录都保存在本机。")
 
@@ -84,6 +84,6 @@ st.markdown(
 - `待处理`：新导入或尚未人工确认，需要继续整理。
 - `草稿待复核`：已有 Markdown，但尚未人工确认完成。
 - `处理失败`：单页处理出错；已完成的其他页面不会丢失。
-- v0.1.0 不接入云端 OCR；原始页面图片始终保留。
+- v0.1.1 不接入云端 OCR；原始页面图片始终保留。
 """
 )
