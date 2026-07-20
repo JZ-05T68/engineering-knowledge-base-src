@@ -640,14 +640,14 @@ def validate_backup(
         if not root.is_dir():
             raise BackupError(f"备份目录不存在：{root}")
         manifest = _load_and_validate_manifest(root / MANIFEST_NAME)
-        if expected_app_version is not None and str(manifest["application_version"]) != (
-            _normalized_version(expected_app_version)
-        ):
-            raise BackupError(
-                "备份应用版本不兼容："
-                f"{manifest['application_version']}，当前仅支持 "
-                f"{_normalized_version(expected_app_version)}"
-            )
+        if expected_app_version is not None:
+            backup_version = str(manifest["application_version"])
+            current_version = _normalized_version(expected_app_version)
+            if not _is_compatible_patch_backup(backup_version, current_version):
+                raise BackupError(
+                    "备份应用版本不兼容："
+                    f"{backup_version}，当前支持 {current_version} 及同系列更早补丁版本"
+                )
         if int(manifest["schema_version"]) != expected_schema_version:
             raise BackupError(
                 f"备份 schema v{manifest['schema_version']} 不兼容，"
@@ -1224,6 +1224,14 @@ def _normalized_version(value: str) -> str:
     if len(parts) != 3 or any(not part.isdigit() for part in parts):
         raise BackupError(f"应用版本格式错误：{value!r}")
     return version
+
+
+def _is_compatible_patch_backup(backup_version: str, current_version: str) -> bool:
+    """Accept current or older patches in one major/minor line, never future patches."""
+
+    backup = tuple(int(part) for part in _normalized_version(backup_version).split("."))
+    current = tuple(int(part) for part in _normalized_version(current_version).split("."))
+    return backup[:2] == current[:2] and backup[2] <= current[2]
 
 
 def _parse_timestamp(value: str) -> datetime:

@@ -31,8 +31,10 @@ def _service(root: Path, *, version: str = "0.0.8") -> BackupService:
     )
 
 
-def _library(root: Path, *, marker: bytes = b"source library") -> BackupService:
-    service = _service(root)
+def _library(
+    root: Path, *, marker: bytes = b"source library", version: str = "0.0.8"
+) -> BackupService:
+    service = _service(root, version=version)
     for directory in (
         service.raw_dir,
         service.pages_dir,
@@ -279,6 +281,32 @@ def test_schema_and_application_version_incompatibility_are_rejected(
     assert "不兼容" in schema_validation.errors[0]
     assert not version_validation.valid
     assert "应用版本不兼容" in version_validation.errors[0]
+
+
+def test_patch_upgrade_accepts_older_same_minor_backup_but_rejects_future_patch(
+    tmp_path: Path,
+) -> None:
+    v010_backup = _library(tmp_path / "v010", version="0.1.0").create_backup().backup_path
+    v012_backup = _library(tmp_path / "v012", version="0.1.2").create_backup().backup_path
+
+    compatible = validate_backup(v010_backup, expected_app_version="0.1.1")
+    future = validate_backup(v012_backup, expected_app_version="0.1.1")
+
+    assert compatible.valid
+    assert not future.valid
+    assert "应用版本不兼容" in future.errors[0]
+
+
+def test_patch_upgrade_can_restore_older_same_minor_backup(tmp_path: Path) -> None:
+    source = _library(tmp_path / "source", marker=b"v0.1.0", version="0.1.0")
+    backup = source.create_backup().backup_path
+    target = _library(tmp_path / "target", marker=b"v0.1.1", version="0.1.1")
+
+    result = target.restore_backup(backup, service_is_running=lambda: False)
+
+    assert result.database_summary.schema_version == 4
+    assert (target.raw_dir / "manual.pdf").read_bytes() == b"v0.1.0"
+    assert result.pre_restore_backup is not None
 
 
 def test_restore_rebases_paths_preserves_all_counts_and_creates_prebackup(
