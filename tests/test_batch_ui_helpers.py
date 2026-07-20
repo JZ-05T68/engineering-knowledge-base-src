@@ -185,6 +185,7 @@ def test_result_feedback_never_describes_atomic_failure_as_partial_success() -> 
     )
 
     assert "本次操作已取消且未修改任何页面" in result_feedback(stale).message
+    assert "批量计划依赖的数据已发生变化" in result_feedback(stale).message
     assert "所有修改均已回滚" in result_feedback(failed).message
     assert "成功" not in result_feedback(stale).message
     assert "成功" not in result_feedback(failed).message

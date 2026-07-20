@@ -761,4 +761,4 @@ def _placeholders(count: int) -> str:
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="microseconds")

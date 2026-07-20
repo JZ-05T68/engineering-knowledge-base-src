@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import sqlite3
 from collections.abc import Callable, Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+import src.database as database_module
 from src.batch_service import (
     BatchFailureCode,
     BatchOperationType,
@@ -222,6 +224,48 @@ def test_status_execute_rejects_stale_snapshot_atomically(tmp_path: Path) -> Non
     assert all(_raw_page(database, page_id)["review_status"] == "pending" for page_id in page_ids)
 
 
+@pytest.mark.parametrize(
+    "existing_timestamp",
+    [
+        "2026-07-21T08:30:00+00:00",
+        "2026-07-21T08:30:00.654321+00:00",
+    ],
+)
+def test_status_execute_rejects_page_saved_at_a_colliding_timestamp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    existing_timestamp: str,
+) -> None:
+    database, service, _, page_ids = _library(tmp_path, (PageStatus.REVIEWED,))
+    with sqlite3.connect(database.database_path) as connection:
+        connection.execute(
+            "UPDATE pages SET updated_at = ? WHERE id = ?",
+            (existing_timestamp, page_ids[0]),
+        )
+    plan = service.plan_status(page_ids, PageStatus.PENDING)
+
+    class SameSecondClock:
+        fromisoformat = staticmethod(datetime.fromisoformat)
+
+        @classmethod
+        def now(cls, timezone):
+            assert timezone is UTC
+            return datetime(2026, 7, 21, 8, 30, 0, 654321, tzinfo=UTC)
+
+    monkeypatch.setattr(database_module, "datetime", SameSecondClock)
+    saved = database.update_page(page_ids[0], markdown_content="预检后保存的页面笔记")
+    result = service.execute(plan)
+
+    assert saved.updated_at.isoformat() != existing_timestamp
+    assert not result.committed
+    assert result.failure_code is BatchFailureCode.STALE_CONFLICT
+    assert result.stale_page_ids == (page_ids[0],)
+    page = database.get_page(page_ids[0])
+    assert page is not None
+    assert page.status is PageStatus.REVIEWED
+    assert page.markdown_content == "预检后保存的页面笔记"
+
+
 def test_status_sql_failure_rolls_back_all_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -433,7 +477,7 @@ def test_relation_sql_failure_rolls_back_all_changes(
     assert _relation_pairs(database, table) == set()
 
 
-def test_relation_execute_rejects_stale_page_and_direct_relation(tmp_path: Path) -> None:
+def test_relation_execute_rejects_stale_page(tmp_path: Path) -> None:
     database, service, _, page_ids = _library(
         tmp_path, (PageStatus.PENDING, PageStatus.PENDING)
     )
@@ -446,15 +490,66 @@ def test_relation_execute_rejects_stale_page_and_direct_relation(tmp_path: Path)
         )
 
     stale_page = service.execute(stale_page_plan)
-    relation_plan = service.plan_add_tags(page_ids, [tag.id])
-    database.set_page_tags(page_ids[1], [tag.id])
-    stale_relation = service.execute(relation_plan)
 
     assert stale_page.failure_code is BatchFailureCode.STALE_CONFLICT
     assert stale_page.stale_page_ids == (page_ids[0],)
-    assert stale_relation.failure_code is BatchFailureCode.STALE_CONFLICT
-    assert stale_relation.stale_page_ids == (page_ids[1],)
-    assert _relation_pairs(database, "page_tags") == {(page_ids[1], tag.id)}
+    assert _relation_pairs(database, "page_tags") == set()
+
+
+@pytest.mark.parametrize("kind", ["tag", "project"])
+@pytest.mark.parametrize("initially_related", [False, True])
+def test_relation_execute_rejects_direct_relation_added_or_removed_after_preflight(
+    tmp_path: Path, kind: str, initially_related: bool
+) -> None:
+    database, service, _, page_ids = _library(tmp_path, (PageStatus.PENDING,))
+    if kind == "tag":
+        target = database.create_tag("并发标签")
+        set_relations = database.set_page_tags
+        plan_operation = service.plan_remove_tags if initially_related else service.plan_add_tags
+        table = "page_tags"
+    else:
+        target = database.create_project("并发项目")
+        set_relations = database.set_page_projects
+        plan_operation = (
+            service.plan_remove_projects
+            if initially_related
+            else service.plan_add_projects
+        )
+        table = "project_pages"
+    set_relations(page_ids[0], [target.id] if initially_related else [])
+    plan = plan_operation(page_ids, [target.id])
+
+    set_relations(page_ids[0], [] if initially_related else [target.id])
+    result = service.execute(plan)
+
+    assert not result.committed
+    assert result.failure_code is BatchFailureCode.STALE_CONFLICT
+    assert result.stale_page_ids == (page_ids[0],)
+    expected = set() if initially_related else {(page_ids[0], target.id)}
+    assert _relation_pairs(database, table) == expected
+
+
+@pytest.mark.parametrize("kind", ["tag", "project"])
+def test_relation_execute_rejects_target_deleted_after_preflight(
+    tmp_path: Path, kind: str
+) -> None:
+    database, service, _, page_ids = _library(tmp_path, (PageStatus.PENDING,))
+    if kind == "tag":
+        target = database.create_tag("待删除标签")
+        plan = service.plan_add_tags(page_ids, [target.id])
+        database.delete_tag(target.id)
+        table = "page_tags"
+    else:
+        target = database.create_project("待删除项目")
+        plan = service.plan_add_projects(page_ids, [target.id])
+        database.delete_project(target.id)
+        table = "project_pages"
+
+    result = service.execute(plan)
+
+    assert not result.committed
+    assert result.failure_code is BatchFailureCode.STALE_CONFLICT
+    assert _relation_pairs(database, table) == set()
 
 
 @pytest.mark.parametrize("kind", ["tag", "project"])

@@ -8,7 +8,7 @@ import sqlite3
 import unicodedata
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -671,8 +671,14 @@ class Database:
             if page is None:
                 raise RecordNotFoundError(f"页面不存在：{page_id}")
             return page
-        assignments.append("updated_at = ?")
-        values.extend((_utc_now(), page_id))
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        assignments.append(
+            "updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END"
+        )
+        values.extend((timestamp, alternate_timestamp, timestamp, page_id))
         with self._connection() as connection:
             cursor = connection.execute(
                 f"UPDATE pages SET {', '.join(assignments)} WHERE id = ?", values
@@ -1432,7 +1438,7 @@ class Database:
 
 
 def _utc_now() -> str:
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 def _parse_datetime(value: str | None) -> datetime | None:

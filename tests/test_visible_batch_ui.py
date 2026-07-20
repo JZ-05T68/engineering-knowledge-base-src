@@ -48,6 +48,12 @@ class CountingPageBatchService(PageBatchService):
         return super().execute(plan)
 
 
+class RaisingPageBatchService(CountingPageBatchService):
+    def execute(self, plan):
+        self.execute_calls += 1
+        raise RuntimeError("simulated unexpected UI-layer execution failure")
+
+
 def _database_with_pages(
     tmp_path: Path,
     *,
@@ -163,6 +169,30 @@ def test_search_selection_is_limited_to_current_page_and_cleared_on_pagination(
     assert batch_service.plan_calls == 0 and batch_service.execute_calls == 0
 
 
+def test_search_equivalent_filter_order_preserves_visible_selection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, _, page_ids, _ = _search_app(tmp_path, monkeypatch, page_count=3)
+    app.query_params = {
+        "q": "批量关键词",
+        "limit": "50",
+        "statuses": "pending,draft",
+    }
+    app.run(timeout=15)
+    _button(app, "选择当前可见 3 项").click().run(timeout=15)
+
+    app.query_params = {
+        "q": "批量关键词",
+        "limit": "50",
+        "statuses": "draft,pending",
+    }
+    app.run(timeout=15)
+
+    state = app.session_state["visible_page_batch_state"]
+    assert state.selected_page_ids == tuple(page_ids)
+    assert not any("原批量选择已清除" in info.value for info in app.info)
+
+
 def test_search_document_view_clears_hidden_page_selection(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -237,15 +267,17 @@ def test_review_protected_plan_has_no_execute_and_empty_entities_are_disabled(
 def test_review_dirty_selected_page_blocks_preflight_and_batch_change_clears_selection(
     tmp_path: Path, monkeypatch
 ) -> None:
-    app, database, document_id, _, _ = _review_app(tmp_path, monkeypatch)
+    app, database, document_id, _, batch_service = _review_app(tmp_path, monkeypatch)
     _button(app, "选择当前可见 20 项").click().run(timeout=15)
 
-    app.text_area(key="review_markdown_1").input("尚未保存的批量保护内容").run(
-        timeout=15
-    )
+    app.text_area(key="review_markdown_1").input("尚未保存的批量保护内容")
+    _button(app, "预检批量操作").click().run(timeout=15)
 
     assert _button(app, "预检批量操作").disabled
     assert any("存在未保存编辑" in warning.value for warning in app.warning)
+    assert batch_service.plan_calls == 0
+    assert app.session_state["visible_page_batch_state"].pending_action is None
+    assert not any("批量计划" in element.value for element in app.markdown)
     app.selectbox(key="review_visible_batch_number").select(2).run(timeout=15)
     assert app.session_state["visible_page_batch_state"].selected_page_ids == ()
     assert app.session_state["review_markdown_1"] == "尚未保存的批量保护内容"
@@ -485,3 +517,71 @@ def test_stale_plan_preserves_visible_selection_and_is_never_retried(
     assert any("本次操作已取消" in warning.value for warning in app.warning)
     # The execute click already includes the page's requested rerun.
     assert batch_service.execute_calls == 1
+
+
+def test_search_stale_relation_refreshes_results_and_clears_hidden_selection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, page_ids, batch_service = _search_app(
+        tmp_path, monkeypatch, page_count=3
+    )
+    tag = database.list_tags()[0]
+    database.set_page_tags(page_ids[0], [tag.id])
+    app.query_params = {
+        "q": "批量关键词",
+        "limit": "50",
+        "tags": str(tag.id),
+    }
+    app.run(timeout=15)
+    _page_checkbox(app, 1).check().run(timeout=15)
+    app.selectbox(key="visible_batch_operation_search").select(
+        "remove_page_tags"
+    ).run(timeout=15)
+    app.multiselect(key="visible_batch_tags_search").select(tag.id).run(timeout=15)
+    _button(app, "预检批量操作").click().run(timeout=15)
+    database.set_page_tags(page_ids[0], [])
+
+    _confirm_checkbox(app).check().run(timeout=15)
+    _button(app, "执行批量操作").click().run(timeout=15)
+
+    state = app.session_state["visible_page_batch_state"]
+    assert batch_service.execute_calls == 1
+    assert state.selected_page_ids == ()
+    assert state.pending_action is None
+    assert app.session_state["knowledge_results"] == []
+    assert any("本次操作已取消" in warning.value for warning in app.warning)
+    assert not any(
+        "当前可见页面批量操作" in element.value for element in app.markdown
+    )
+
+
+def test_execute_exception_consumes_token_and_requires_new_preflight(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, page_ids, _ = _search_app(tmp_path, monkeypatch, page_count=3)
+    raising_service = RaisingPageBatchService(database)
+    monkeypatch.setattr(
+        runtime, "application_page_batch_service", lambda: raising_service
+    )
+    app.run(timeout=15)
+    _page_checkbox(app, 1).check().run(timeout=15)
+    _button(app, "预检批量操作").click().run(timeout=15)
+    _confirm_checkbox(app).check().run(timeout=15)
+    old_token = app.session_state["visible_page_batch_state"].confirmed_token
+
+    _button(app, "执行批量操作").click().run(timeout=15)
+
+    state = app.session_state["visible_page_batch_state"]
+    assert old_token is not None and old_token in state.consumed_tokens
+    assert state.selected_page_ids == (page_ids[0],)
+    assert state.pending_action is None
+    assert state.confirmed_token is None
+    assert raising_service.execute_calls == 1
+    page = database.get_page(page_ids[0])
+    assert page is not None and page.status is PageStatus.PENDING
+    assert any("确认凭证已失效" in error.value for error in app.error)
+    assert not app.exception
+
+    app.run(timeout=15)
+    assert raising_service.execute_calls == 1
+    assert not any(button.label == "执行批量操作" for button in app.button)

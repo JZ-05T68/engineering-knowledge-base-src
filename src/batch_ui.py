@@ -136,7 +136,8 @@ def result_feedback(result: BatchOperationResult) -> BatchFeedback:
         if result.failure_code is BatchFailureCode.STALE_CONFLICT:
             return BatchFeedback(
                 "warning",
-                "页面状态已发生变化，本次操作已取消且未修改任何页面，请重新预检。",
+                "批量计划依赖的数据已发生变化，本次操作已取消且未修改任何页面，"
+                "请重新预检。",
             )
         return BatchFeedback(
             "error",
@@ -196,7 +197,7 @@ def render_visible_page_batch_ui(
     tags: Sequence[Tag],
     projects: Sequence[Project],
     dirty_page_ids: Sequence[int] = (),
-    on_committed: Callable[[], None] | None = None,
+    on_finished: Callable[[], None] | None = None,
 ) -> bool:
     """Render one visible-only selection and explicit preflight/confirm/execute flow."""
 
@@ -240,9 +241,10 @@ def render_visible_page_batch_ui(
         with st.expander("勾选当前可见页面", expanded=bool(state.selected_page_ids)):
             for page_id in scope.visible_page_ids:
                 checkbox_key = _checkbox_key(scope, state, page_id)
+                if checkbox_key not in st.session_state:
+                    st.session_state[checkbox_key] = page_id in state.selected_page_ids
                 st.checkbox(
                     page_labels.get(page_id, f"页面 {page_id}"),
-                    value=page_id in state.selected_page_ids,
                     key=checkbox_key,
                     on_change=_on_page_checkbox_change,
                     args=(scope, page_id, checkbox_key),
@@ -304,13 +306,15 @@ def render_visible_page_batch_ui(
                 "当前选中的页面存在未保存编辑，请先保存或从批量选择中移除该页面。"
             )
         target_missing = operation is not BatchOperationType.SET_PAGE_STATUS and not target_ids
-        if st.button(
+        preflight_blocked = not state.selected_page_ids or target_missing or dirty_selected
+        preflight_requested = st.button(
             "预检批量操作",
             key=f"visible_batch_preflight_{scope.source.value}",
             type="primary",
-            disabled=(not state.selected_page_ids or target_missing or dirty_selected),
+            disabled=preflight_blocked,
             use_container_width=True,
-        ):
+        )
+        if preflight_requested and not preflight_blocked:
             try:
                 plan = create_batch_plan(
                     service,
@@ -366,20 +370,36 @@ def render_visible_page_batch_ui(
                 st.warning("该批量操作已执行或确认已失效，请重新预检。")
                 return False
             _store_state(consumed_state)
-            result = service.execute(action.plan)
-            finished_state = finish_pending_action(
-                consumed_state, committed=result.committed
-            )
-            _store_state(finished_state)
-            feedback = result_feedback(result)
+            try:
+                result = service.execute(action.plan)
+            except Exception:
+                LOGGER.exception(
+                    "页面批量执行意外中断：source=%s", scope.source.value
+                )
+                _store_state(
+                    finish_pending_action(consumed_state, committed=False)
+                )
+                feedback = BatchFeedback(
+                    "error",
+                    "批量执行意外中断，数据库结果无法由界面确认；为防止重复提交，"
+                    "本次确认凭证已失效。请核对当前数据后重新预检。",
+                )
+            else:
+                finished_state = finish_pending_action(
+                    consumed_state, committed=result.committed
+                )
+                _store_state(finished_state)
+                feedback = result_feedback(result)
             st.session_state[_FLASH_KEY] = (feedback.level, feedback.message)
-            if result.committed and on_committed is not None:
+            if on_finished is not None:
                 try:
-                    on_committed()
+                    on_finished()
                 except Exception:
-                    LOGGER.exception("批量提交后刷新当前页面数据失败")
+                    LOGGER.exception("批量执行后刷新当前页面数据失败")
                     st.session_state[_FLASH_KEY] = (
-                        "warning",
+                        feedback.level
+                        if feedback.level in {"warning", "error"}
+                        else "warning",
                         feedback.message + " 页面显示刷新失败，请手动重新加载当前页面。",
                     )
             return True

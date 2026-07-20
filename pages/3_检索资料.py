@@ -717,12 +717,14 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
             else None
         ),
         filters={
-            "document_ids": active_state.filters.document_ids,
-            "project_ids": active_state.filters.project_ids,
-            "tag_ids": active_state.filters.tag_ids,
-            "statuses": tuple(value.value for value in active_state.filters.statuses),
+            "document_ids": tuple(sorted(active_state.filters.document_ids)),
+            "project_ids": tuple(sorted(active_state.filters.project_ids)),
+            "tag_ids": tuple(sorted(active_state.filters.tag_ids)),
+            "statuses": tuple(
+                sorted(value.value for value in active_state.filters.statuses)
+            ),
             "match_fields": tuple(
-                value.value for value in active_state.filters.match_fields
+                sorted(value.value for value in active_state.filters.match_fields)
             ),
             "has_note": active_state.filters.has_note,
             "evidence_basket_id": active_state.filters.evidence_basket_id,
@@ -746,7 +748,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
         service=page_batch_service,
         tags=all_tags,
         projects=all_projects,
-        on_committed=lambda: _search_with_state(active_state),
+        on_finished=lambda: _search_with_state(active_state),
     )
     evidence_packages = dict(st.session_state.get("evidence_packages", {}))
     for index, result in enumerate(visible_results, start=start + 1):
