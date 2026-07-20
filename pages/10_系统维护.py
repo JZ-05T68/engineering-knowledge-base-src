@@ -31,7 +31,7 @@ from src.runtime import (
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(
-    page_title="系统维护｜工程知识库 v0.0.8",
+    page_title="系统维护｜工程知识库 v0.1.0",
     page_icon="🛡️",
     layout="wide",
 )
@@ -102,7 +102,7 @@ if st.button("创建并验证完整备份", type="primary", use_container_width=
 
 candidates = list_backup_candidates(settings.backups_dir)
 if not candidates:
-    st.info("还没有 v0.0.8 完整备份。请先创建第一个备份，再进行恢复预检。")
+    st.info(f"还没有 v{settings.app_version} 完整备份。请先创建第一个备份，再进行恢复预检。")
 else:
     st.caption(f"已发现 {len(candidates)} 个带 manifest 的备份目录。")
     candidate_by_name = {candidate.name: candidate for candidate in candidates}

@@ -1,4 +1,4 @@
-"""Unified v0.0.8 release-readiness checks with clear process exit status."""
+"""Unified v0.1.0 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -32,7 +32,8 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.0.8"
+EXPECTED_VERSION: Final[str] = "0.1.0"
+_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = (*range(8502, 8510), 8511, 8512)
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?i)(?:^|/)(?:browser[-_]?acceptance|acceptance[-_]?artifacts?|test[-_]?data)(?:/|$)"
@@ -355,10 +356,23 @@ def version_consistency_check(
     page_files = [project_root / "app.py", *sorted((project_root / "pages").glob("*.py"))]
     for page in page_files:
         content = _safe_read(page)
-        if f"v{expected}" not in content:
+        display_text = "\n".join(
+            line
+            for line in content.splitlines()
+            if "page_title=" in line or "st.title(" in line
+        )
+        display_versions = set(_VERSION_PATTERN.findall(display_text))
+        if f"v{expected}" not in display_versions:
             issues.append(f"{page.name} 未包含当前页面版本")
-        if "v0.0.7" in content:
-            issues.append(f"{page.name} 仍包含旧页面版本")
+        stale_versions = sorted(
+            version
+            for version in display_versions
+            if version != f"v{expected}"
+        )
+        if stale_versions:
+            issues.append(
+                f"{page.name} 仍包含旧页面版本：{', '.join(stale_versions)}"
+            )
     return CheckResult(
         "Version consistency",
         CheckStatus.PASS if not issues else CheckStatus.FAIL,
@@ -538,7 +552,7 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.0.8 统一发布检查")
+    parser = argparse.ArgumentParser(description="工程知识库 v0.1.0 统一发布检查")
     parser.add_argument(
         "--skip-backup",
         action="store_true",

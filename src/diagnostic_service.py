@@ -567,7 +567,7 @@ class DiagnosticService:
                 "latest_backup",
                 "最近完整备份",
                 DiagnosticStatus.WARNING,
-                "尚未创建 v0.0.8 完整备份。",
+                f"尚未创建 v{self.app_version} 完整备份。",
             )
         latest = candidates[0]
         validation = validate_backup(
