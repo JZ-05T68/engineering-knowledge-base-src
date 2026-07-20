@@ -10,6 +10,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.backup_service import BackupService
+from src.batch_service import PageBatchService
 from src.config import Settings, get_settings
 from src.database import Database
 from src.diagnostic_service import DiagnosticService
@@ -104,6 +105,12 @@ def application_evidence_basket_service() -> EvidenceBasketService:
     """Return the process-wide durable evidence basket service."""
 
     return EvidenceBasketService(application_database())
+
+
+def application_page_batch_service() -> PageBatchService:
+    """Build the stateless batch wrapper around the process-wide database."""
+
+    return PageBatchService(application_database())
 
 
 @lru_cache(maxsize=1)

@@ -7,15 +7,27 @@ import logging
 import streamlit as st
 import streamlit.components.v1 as components
 
+from src.batch_selection import BatchSelectionSource, build_visible_page_scope
+from src.batch_ui import (
+    clear_inactive_visible_batch_state,
+    render_visible_batch_feedback,
+    render_visible_page_batch_ui,
+)
 from src.models import Page, PageStatus
 from src.review_shortcuts import review_shortcuts_html
-from src.runtime import application_database, application_document_service
+from src.runtime import (
+    application_database,
+    application_document_service,
+    application_page_batch_service,
+)
 
 LOGGER = logging.getLogger(__name__)
 _ACTIVE_PAGE_KEY = "review_active_page_id"
 _SELECTOR_KEY = "review_page_selector"
 _PENDING_TARGET_KEY = "review_pending_target_id"
 _FLASH_KEY = "review_flash"
+_BATCH_NUMBER_KEY = "review_visible_batch_number"
+_VISIBLE_BATCH_SIZE = 20
 
 st.set_page_config(page_title="待复核页面｜工程知识库 v0.1.1", page_icon="📝", layout="wide")
 st.title("待复核页面")
@@ -63,7 +75,10 @@ def _page_label(page: Page, document_titles: dict[int, str]) -> str:
 try:
     database = application_database()
     document_service = application_document_service()
+    page_batch_service = application_page_batch_service()
     documents = database.list_documents()
+    all_tags = database.list_tags()
+    all_projects = database.list_projects()
 except Exception as exc:
     LOGGER.exception("读取待复核页面失败")
     st.error(f"读取待复核页面失败：{exc}")
@@ -78,6 +93,8 @@ selected_document = st.selectbox(
     key="review_document_filter",
 )
 review_queue = database.list_review_pages(selected_document)
+if not review_queue and clear_inactive_visible_batch_state():
+    st.info("页面范围已变化，原批量选择已清除。")
 
 query_page_id = st.query_params.get("page_id")
 try:
@@ -145,6 +162,7 @@ if flash is not None:
     st.session_state[_PENDING_TARGET_KEY] = None
     level, message = flash
     getattr(st, level)(message)
+render_visible_batch_feedback()
 
 pending_target_id = st.session_state.get(_PENDING_TARGET_KEY)
 if pending_target_id is not None and not _is_dirty(page.id):
@@ -189,6 +207,63 @@ if pending_target_id is not None:
         else:
             st.session_state.pop(_PENDING_TARGET_KEY, None)
         st.rerun()
+
+batch_count = max(
+    1, (len(review_queue) + _VISIBLE_BATCH_SIZE - 1) // _VISIBLE_BATCH_SIZE
+)
+current_batch_value = st.session_state.get(_BATCH_NUMBER_KEY, 1)
+try:
+    current_batch_number = int(current_batch_value)
+except (TypeError, ValueError):
+    current_batch_number = 1
+current_batch_number = min(max(current_batch_number, 1), batch_count)
+st.session_state[_BATCH_NUMBER_KEY] = current_batch_number
+current_batch_number = int(
+    st.selectbox(
+        "待整理当前可见批次",
+        options=list(range(1, batch_count + 1)),
+        format_func=lambda value: f"第 {value} / {batch_count} 批",
+        key=_BATCH_NUMBER_KEY,
+        disabled=not review_queue,
+    )
+)
+batch_start = (current_batch_number - 1) * _VISIBLE_BATCH_SIZE
+visible_review_pages = review_queue[
+    batch_start : batch_start + _VISIBLE_BATCH_SIZE
+]
+batch_rerun_requested = False
+if review_queue:
+    st.caption(
+        f"当前批次显示 {len(visible_review_pages)} 页；"
+        f"队列共 {len(review_queue)} 页。批量选择不会跨批次。"
+    )
+    review_batch_scope = build_visible_page_scope(
+        source=BatchSelectionSource.REVIEW_QUEUE,
+        document_id=selected_document,
+        filters={
+            "review_statuses": (
+                PageStatus.PENDING.value,
+                PageStatus.DRAFT.value,
+                PageStatus.FAILED.value,
+            )
+        },
+        sort="document_page",
+        query="",
+        batch_number=current_batch_number,
+        visible_page_ids=[item.id for item in visible_review_pages],
+    )
+    batch_rerun_requested = render_visible_page_batch_ui(
+        scope=review_batch_scope,
+        page_labels={
+            item.id: _page_label(item, document_titles) for item in visible_review_pages
+        },
+        service=page_batch_service,
+        tags=all_tags,
+        projects=all_projects,
+        dirty_page_ids=tuple(
+            item.id for item in visible_review_pages if _is_dirty(item.id)
+        ),
+    )
 
 if st.session_state.get("review_last_viewed_page_id") != page.id:
     try:
@@ -400,3 +475,6 @@ st.caption(
     "Alt+Left / Alt+Right 切换待处理页（文本输入时不触发方向快捷键）。"
 )
 components.html(review_shortcuts_html(), height=0, width=0)
+
+if batch_rerun_requested:
+    st.rerun()

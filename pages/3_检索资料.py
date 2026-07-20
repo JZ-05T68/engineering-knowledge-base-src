@@ -8,6 +8,12 @@ from dataclasses import replace
 import streamlit as st
 import streamlit.components.v1 as components
 
+from src.batch_selection import BatchSelectionSource, build_visible_page_scope
+from src.batch_ui import (
+    clear_inactive_visible_batch_state,
+    render_visible_batch_feedback,
+    render_visible_page_batch_ui,
+)
 from src.evidence_basket_service import (
     DuplicateEvidenceError,
     EvidenceBasketError,
@@ -22,7 +28,11 @@ from src.models import (
     SearchViewMode,
 )
 from src.prompt_builder import PromptBuilder
-from src.runtime import application_database, application_evidence_basket_service
+from src.runtime import (
+    application_database,
+    application_evidence_basket_service,
+    application_page_batch_service,
+)
 from src.search_history import search_history_reload_html
 from src.search_navigation import (
     SearchNavigationError,
@@ -234,6 +244,7 @@ def _sanitize_metadata_ids(
 try:
     database = application_database()
     basket_service = application_evidence_basket_service()
+    page_batch_service = application_page_batch_service()
     search_service = SearchService(database)
     evidence_builder = EvidencePackageBuilder()
     all_documents = database.list_documents(sort_by="name_asc")
@@ -357,6 +368,7 @@ if entry_columns[1].button(
 basket_flash = st.session_state.pop("basket_flash", "")
 if basket_flash:
     st.success(basket_flash)
+render_visible_batch_feedback()
 
 # Active filters stay compact and only render when at least one condition exists.
 active_labels = active_filter_labels(
@@ -596,6 +608,10 @@ if search_error:
     st.error(search_error)
 
 results = st.session_state.get("knowledge_results", [])
+batch_rerun_requested = False
+if not results or active_state.view_mode is not SearchViewMode.PAGE:
+    if clear_inactive_visible_batch_state():
+        st.info("页面范围已变化，原批量选择已清除。")
 active_query_terms = search_service.query_terms(active_state.query)
 has_searched = bool(active_state.query.strip())
 effective_total = facet_counts.total if active_query_terms else 0
@@ -687,6 +703,45 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
 
     start = (current_page - 1) * RESULTS_PER_PAGE
     visible_results = results[start : start + RESULTS_PER_PAGE]
+    batch_scope = build_visible_page_scope(
+        source=BatchSelectionSource.SEARCH,
+        document_id=(
+            active_state.filters.document_ids[0]
+            if len(active_state.filters.document_ids) == 1
+            else None
+        ),
+        filters={
+            "document_ids": active_state.filters.document_ids,
+            "project_ids": active_state.filters.project_ids,
+            "tag_ids": active_state.filters.tag_ids,
+            "statuses": tuple(value.value for value in active_state.filters.statuses),
+            "match_fields": tuple(
+                value.value for value in active_state.filters.match_fields
+            ),
+            "has_note": active_state.filters.has_note,
+            "evidence_basket_id": active_state.filters.evidence_basket_id,
+            "limit": active_state.limit,
+            "view_mode": active_state.view_mode.value,
+        },
+        sort=active_state.sort.value,
+        query=active_state.query,
+        batch_number=current_page,
+        visible_page_ids=[result.page_id for result in visible_results],
+    )
+    batch_rerun_requested = render_visible_page_batch_ui(
+        scope=batch_scope,
+        page_labels={
+            result.page_id: (
+                f"{result.document_title.strip() or '未命名文档'} · "
+                f"第 {result.page_number} 页 · {result.status.label}"
+            )
+            for result in visible_results
+        },
+        service=page_batch_service,
+        tags=all_tags,
+        projects=all_projects,
+        on_committed=lambda: _search_with_state(active_state),
+    )
     evidence_packages = dict(st.session_state.get("evidence_packages", {}))
     for index, result in enumerate(visible_results, start=start + 1):
         snippet = result.snippet or result.content[:220] or "（该页没有可显示的文本摘要）"
@@ -1176,3 +1231,6 @@ if results and active_state.view_mode is SearchViewMode.DOCUMENT:
                     _render_group_result_card(
                         result, result_positions[result.page_id]
                     )
+
+if batch_rerun_requested:
+    st.rerun()
