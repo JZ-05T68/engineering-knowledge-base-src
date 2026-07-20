@@ -95,6 +95,50 @@ def test_create_add_multiple_prevent_duplicate_and_restore_after_restart(
     assert reopened.list_items()[0].user_note == "现场复核"
 
 
+def test_same_page_distinct_selections_coexist_while_normalized_duplicate_is_rejected(
+    tmp_path: Path,
+) -> None:
+    database, service, document_id, page_ids = _library(tmp_path)
+    page_id = page_ids[0]
+
+    first = service.add_item(
+        document_id=document_id,
+        page_id=page_id,
+        evidence_text="液压泵需要定期检查压力和温度。",
+    )
+    second = service.add_item(
+        document_id=document_id,
+        page_id=page_id,
+        evidence_text="禁止超压",
+    )
+
+    assert first.page_id == second.page_id == page_id
+    assert first.id != second.id
+    assert [item.evidence_text for item in service.list_items()] == [
+        "液压泵需要定期检查压力和温度。",
+        "禁止超压",
+    ]
+    with sqlite3.connect(database.database_path) as connection:
+        stored = connection.execute(
+            """
+            SELECT page_id, selection_sha256
+            FROM evidence_items
+            ORDER BY position
+            """
+        ).fetchall()
+    assert [row[0] for row in stored] == [page_id, page_id]
+    assert len({row[1] for row in stored}) == 2
+
+    with pytest.raises(DuplicateEvidenceError, match="重复"):
+        service.add_item(
+            document_id=document_id,
+            page_id=page_id,
+            evidence_text="  液压泵需要定期检查压力和温度。  ",
+        )
+
+    assert [item.id for item in service.list_items()] == [first.id, second.id]
+
+
 def test_user_excerpt_classification_chinese_special_chars_and_empty_selection(
     tmp_path: Path,
 ) -> None:
