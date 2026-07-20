@@ -11,6 +11,7 @@ from pathlib import Path
 
 from src.backup_service import BackupService
 from src.batch_service import PageBatchService
+from src.classification_metadata import ClassificationMetadataService
 from src.config import Settings, get_settings
 from src.database import Database
 from src.diagnostic_service import DiagnosticService
@@ -111,6 +112,12 @@ def application_page_batch_service() -> PageBatchService:
     """Build the stateless batch wrapper around the process-wide database."""
 
     return PageBatchService(application_database())
+
+
+def application_classification_metadata_service() -> ClassificationMetadataService:
+    """Build a fresh classification reader with no cross-rerun cache state."""
+
+    return ClassificationMetadataService(application_database())
 
 
 @lru_cache(maxsize=1)

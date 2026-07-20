@@ -8,7 +8,9 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 import src.runtime as runtime
+from src.batch_selection import BatchSelectionSource, build_visible_page_scope
 from src.batch_service import PageBatchService
+from src.classification_metadata import ClassificationMetadataService
 from src.database import Database
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
@@ -249,6 +251,174 @@ def test_review_dirty_selected_page_blocks_preflight_and_batch_change_clears_sel
     assert app.session_state["review_markdown_1"] == "尚未保存的批量保护内容"
     first = database.get_page_by_number(document_id, 1)
     assert first is not None and first.markdown_content == ""
+
+
+def test_review_database_pagination_limits_each_visible_batch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, _, _, _, _ = _review_app(tmp_path, monkeypatch, page_count=45)
+
+    assert _button(app, "选择当前可见 20 项")
+    assert all(_page_checkbox(app, number) for number in range(1, 21))
+    app.selectbox(key="review_visible_batch_number").select(2).run(timeout=15)
+    assert _button(app, "选择当前可见 20 项")
+    assert all(_page_checkbox(app, number) for number in range(21, 41))
+    app.selectbox(key="review_visible_batch_number").select(3).run(timeout=15)
+    assert _button(app, "选择当前可见 5 项")
+    assert all(_page_checkbox(app, number) for number in range(41, 46))
+
+
+def test_review_pagination_scope_uses_database_page_id_order(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, _, _, page_ids, _ = _review_app(tmp_path, monkeypatch, page_count=25)
+    expected_scope = build_visible_page_scope(
+        source=BatchSelectionSource.REVIEW_QUEUE,
+        document_id=None,
+        filters={
+            "review_statuses": (
+                PageStatus.PENDING.value,
+                PageStatus.DRAFT.value,
+                PageStatus.FAILED.value,
+            )
+        },
+        sort="document_page",
+        query="",
+        batch_number=1,
+        visible_page_ids=page_ids[:20],
+    )
+
+    state = app.session_state["visible_page_batch_state"]
+    assert state.scope_signature == expected_scope.signature
+
+
+def test_review_document_change_clears_selection_plan_confirmation_and_token(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, _, _, _ = _review_app(tmp_path, monkeypatch, page_count=3)
+    second_document = database.create_document(
+        title="第二份批量文档",
+        filename="second-visible-batch.pdf",
+        source_path=tmp_path / "raw" / "second-visible-batch.pdf",
+        sha256="7" * 64,
+    )
+    for page_number in (1, 2):
+        database.create_page(
+            document_id=second_document.id,
+            page_number=page_number,
+            image_path=tmp_path / "pages" / f"second-{page_number}.png",
+        )
+    app.run(timeout=15)
+    _button(app, "选择当前可见 5 项").click().run(timeout=15)
+    _button(app, "预检批量操作").click().run(timeout=15)
+    _confirm_checkbox(app).check().run(timeout=15)
+    assert app.session_state["visible_page_batch_state"].confirmed_token is not None
+
+    app.selectbox(key="review_document_filter").select(second_document.id).run(timeout=15)
+
+    state = app.session_state["visible_page_batch_state"]
+    assert state.selected_page_ids == ()
+    assert state.pending_action is None
+    assert state.confirmed_token is None
+    assert _button(app, "选择当前可见 2 项")
+    assert not app.exception
+
+
+def test_review_external_range_change_invalidates_unexecuted_plan(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, _, page_ids, batch_service = _review_app(
+        tmp_path, monkeypatch, page_count=21
+    )
+    app.selectbox(key="review_visible_batch_number").select(2).run(timeout=15)
+    _button(app, "选择当前可见 1 项").click().run(timeout=15)
+    _button(app, "预检批量操作").click().run(timeout=15)
+    _confirm_checkbox(app).check().run(timeout=15)
+    old_token = app.session_state["visible_page_batch_state"].confirmed_token
+
+    database.update_page(page_ids[-1], status=PageStatus.REVIEWED)
+    app.run(timeout=15)
+
+    state = app.session_state["visible_page_batch_state"]
+    assert old_token is not None
+    assert state.selected_page_ids == ()
+    assert state.pending_action is None
+    assert state.confirmed_token is None
+    assert batch_service.execute_calls == 0
+    assert app.session_state["review_visible_batch_number"] == 1
+    assert not any(button.label == "执行批量操作" for button in app.button)
+
+
+def test_review_last_batch_falls_back_after_batch_completion(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, _, page_ids, batch_service = _review_app(
+        tmp_path, monkeypatch, page_count=21
+    )
+    app.selectbox(key="review_visible_batch_number").select(2).run(timeout=15)
+    _button(app, "选择当前可见 1 项").click().run(timeout=15)
+    _button(app, "预检批量操作").click().run(timeout=15)
+    _confirm_checkbox(app).check().run(timeout=15)
+    _button(app, "执行批量操作").click().run(timeout=15)
+
+    assert batch_service.execute_calls == 1
+    assert database.get_page(page_ids[-1]).status is PageStatus.REVIEWED  # type: ignore[union-attr]
+    assert app.session_state["review_visible_batch_number"] == 1
+    assert _button(app, "选择当前可见 20 项")
+    assert not app.exception
+
+
+def test_search_and_review_pages_use_one_shared_metadata_entry_per_run(
+    tmp_path: Path, monkeypatch
+) -> None:
+    database, _, _ = _database_with_pages(tmp_path, page_count=3)
+    basket_service = EvidenceBasketService(database)
+    batch_service = CountingPageBatchService(database)
+
+    class CountingMetadataService(ClassificationMetadataService):
+        def __init__(self, database: Database) -> None:
+            super().__init__(database)
+            self.load_calls = 0
+
+        def load(self, **kwargs):
+            self.load_calls += 1
+            return super().load(**kwargs)
+
+    metadata_service = CountingMetadataService(database)
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+    monkeypatch.setattr(
+        runtime, "application_evidence_basket_service", lambda: basket_service
+    )
+    monkeypatch.setattr(
+        runtime, "application_page_batch_service", lambda: batch_service
+    )
+    monkeypatch.setattr(
+        runtime,
+        "application_classification_metadata_service",
+        lambda: metadata_service,
+    )
+
+    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_app = AppTest.from_file(str(search_path))
+    search_app.query_params = {"q": "批量关键词", "limit": "50"}
+    search_app.run(timeout=15)
+    assert metadata_service.load_calls == 1
+    assert not search_app.exception
+
+    document_service = DocumentService(
+        database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+    )
+    monkeypatch.setattr(
+        runtime, "application_document_service", lambda: document_service
+    )
+    review_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
+    review_app = AppTest.from_file(str(review_path)).run(timeout=15)
+
+    assert metadata_service.load_calls == 2
+    assert not review_app.exception
 
 
 def test_review_dirty_unselected_editor_survives_other_page_batch_reruns(

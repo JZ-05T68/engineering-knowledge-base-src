@@ -16,6 +16,7 @@ from src.batch_ui import (
 from src.models import Page, PageStatus
 from src.review_shortcuts import review_shortcuts_html
 from src.runtime import (
+    application_classification_metadata_service,
     application_database,
     application_document_service,
     application_page_batch_service,
@@ -76,9 +77,10 @@ try:
     database = application_database()
     document_service = application_document_service()
     page_batch_service = application_page_batch_service()
-    documents = database.list_documents()
-    all_tags = database.list_tags()
-    all_projects = database.list_projects()
+    classification_metadata = application_classification_metadata_service().load()
+    documents = classification_metadata.documents
+    all_tags = classification_metadata.tags
+    all_projects = classification_metadata.projects
 except Exception as exc:
     LOGGER.exception("读取待复核页面失败")
     st.error(f"读取待复核页面失败：{exc}")
@@ -92,8 +94,19 @@ selected_document = st.selectbox(
     format_func=lambda value: "全部文档" if value is None else document_options[value].title,
     key="review_document_filter",
 )
-review_queue = database.list_review_pages(selected_document)
-if not review_queue and clear_inactive_visible_batch_state():
+current_batch_value = st.session_state.get(_BATCH_NUMBER_KEY, 1)
+try:
+    requested_batch_number = int(current_batch_value)
+except (TypeError, ValueError):
+    requested_batch_number = 1
+queue_batch = database.paginate_review_pages(
+    selected_document,
+    batch_number=requested_batch_number,
+    batch_size=_VISIBLE_BATCH_SIZE,
+)
+if queue_batch.corrected:
+    st.session_state[_BATCH_NUMBER_KEY] = queue_batch.batch_number
+if not queue_batch.pages and clear_inactive_visible_batch_state():
     st.info("页面范围已变化，原批量选择已清除。")
 
 query_page_id = st.query_params.get("page_id")
@@ -108,8 +121,8 @@ if active_page_id is not None:
     active_page = database.get_page(int(active_page_id))
 if active_page is None and requested_page_id is not None:
     active_page = database.get_page(requested_page_id)
-if active_page is None and review_queue:
-    active_page = review_queue[0]
+if active_page is None and queue_batch.pages:
+    active_page = queue_batch.pages[0]
 if active_page is None:
     if documents:
         st.success("当前筛选范围内没有待复核页面。可以查看已经整理过的资料。")
@@ -126,7 +139,7 @@ if _ACTIVE_PAGE_KEY not in st.session_state or (
 ):
     _activate_page(active_page.id)
 
-selectable_pages = {page.id: page for page in review_queue}
+selectable_pages = {page.id: page for page in queue_batch.pages}
 selectable_pages.setdefault(active_page.id, active_page)
 selector_options = sorted(
     selectable_pages,
@@ -137,18 +150,14 @@ selector_options = sorted(
 )
 st.session_state[_SELECTOR_KEY] = int(st.session_state[_ACTIVE_PAGE_KEY])
 st.selectbox(
-    "选择待处理页面",
+    "选择当前批次待处理页面",
     options=selector_options,
     format_func=lambda value: _page_label(selectable_pages[value], document_titles),
     key=_SELECTOR_KEY,
     on_change=_on_page_selector_change,
 )
 
-active_page_id = int(st.session_state[_ACTIVE_PAGE_KEY])
-page = database.get_page(active_page_id)
-if page is None:
-    st.error("当前页面记录不存在，请返回待复核队列重新选择。")
-    st.stop()
+page = active_page
 document = document_options.get(page.document_id)
 if document is None:
     st.error("当前页面所属文档不存在。")
@@ -208,46 +217,47 @@ if pending_target_id is not None:
             st.session_state.pop(_PENDING_TARGET_KEY, None)
         st.rerun()
 
-batch_count = max(
-    1, (len(review_queue) + _VISIBLE_BATCH_SIZE - 1) // _VISIBLE_BATCH_SIZE
-)
-current_batch_value = st.session_state.get(_BATCH_NUMBER_KEY, 1)
-try:
-    current_batch_number = int(current_batch_value)
-except (TypeError, ValueError):
-    current_batch_number = 1
-current_batch_number = min(max(current_batch_number, 1), batch_count)
-st.session_state[_BATCH_NUMBER_KEY] = current_batch_number
-current_batch_number = int(
+current_batch_number = queue_batch.batch_number
+if queue_batch.total_batches:
+    st.session_state[_BATCH_NUMBER_KEY] = current_batch_number
+    current_batch_number = int(
+        st.selectbox(
+            "待整理当前可见批次",
+            options=list(range(1, queue_batch.total_batches + 1)),
+            format_func=lambda value: f"第 {value} / {queue_batch.total_batches} 批",
+            key=_BATCH_NUMBER_KEY,
+        )
+    )
+else:
+    st.session_state[_BATCH_NUMBER_KEY] = 1
     st.selectbox(
         "待整理当前可见批次",
-        options=list(range(1, batch_count + 1)),
-        format_func=lambda value: f"第 {value} / {batch_count} 批",
+        options=[1],
+        format_func=lambda _value: "当前没有待整理批次",
         key=_BATCH_NUMBER_KEY,
-        disabled=not review_queue,
+        disabled=True,
     )
-)
-batch_start = (current_batch_number - 1) * _VISIBLE_BATCH_SIZE
-visible_review_pages = review_queue[
-    batch_start : batch_start + _VISIBLE_BATCH_SIZE
-]
+visible_review_pages = queue_batch.pages
 batch_rerun_requested = False
-if review_queue:
+if queue_batch.total_pages:
+    if queue_batch.corrected:
+        st.info(
+            f"原请求的第 {queue_batch.requested_batch_number} 批已越界，"
+            f"已安全回到第 {queue_batch.batch_number} 批。"
+        )
     st.caption(
         f"当前批次显示 {len(visible_review_pages)} 页；"
-        f"队列共 {len(review_queue)} 页。批量选择不会跨批次。"
+        f"队列共 {queue_batch.total_pages} 页。批量选择不会跨批次。"
     )
     review_batch_scope = build_visible_page_scope(
         source=BatchSelectionSource.REVIEW_QUEUE,
         document_id=selected_document,
         filters={
-            "review_statuses": (
-                PageStatus.PENDING.value,
-                PageStatus.DRAFT.value,
-                PageStatus.FAILED.value,
+            "review_statuses": tuple(
+                status.value for status in queue_batch.query.statuses
             )
         },
-        sort="document_page",
+        sort=queue_batch.query.sort.value,
         query="",
         batch_number=current_batch_number,
         visible_page_ids=[item.id for item in visible_review_pages],
@@ -293,7 +303,7 @@ previous_page = database.get_adjacent_review_page(page.id, "previous", selected_
 next_page = database.get_adjacent_review_page(page.id, "next", selected_document)
 continuation_page = next_page
 if page.status not in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}:
-    continuation_page = review_queue[0] if review_queue else None
+    continuation_page = database.get_first_review_page(selected_document)
 if st.button(
     "继续处理下一待复核页",
     disabled=continuation_page is None,

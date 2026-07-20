@@ -14,6 +14,7 @@ from src.batch_ui import (
     render_visible_batch_feedback,
     render_visible_page_batch_ui,
 )
+from src.classification_metadata import ClassificationDocumentSort
 from src.evidence_basket_service import (
     DuplicateEvidenceError,
     EvidenceBasketError,
@@ -29,6 +30,7 @@ from src.models import (
 )
 from src.prompt_builder import PromptBuilder
 from src.runtime import (
+    application_classification_metadata_service,
     application_database,
     application_evidence_basket_service,
     application_page_batch_service,
@@ -245,11 +247,15 @@ try:
     database = application_database()
     basket_service = application_evidence_basket_service()
     page_batch_service = application_page_batch_service()
+    classification_metadata_service = application_classification_metadata_service()
     search_service = SearchService(database)
     evidence_builder = EvidencePackageBuilder()
-    all_documents = database.list_documents(sort_by="name_asc")
-    all_projects = database.list_projects()
-    all_tags = database.list_tags()
+    classification_metadata = classification_metadata_service.load(
+        document_sort=ClassificationDocumentSort.NAME_ASC
+    )
+    all_documents = classification_metadata.documents
+    all_projects = classification_metadata.projects
+    all_tags = classification_metadata.tags
     current_basket = basket_service.default_basket()
 except Exception as exc:
     LOGGER.exception("初始化检索服务失败")

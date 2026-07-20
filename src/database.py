@@ -24,6 +24,9 @@ from src.models import (
     PageStatus,
     Project,
     ReviewProgress,
+    ReviewQueuePage,
+    ReviewQueueQuery,
+    ReviewQueueSort,
     SearchFacetCounts,
     SearchField,
     SearchFilters,
@@ -36,6 +39,14 @@ LOGGER = logging.getLogger(__name__)
 _SHA256_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{64}$")
 _QUOTED_TERM: Final[re.Pattern[str]] = re.compile(r'"([^"]+)"')
 _UNSET: Final[object] = object()
+_DEFAULT_REVIEW_QUEUE_STATUSES: Final[tuple[PageStatus, ...]] = (
+    PageStatus.PENDING,
+    PageStatus.DRAFT,
+    PageStatus.FAILED,
+)
+_REVIEW_QUEUE_ORDERS: Final[dict[ReviewQueueSort, str]] = {
+    ReviewQueueSort.DOCUMENT_PAGE: "document_id ASC, page_number ASC, id ASC",
+}
 _SEARCH_FIELD_ORDER: Final[tuple[SearchField, ...]] = (
     SearchField.MARKDOWN,
     SearchField.OCR_TEXT,
@@ -425,6 +436,111 @@ class Database:
                 parameters,
             ).fetchall()
         return [_page_from_row(row) for row in rows]
+
+    def paginate_review_pages(
+        self,
+        document_id: int | None = None,
+        *,
+        statuses: Sequence[PageStatus | str] | None = None,
+        sort: ReviewQueueSort | str = ReviewQueueSort.DOCUMENT_PAGE,
+        batch_number: int = 1,
+        batch_size: int = 20,
+    ) -> ReviewQueuePage:
+        """Return one bounded, stable, one-based batch of the review queue.
+
+        Count and data reads share one SQLite snapshot and the exact same
+        parameterized predicate. Only the whitelisted order fragment is
+        interpolated into SQL.
+        """
+
+        if document_id is not None and document_id <= 0:
+            raise ValueError("文档 ID 必须是正整数")
+        if isinstance(batch_number, bool) or not isinstance(batch_number, int):
+            raise ValueError("待整理批次编号必须是整数")
+        if isinstance(batch_size, bool) or not isinstance(batch_size, int):
+            raise ValueError("待整理批次大小必须是整数")
+        if not 1 <= batch_size <= 100:
+            raise ValueError("待整理批次大小必须在 1 到 100 之间")
+        normalized_sort = ReviewQueueSort(sort)
+        requested_batch_number = batch_number
+        normalized_request = max(batch_number, 1)
+        requested_statuses = (
+            _DEFAULT_REVIEW_QUEUE_STATUSES if statuses is None else statuses
+        )
+        status_set = {PageStatus(status) for status in requested_statuses}
+        normalized_statuses = tuple(
+            status for status in PageStatus if status in status_set
+        )
+
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if normalized_statuses:
+            placeholders = ",".join("?" for _ in normalized_statuses)
+            conditions.append(f"review_status IN ({placeholders})")
+            parameters.extend(status.value for status in normalized_statuses)
+        else:
+            conditions.append("0")
+        if document_id is not None:
+            conditions.append("document_id = ?")
+            parameters.append(document_id)
+        where = " AND ".join(conditions)
+
+        with self._connection() as connection:
+            connection.execute("BEGIN")
+            count_row = connection.execute(
+                f"SELECT COUNT(*) AS total_pages FROM pages WHERE {where}",
+                parameters,
+            ).fetchone()
+            total_pages = int(count_row["total_pages"])
+            total_batches = (total_pages + batch_size - 1) // batch_size
+            effective_batch = min(normalized_request, total_batches or 1)
+            if total_pages:
+                offset = (effective_batch - 1) * batch_size
+                rows = connection.execute(
+                    f"""SELECT * FROM pages WHERE {where}
+                    ORDER BY {_REVIEW_QUEUE_ORDERS[normalized_sort]}
+                    LIMIT ? OFFSET ?""",
+                    (*parameters, batch_size, offset),
+                ).fetchall()
+            else:
+                rows = []
+
+        normalized_query = ReviewQueueQuery(
+            document_id=document_id,
+            statuses=normalized_statuses,
+            sort=normalized_sort,
+            batch_size=batch_size,
+            batch_number=effective_batch,
+        )
+        return ReviewQueuePage(
+            pages=tuple(_page_from_row(row) for row in rows),
+            total_pages=total_pages,
+            batch_size=batch_size,
+            batch_number=effective_batch,
+            total_batches=total_batches,
+            requested_batch_number=requested_batch_number,
+            corrected=effective_batch != requested_batch_number,
+            query=normalized_query,
+        )
+
+    def get_first_review_page(self, document_id: int | None = None) -> Page | None:
+        """Return the first page in the default queue without loading the queue."""
+
+        parameters: list[object] = [
+            status.value for status in _DEFAULT_REVIEW_QUEUE_STATUSES
+        ]
+        where = "review_status IN (?,?,?)"
+        if document_id is not None:
+            where += " AND document_id = ?"
+            parameters.append(document_id)
+        with self._connection() as connection:
+            row = connection.execute(
+                f"""SELECT * FROM pages WHERE {where}
+                ORDER BY {_REVIEW_QUEUE_ORDERS[ReviewQueueSort.DOCUMENT_PAGE]}
+                LIMIT 1""",
+                parameters,
+            ).fetchone()
+        return _page_from_row(row) if row is not None else None
 
     def list_pending_pages(self, document_id: int | None = None) -> list[Page]:
         """Compatibility alias for pages in the default manual-review queue."""

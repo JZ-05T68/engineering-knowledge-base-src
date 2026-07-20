@@ -94,6 +94,12 @@ class SearchSort(StrEnum):
         }[self]
 
 
+class ReviewQueueSort(StrEnum):
+    """Supported, SQL-whitelisted orders for the manual-review queue."""
+
+    DOCUMENT_PAGE = "document_page"
+
+
 class SearchViewMode(StrEnum):
     """Supported search-result layouts stored in the URL state."""
 
@@ -153,6 +159,17 @@ class SearchFilters:
     match_fields: tuple[SearchField, ...] = ()
     has_note: bool = False
     evidence_basket_id: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewQueueQuery:
+    """Normalized queue scope; ``batch_number`` is explicitly one-based."""
+
+    document_id: int | None
+    statuses: tuple[PageStatus, ...]
+    sort: ReviewQueueSort
+    batch_size: int
+    batch_number: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,6 +240,26 @@ class Page:
         """Whether this page has a non-empty user-authored note."""
 
         return bool(self.markdown_content.strip())
+
+
+@dataclass(frozen=True, slots=True)
+class ReviewQueuePage:
+    """One bounded, one-based page of the manual-review queue."""
+
+    pages: tuple[Page, ...]
+    total_pages: int
+    batch_size: int
+    batch_number: int
+    total_batches: int
+    requested_batch_number: int
+    corrected: bool
+    query: ReviewQueueQuery
+
+    @property
+    def visible_page_ids(self) -> tuple[int, ...]:
+        """Return stable IDs in exactly the database result order."""
+
+        return tuple(page.id for page in self.pages)
 
 
 @dataclass(frozen=True, slots=True)
