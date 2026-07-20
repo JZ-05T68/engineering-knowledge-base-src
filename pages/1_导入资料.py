@@ -12,16 +12,36 @@ from src.models import PageStatus
 from src.runtime import application_document_service
 
 LOGGER = logging.getLogger(__name__)
+_REVIEW_REQUEST_PARAM = "import_review_page"
 
 
-def _open_review_page(page_id: int) -> None:
-    """Navigate from a completed import without persisting extra session state."""
+def _request_review_page(page_id: int) -> None:
+    """Request a review navigation that the next page run consumes once."""
 
-    st.query_params["page_id"] = str(page_id)
-    st.switch_page("pages/4_待整理页面.py")
+    st.query_params[_REVIEW_REQUEST_PARAM] = str(page_id)
+
+
+def _consume_review_request() -> None:
+    """Validate and consume the callback request outside Streamlit's callback phase."""
+
+    raw_value = st.query_params.get(_REVIEW_REQUEST_PARAM)
+    if raw_value is None:
+        return
+    del st.query_params[_REVIEW_REQUEST_PARAM]
+    try:
+        page_id = int(raw_value)
+    except (TypeError, ValueError):
+        return
+    if page_id <= 0:
+        return
+    st.switch_page(
+        "pages/4_待整理页面.py",
+        query_params={"page_id": str(page_id)},
+    )
 
 
 st.set_page_config(page_title="导入资料｜工程知识库 v0.1.1", page_icon="📥", layout="wide")
+_consume_review_request()
 st.title("导入资料")
 st.caption("PDF 原件、逐页 PNG、文本和导入记录都保存在本机。")
 
@@ -88,7 +108,7 @@ if st.button("导入 PDF", type="primary"):
         if review_target is not None:
             st.button(
                 "进入复核",
-                on_click=_open_review_page,
+                on_click=_request_review_page,
                 args=(review_target.id,),
                 help="打开本次导入的第一张待复核页面；不会自动修改页面状态。",
             )
