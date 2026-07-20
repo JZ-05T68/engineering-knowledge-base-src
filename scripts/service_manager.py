@@ -24,7 +24,7 @@ PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import get_settings  # noqa: E402
+from src.config import OfficialEndpointError, get_settings  # noqa: E402
 
 TASK_NAME: Final[str] = "EngineeringKnowledgeBase"
 HEALTH_PATH: Final[str] = "/_stcore/health"
@@ -485,16 +485,20 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     configure_manager_logging()
     arguments = build_parser().parse_args()
-    if arguments.command == "start":
-        return start_service(open_browser=not arguments.no_browser)
-    if arguments.command == "stop":
-        return stop_service()
-    if arguments.command == "status":
-        return show_status()
-    if arguments.command == "enable-autostart":
-        return enable_autostart()
-    if arguments.command == "disable-autostart":
-        return disable_autostart()
+    try:
+        if arguments.command == "start":
+            return start_service(open_browser=not arguments.no_browser)
+        if arguments.command == "stop":
+            return stop_service()
+        if arguments.command == "status":
+            return show_status()
+        if arguments.command == "enable-autostart":
+            return enable_autostart()
+        if arguments.command == "disable-autostart":
+            return disable_autostart()
+    except OfficialEndpointError as exc:
+        print(f"正式服务配置错误：{exc}")
+        return 2
     return 1
 
 

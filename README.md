@@ -127,13 +127,15 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
-可按需复制 `.env.example` 调整渲染 DPI、文本阈值或端口：
+可按需复制 `.env.example` 调整渲染 DPI 或文本阈值：
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-监听地址被限制为 `127.0.0.1`；不要改为 `0.0.0.0`。
+正式服务端点固定为 `127.0.0.1:8501`，不支持通过 `.env` 改写地址或端口；不要改为
+`0.0.0.0`、局域网地址、公网地址或其他端口。自动化测试通过显式依赖注入使用临时端口，
+不改变正式运行配置。
 
 ## 检索、证据篮与引用证据包使用方法
 
@@ -348,7 +350,7 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
 | 现象 | 处理方式 |
 | --- | --- |
 | 提示虚拟环境不存在 | 按“首次安装”创建 `.venv`，不要复制其他机器的虚拟环境 |
-| 8501 端口被占用 | 运行 `查看运行状态.bat`；关闭占用程序，或在 `.env` 设置未占用的 `EKB_PORT` |
+| 8501 端口被占用 | 运行 `查看运行状态.bat` 并关闭占用程序；正式服务不支持改用其他端口 |
 | PID 文件过期 | 再次启动或查看状态会自动识别并清理；PID 在 `runtime/` |
 | 服务异常退出 | 查看 `logs/server-console.log` 和 `logs/service-manager.log` |
 | 数据库不可写/迁移失败 | 停止服务，检查 `data/database/` 权限；保留主库并查看 `backups/`，不要删库重建 |

@@ -4,12 +4,36 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Final, Literal
 
-from pydantic import Field
+from pydantic import Field, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+OFFICIAL_HOST: Final[str] = "127.0.0.1"
+OFFICIAL_PORT: Final[int] = 8501
+
+
+class OfficialEndpointError(ValueError):
+    """Raised when a formal runtime attempts to use a non-official endpoint."""
+
+
+def require_official_endpoint(host: str, port: int) -> None:
+    """Require the one supported endpoint for formal local runtime paths.
+
+    ``Settings`` remains directly constructible with a temporary port so tests
+    can isolate their listeners.  Formal entry points use ``get_settings()``,
+    which calls this guard before returning configuration.
+    """
+
+    if host != OFFICIAL_HOST:
+        raise OfficialEndpointError(
+            f"正式服务端点必须为 {OFFICIAL_HOST}:{OFFICIAL_PORT}；收到地址 {host}。"
+        )
+    if port != OFFICIAL_PORT:
+        raise OfficialEndpointError(
+            f"正式服务端点必须为 {OFFICIAL_HOST}:{OFFICIAL_PORT}；收到端口 {port}。"
+        )
 
 
 class Settings(BaseSettings):
@@ -28,8 +52,8 @@ class Settings(BaseSettings):
 
     app_title: str = "工程知识库 v0.1.1"
     app_version: str = "0.1.1"
-    host: Literal["127.0.0.1"] = "127.0.0.1"
-    port: int = Field(default=8501, ge=1, le=65535)
+    host: Literal["127.0.0.1"] = OFFICIAL_HOST
+    port: int = Field(default=OFFICIAL_PORT, ge=1, le=65535)
 
     data_dir: Path = PROJECT_ROOT / "data"
     raw_dir: Path = PROJECT_ROOT / "data" / "raw"
@@ -64,6 +88,13 @@ class Settings(BaseSettings):
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Return one cached settings instance for the process."""
+    """Return one cached, official-endpoint settings instance for the process."""
 
-    return Settings()
+    try:
+        settings = Settings()
+    except ValidationError as exc:
+        raise OfficialEndpointError(
+            f"正式服务端点必须为 {OFFICIAL_HOST}:{OFFICIAL_PORT}；配置值无效。"
+        ) from exc
+    require_official_endpoint(settings.host, settings.port)
+    return settings

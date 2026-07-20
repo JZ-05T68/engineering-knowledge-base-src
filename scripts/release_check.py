@@ -24,7 +24,13 @@ from src.backup_service import (  # noqa: E402
     read_database_summary,
     validate_backup,
 )
-from src.config import Settings, get_settings  # noqa: E402
+from src.config import (  # noqa: E402
+    OFFICIAL_HOST,
+    OFFICIAL_PORT,
+    OfficialEndpointError,
+    Settings,
+    get_settings,
+)
 from src.diagnostic_service import (  # noqa: E402
     is_healthy,
     is_port_open,
@@ -386,13 +392,18 @@ def listener_check(
     addresses: tuple[str, ...],
     healthy: bool,
 ) -> CheckResult:
-    """Require a healthy listener bound only to IPv4 loopback."""
+    """Require the healthy, fixed formal endpoint on IPv4 loopback."""
 
-    valid = configured_host == "127.0.0.1" and addresses == ("127.0.0.1",) and healthy
+    endpoint_ok = configured_host == OFFICIAL_HOST and port == OFFICIAL_PORT
+    listener_ok = addresses == (OFFICIAL_HOST,) and healthy
+    valid = endpoint_ok and listener_ok
     detail = (
-        f"127.0.0.1:{port} / health ok"
+        f"{OFFICIAL_HOST}:{OFFICIAL_PORT} / health ok"
         if valid
-        else f"configured={configured_host}, listeners={addresses}, healthy={healthy}"
+        else (
+            f"正式端点必须为 {OFFICIAL_HOST}:{OFFICIAL_PORT}；"
+            f"configured={configured_host}:{port}, listeners={addresses}, healthy={healthy}"
+        )
     )
     return CheckResult(
         "Service listener", CheckStatus.PASS if valid else CheckStatus.FAIL, detail
@@ -563,7 +574,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
-    settings = get_settings()
+    try:
+        settings = get_settings()
+    except OfficialEndpointError as exc:
+        print(f"[FAIL] Formal endpoint configuration: {exc}")
+        return 2
     settings.ensure_directories()
     report = ReleaseChecker(settings).run(create_backup=not arguments.skip_backup)
     print(render_report(report))

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+import scripts.release_check as release_check
 from scripts.release_check import (
     CheckResult,
     CheckStatus,
@@ -19,6 +22,7 @@ from scripts.release_check import (
     untracked_artifact_check,
     version_consistency_check,
 )
+from src.config import OfficialEndpointError
 
 
 def test_all_pass_report_returns_zero_and_clear_summary() -> None:
@@ -95,12 +99,31 @@ def test_version_mismatch_fails_readme_changelog_and_page_consistency(
 
 def test_non_loopback_or_unhealthy_listener_is_failure() -> None:
     wrong = listener_check("127.0.0.1", 8501, ("0.0.0.0",), True)
+    wrong_port = listener_check("127.0.0.1", 49343, ("127.0.0.1",), True)
     unhealthy = listener_check("127.0.0.1", 8501, ("127.0.0.1",), False)
     correct = listener_check("127.0.0.1", 8501, ("127.0.0.1",), True)
 
     assert wrong.status is CheckStatus.FAIL
+    assert wrong_port.status is CheckStatus.FAIL
+    assert "正式端点必须为 127.0.0.1:8501" in wrong_port.detail
     assert unhealthy.status is CheckStatus.FAIL
     assert correct.status is CheckStatus.PASS
+
+
+def test_release_entrypoint_reports_invalid_formal_endpoint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def invalid_settings():
+        raise OfficialEndpointError(
+            "正式服务端点必须为 127.0.0.1:8501；收到端口 49343。"
+        )
+
+    monkeypatch.setattr(release_check, "get_settings", invalid_settings)
+
+    assert release_check.main(["--skip-backup"]) == 2
+    output = capsys.readouterr().out
+    assert "[FAIL] Formal endpoint configuration" in output
+    assert "127.0.0.1:8501" in output
 
 
 def test_staged_agents_md_is_a_release_failure() -> None:

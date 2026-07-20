@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import socket
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
 import scripts.service_manager as manager
+from src.config import OfficialEndpointError
 
 
 def make_settings(tmp_path: Path, port: int) -> SimpleNamespace:
@@ -102,3 +104,19 @@ def test_duplicate_start_reuses_running_instance(monkeypatch, capsys) -> None:
 
     assert manager.start_service(open_browser=False) == 0
     assert "已经运行" in capsys.readouterr().out
+
+
+def test_cli_reports_invalid_formal_endpoint(monkeypatch, capsys) -> None:
+    def invalid_settings():
+        raise OfficialEndpointError(
+            "正式服务端点必须为 127.0.0.1:8501；收到端口 49344。"
+        )
+
+    monkeypatch.setattr(manager, "configure_manager_logging", lambda: None)
+    monkeypatch.setattr(manager, "get_settings", invalid_settings)
+    monkeypatch.setattr(sys, "argv", ["service_manager.py", "start", "--no-browser"])
+
+    assert manager.main() == 2
+    output = capsys.readouterr().out
+    assert "正式服务配置错误" in output
+    assert "127.0.0.1:8501" in output
