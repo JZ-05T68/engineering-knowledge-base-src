@@ -50,8 +50,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_title: str = "工程知识库 v0.1.1"
-    app_version: str = "0.1.1"
+    app_title: str = "工程知识库 v0.1.2"
+    app_version: str = "0.1.2"
     host: Literal["127.0.0.1"] = OFFICIAL_HOST
     port: int = Field(default=OFFICIAL_PORT, ge=1, le=65535)
 

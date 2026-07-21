@@ -286,11 +286,11 @@ def test_schema_and_application_version_incompatibility_are_rejected(
 def test_patch_upgrade_accepts_older_same_minor_backup_but_rejects_future_patch(
     tmp_path: Path,
 ) -> None:
-    v010_backup = _library(tmp_path / "v010", version="0.1.0").create_backup().backup_path
-    v012_backup = _library(tmp_path / "v012", version="0.1.2").create_backup().backup_path
+    v011_backup = _library(tmp_path / "v011", version="0.1.1").create_backup().backup_path
+    v013_backup = _library(tmp_path / "v013", version="0.1.3").create_backup().backup_path
 
-    compatible = validate_backup(v010_backup, expected_app_version="0.1.1")
-    future = validate_backup(v012_backup, expected_app_version="0.1.1")
+    compatible = validate_backup(v011_backup, expected_app_version="0.1.2")
+    future = validate_backup(v013_backup, expected_app_version="0.1.2")
 
     assert compatible.valid
     assert not future.valid
@@ -298,14 +298,14 @@ def test_patch_upgrade_accepts_older_same_minor_backup_but_rejects_future_patch(
 
 
 def test_patch_upgrade_can_restore_older_same_minor_backup(tmp_path: Path) -> None:
-    source = _library(tmp_path / "source", marker=b"v0.1.0", version="0.1.0")
+    source = _library(tmp_path / "source", marker=b"v0.1.1", version="0.1.1")
     backup = source.create_backup().backup_path
-    target = _library(tmp_path / "target", marker=b"v0.1.1", version="0.1.1")
+    target = _library(tmp_path / "target", marker=b"v0.1.2", version="0.1.2")
 
     result = target.restore_backup(backup, service_is_running=lambda: False)
 
     assert result.database_summary.schema_version == 4
-    assert (target.raw_dir / "manual.pdf").read_bytes() == b"v0.1.0"
+    assert (target.raw_dir / "manual.pdf").read_bytes() == b"v0.1.1"
     assert result.pre_restore_backup is not None
 
 

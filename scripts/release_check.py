@@ -1,4 +1,4 @@
-"""Unified v0.1.1 release-readiness checks with clear process exit status."""
+"""Unified v0.1.2 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -38,9 +38,9 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.1.1"
+EXPECTED_VERSION: Final[str] = "0.1.2"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
-ISOLATION_PORTS: Final[tuple[int, ...]] = (*range(8502, 8510), 8511, 8512)
+ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?i)(?:^|/)(?:browser[-_]?acceptance|acceptance[-_]?artifacts?|test[-_]?data)(?:/|$)"
     r"|(?:\.tmp$|\.partial$|\.incomplete$|test[^/]*\.db$)"
@@ -101,8 +101,17 @@ class ReleaseChecker:
         self.settings = settings
         self.project_root = project_root.resolve(strict=False)
 
-    def run(self, *, create_backup: bool = True) -> ReleaseReport:
+    def run(
+        self,
+        *,
+        create_backup: bool = True,
+        existing_backup: Path | None = None,
+        expect_service_stopped: bool = False,
+    ) -> ReleaseReport:
         """Run all checks and return a non-ambiguous report."""
+
+        if create_backup and existing_backup is not None:
+            raise ValueError("不能同时创建新备份和复验既有备份")
 
         started = time.perf_counter()
         results: list[CheckResult] = []
@@ -207,14 +216,22 @@ class ReleaseChecker:
         results.append(data_pollution_check(self.settings.data_dir))
 
         addresses = listener_addresses_for_port(self.settings.port)
-        results.append(
-            listener_check(
+        listener_result = (
+            stopped_listener_check(
+                self.settings.host,
+                self.settings.port,
+                addresses,
+                is_healthy(self.settings.port),
+            )
+            if expect_service_stopped
+            else listener_check(
                 self.settings.host,
                 self.settings.port,
                 addresses,
                 is_healthy(self.settings.port),
             )
         )
+        results.append(listener_result)
         residual = tuple(
             port
             for port in ISOLATION_PORTS
@@ -241,7 +258,11 @@ class ReleaseChecker:
         results.append(self._path_access_check())
 
         backup_path: Path | None = None
-        if create_backup:
+        if existing_backup is not None:
+            backup_result = self._existing_backup_check(existing_backup)
+            results.append(backup_result[0])
+            backup_path = backup_result[1]
+        elif create_backup:
             backup_result = self._backup_check()
             results.append(backup_result[0])
             backup_path = backup_result[1]
@@ -341,6 +362,45 @@ class ReleaseChecker:
             backup.backup_path,
         )
 
+    def _existing_backup_check(
+        self, backup_path: Path
+    ) -> tuple[CheckResult, Path | None]:
+        """Revalidate one already-created formal release backup without copying data."""
+
+        resolved = backup_path.resolve(strict=False)
+        expected_prefix = f"release-v{self.settings.app_version}-"
+        if not resolved.name.startswith(expected_prefix):
+            return (
+                CheckResult(
+                    "Backup verification",
+                    CheckStatus.FAIL,
+                    f"正式发布备份目录必须以 {expected_prefix} 开头",
+                ),
+                None,
+            )
+        validation = validate_backup(
+            resolved,
+            expected_app_version=self.settings.app_version,
+            expected_schema_version=SCHEMA_VERSION,
+        )
+        if not validation.valid:
+            return (
+                CheckResult(
+                    "Backup verification",
+                    CheckStatus.FAIL,
+                    "；".join(validation.errors),
+                ),
+                None,
+            )
+        return (
+            CheckResult(
+                "Backup verification",
+                CheckStatus.PASS,
+                f"既有正式发布备份复验通过（{validation.duration_seconds:.3f}s）",
+            ),
+            resolved,
+        )
+
 
 def version_consistency_check(
     project_root: Path, *, app_version: str, app_title: str
@@ -407,6 +467,30 @@ def listener_check(
     )
     return CheckResult(
         "Service listener", CheckStatus.PASS if valid else CheckStatus.FAIL, detail
+    )
+
+
+def stopped_listener_check(
+    configured_host: str,
+    port: int,
+    addresses: tuple[str, ...],
+    healthy: bool,
+) -> CheckResult:
+    """Require the formal endpoint configuration while the service is stopped."""
+
+    endpoint_ok = configured_host == OFFICIAL_HOST and port == OFFICIAL_PORT
+    stopped = not addresses and not healthy
+    valid = endpoint_ok and stopped
+    detail = (
+        f"{OFFICIAL_HOST}:{OFFICIAL_PORT} 已停止，等待正式运行验收"
+        if valid
+        else (
+            f"正式端点必须为 {OFFICIAL_HOST}:{OFFICIAL_PORT} 且发布收口阶段必须停止；"
+            f"configured={configured_host}:{port}, listeners={addresses}, healthy={healthy}"
+        )
+    )
+    return CheckResult(
+        "Service stopped state", CheckStatus.PASS if valid else CheckStatus.FAIL, detail
     )
 
 
@@ -563,11 +647,22 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.1.1 统一发布检查")
-    parser.add_argument(
+    parser = argparse.ArgumentParser(description="工程知识库 v0.1.2 统一发布检查")
+    backup_group = parser.add_mutually_exclusive_group()
+    backup_group.add_argument(
         "--skip-backup",
         action="store_true",
         help="仅供开发诊断；正式发布检查不得跳过经过验证的备份",
+    )
+    backup_group.add_argument(
+        "--existing-backup",
+        type=Path,
+        help="复验指定的既有正式发布备份，不再创建重复备份",
+    )
+    parser.add_argument(
+        "--expect-service-stopped",
+        action="store_true",
+        help="发布提交和 tag 收口阶段要求 127.0.0.1:8501 尚未监听",
     )
     return parser
 
@@ -580,7 +675,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[FAIL] Formal endpoint configuration: {exc}")
         return 2
     settings.ensure_directories()
-    report = ReleaseChecker(settings).run(create_backup=not arguments.skip_backup)
+    report = ReleaseChecker(settings).run(
+        create_backup=not arguments.skip_backup and arguments.existing_backup is None,
+        existing_backup=arguments.existing_backup,
+        expect_service_stopped=arguments.expect_service_stopped,
+    )
     print(render_report(report))
     return report.exit_code
 

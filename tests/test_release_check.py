@@ -1,4 +1,4 @@
-"""v0.0.8 unified release-check decision tests."""
+"""Unified release-check decision tests."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ import scripts.release_check as release_check
 from scripts.release_check import (
     CheckResult,
     CheckStatus,
+    ReleaseChecker,
     ReleaseReport,
     agents_staging_check,
     data_pollution_check,
@@ -18,11 +19,13 @@ from scripts.release_check import (
     parse_collected_test_count,
     parse_passed_test_count,
     render_report,
+    stopped_listener_check,
     successful_test_count,
     untracked_artifact_check,
     version_consistency_check,
 )
-from src.config import OfficialEndpointError
+from src.backup_service import BackupValidation
+from src.config import OfficialEndpointError, Settings
 
 
 def test_all_pass_report_returns_zero_and_clear_summary() -> None:
@@ -77,20 +80,20 @@ def test_version_mismatch_fails_readme_changelog_and_page_consistency(
 ) -> None:
     (tmp_path / "pages").mkdir()
     (tmp_path / "README.md").write_text(
-        "# Engineering Knowledge Base v0.1.1\n", encoding="utf-8"
+        "# Engineering Knowledge Base v0.1.2\n", encoding="utf-8"
     )
-    (tmp_path / "CHANGELOG.md").write_text("## v0.1.1\n", encoding="utf-8")
+    (tmp_path / "CHANGELOG.md").write_text("## v0.1.2\n", encoding="utf-8")
     (tmp_path / "app.py").write_text(
-        'st.set_page_config(page_title="工程知识库 v0.1.1")', encoding="utf-8"
+        'st.set_page_config(page_title="工程知识库 v0.1.2")', encoding="utf-8"
     )
     (tmp_path / "pages" / "1_test.py").write_text(
-        'st.set_page_config(page_title="测试 v0.1.1 stale v0.0.8")', encoding="utf-8"
+        'st.set_page_config(page_title="测试 v0.1.2 stale v0.0.8")', encoding="utf-8"
     )
 
     result = version_consistency_check(
         tmp_path,
-        app_version="0.1.1",
-        app_title="工程知识库 v0.1.1",
+        app_version="0.1.2",
+        app_title="工程知识库 v0.1.2",
     )
 
     assert result.status is CheckStatus.FAIL
@@ -108,6 +111,50 @@ def test_non_loopback_or_unhealthy_listener_is_failure() -> None:
     assert "正式端点必须为 127.0.0.1:8501" in wrong_port.detail
     assert unhealthy.status is CheckStatus.FAIL
     assert correct.status is CheckStatus.PASS
+
+
+def test_release_closure_can_require_service_to_be_stopped() -> None:
+    stopped = stopped_listener_check("127.0.0.1", 8501, (), False)
+    running = stopped_listener_check("127.0.0.1", 8501, ("127.0.0.1",), True)
+    wrong_port = stopped_listener_check("127.0.0.1", 8510, (), False)
+
+    assert stopped.status is CheckStatus.PASS
+    assert running.status is CheckStatus.FAIL
+    assert wrong_port.status is CheckStatus.FAIL
+
+
+def test_release_closure_revalidates_existing_formal_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    backup = tmp_path / "release-v0.1.2-20260721-120000-deadbeef"
+    checker = ReleaseChecker(
+        Settings(app_title="工程知识库 v0.1.2", app_version="0.1.2"),
+        tmp_path,
+    )
+
+    monkeypatch.setattr(
+        release_check,
+        "validate_backup",
+        lambda *args, **kwargs: BackupValidation(
+            backup_path=backup,
+            valid=True,
+            errors=(),
+            warnings=(),
+            manifest={},
+            database_summary=None,
+            duration_seconds=0.125,
+        ),
+    )
+
+    result, validated_path = checker._existing_backup_check(backup)
+    wrong_name, wrong_path = checker._existing_backup_check(
+        tmp_path / "ekb-v0.1.2-20260721"
+    )
+
+    assert result.status is CheckStatus.PASS
+    assert validated_path == backup.resolve(strict=False)
+    assert wrong_name.status is CheckStatus.FAIL
+    assert wrong_path is None
 
 
 def test_release_entrypoint_reports_invalid_formal_endpoint(
