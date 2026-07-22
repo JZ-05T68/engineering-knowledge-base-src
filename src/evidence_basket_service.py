@@ -335,6 +335,10 @@ class _EvidenceRepository:
 
     def get_or_create_basket(self, name: str) -> EvidenceBasket:
         with self._connection() as connection:
+            # BEGIN IMMEDIATE serializes the check-then-insert below: without a
+            # write lock, concurrent first access can create duplicate baskets
+            # because evidence_baskets.name has no UNIQUE constraint.
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT * FROM evidence_baskets WHERE name = ? ORDER BY id LIMIT 1", (name,)
             ).fetchone()

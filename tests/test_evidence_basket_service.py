@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
@@ -10,10 +13,12 @@ from PIL import Image
 
 from src.database import Database
 from src.evidence_basket_service import (
+    DEFAULT_BASKET_NAME,
     DuplicateEvidenceError,
     EvidenceBasketError,
     EvidenceBasketService,
     EvidenceSourceError,
+    _EvidenceRepository,
     evidence_text_html,
 )
 from src.models import EvidenceTextKind, PageStatus
@@ -259,3 +264,66 @@ def test_missing_files_and_document_cascade_are_explicit(tmp_path: Path) -> None
     )
     database.delete_document(document_id)
     assert service.list_items() == []
+
+
+class _SelectSyncConnection:
+    """Delegate parking the name-based basket lookup until both racers checked."""
+
+    def __init__(self, delegate: sqlite3.Connection, barrier: threading.Barrier) -> None:
+        self._delegate = delegate
+        self._barrier = barrier
+
+    def execute(self, sql: str, parameters: tuple[object, ...] = ()) -> sqlite3.Cursor:
+        cursor = self._delegate.execute(sql, parameters)
+        if sql.startswith("SELECT * FROM evidence_baskets WHERE name"):
+            try:
+                self._barrier.wait(timeout=5.0)
+            except threading.BrokenBarrierError:
+                pass  # Lock winner parked alone; proceed after the timeout.
+        return cursor
+
+
+def test_default_basket_concurrent_first_access_keeps_single_basket(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Both threads complete the existence check before either may insert; a
+    # missing write lock then deterministically creates two default baskets.
+    database = Database(tmp_path / "database" / "knowledge.db")
+    service = EvidenceBasketService(database)
+    barrier = threading.Barrier(2)
+    original_connection = _EvidenceRepository._connection
+
+    @contextmanager
+    def synchronized_connection(
+        self: _EvidenceRepository,
+    ) -> Iterator[_SelectSyncConnection]:
+        with original_connection(self) as connection:
+            yield _SelectSyncConnection(connection, barrier)
+
+    monkeypatch.setattr(_EvidenceRepository, "_connection", synchronized_connection)
+
+    basket_ids: list[int] = []
+    errors: list[Exception] = []
+
+    def first_access() -> None:
+        try:
+            basket_ids.append(service.default_basket().id)
+        except Exception as exc:  # surfaced by the assertions below
+            errors.append(exc)
+
+    threads = [threading.Thread(target=first_access) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30.0)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert errors == []
+    assert len(set(basket_ids)) == 1
+    with sqlite3.connect(database.database_path) as connection:
+        count = connection.execute(
+            "SELECT COUNT(*) FROM evidence_baskets WHERE name = ?",
+            (DEFAULT_BASKET_NAME,),
+        ).fetchone()[0]
+    assert count == 1
