@@ -23,6 +23,7 @@ class FakePdfService:
     def __init__(self) -> None:
         self.process_calls = 0
         self.reuse_existing_calls: list[bool] = []
+        self.process_page_calls: list[int] = []
 
     @staticmethod
     def calculate_sha256(file_path: Path | str) -> str:
@@ -50,6 +51,27 @@ class FakePdfService:
             ProcessedPage(1, first_image, "足够长的工程正文", False, 8),
             ProcessedPage(2, second_image, "", True, 0),
         ]
+
+    def process_page(
+        self,
+        pdf_path: Path | str,
+        output_dir: Path | str,
+        page_number: int,
+        *,
+        reuse_existing: bool = False,
+    ) -> ProcessedPage:
+        self.process_page_calls.append(page_number)
+        assert Path(pdf_path).is_file()
+        page_directory = Path(output_dir)
+        page_directory.mkdir(parents=True, exist_ok=True)
+        image = page_directory / f"page_{page_number:04d}.png"
+        if not image.exists():
+            image.write_bytes(f"page {page_number} png".encode())
+        if page_number == 1:
+            return ProcessedPage(1, image, "足够长的工程正文", False, 8)
+        if page_number == 2:
+            return ProcessedPage(2, image, "", True, 0)
+        raise PdfProcessingError(f"页码 {page_number} 超出范围。")
 
 
 class FakeDatabase:
@@ -468,8 +490,10 @@ class FakePyMuPdfDocument:
         self.pages = [FakePyMuPdfPage(1, "A B C 123"), FakePyMuPdfPage(2, " -- ")]
         self.page_count = len(self.pages)
         self.closed = False
+        self.load_page_calls: list[int] = []
 
     def load_page(self, index: int) -> FakePyMuPdfPage:
+        self.load_page_calls.append(index)
         return self.pages[index]
 
     def close(self) -> None:
@@ -545,3 +569,69 @@ def test_corrupt_pdf_reports_open_error(tmp_path: Path, monkeypatch: pytest.Monk
 
     with pytest.raises(PdfProcessingError, match="无法打开 PDF"):
         PdfService().process(source_path, tmp_path / "pages with spaces")
+
+
+def test_reprocess_page_uses_single_page_processing(tmp_path: Path) -> None:
+    database = Database(tmp_path / "database" / "knowledge.db")
+    fake_pdf = FakePdfService()
+    service = DocumentService(
+        database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+        pdf_service=fake_pdf,
+    )
+
+    result = service.import_pdf(b"%PDF fake", "fake.pdf")
+    target = result.pages[1]
+    process_calls_before = fake_pdf.process_calls
+
+    updated = service.reprocess_page(target.id)
+
+    assert fake_pdf.process_calls == process_calls_before
+    assert fake_pdf.process_page_calls == [target.page_number]
+    assert updated.status is PageStatus.PENDING
+    assert updated.processing_status == "pending_review"
+    assert updated.processing_error == ""
+    assert updated.extracted_text == ""
+
+
+def test_reprocess_page_marks_target_failed_on_page_error(tmp_path: Path) -> None:
+    class FailingPagePdf(FakePdfService):
+        def process_page(
+            self,
+            pdf_path: Path | str,
+            output_dir: Path | str,
+            page_number: int,
+            *,
+            reuse_existing: bool = False,
+        ) -> ProcessedPage:
+            processed = super().process_page(
+                pdf_path, output_dir, page_number, reuse_existing=reuse_existing
+            )
+            return ProcessedPage(
+                processed.page_number,
+                processed.image_path,
+                "",
+                True,
+                0,
+                f"第 {page_number} 页损坏",
+            )
+
+    database = Database(tmp_path / "database" / "knowledge.db")
+    service = DocumentService(
+        database,
+        tmp_path / "raw",
+        tmp_path / "pages",
+        tmp_path / "markdown",
+        pdf_service=FailingPagePdf(),
+    )
+
+    result = service.import_pdf(b"%PDF fake", "fake.pdf")
+    target = result.pages[0]
+
+    updated = service.reprocess_page(target.id)
+
+    assert updated.status is PageStatus.FAILED
+    assert updated.processing_status == "failed"
+    assert updated.processing_error == "第 1 页损坏"

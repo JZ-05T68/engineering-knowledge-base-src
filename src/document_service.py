@@ -438,16 +438,12 @@ class DocumentService:
         document = self.database.get_document(page.document_id)
         if document is None:
             raise DocumentImportError(f"找不到页面所属文档：{page.document_id}")
-        processed_pages = self.pdf_service.process(
+        processed = self.pdf_service.process_page(
             document.source_path,
             self.pages_dir / str(document.id),
+            page.page_number,
             reuse_existing=True,
         )
-        processed = next(
-            (item for item in processed_pages if item.page_number == page.page_number), None
-        )
-        if processed is None:
-            raise DocumentImportError(f"PDF 中找不到第 {page.page_number} 页。")
         if processed.processing_error:
             return self.database.update_page(
                 page.id,
