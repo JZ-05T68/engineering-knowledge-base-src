@@ -236,3 +236,22 @@ def test_long_pdf_page_diagnostics(
     rotated = pages[LONG_ROTATED_PAGE - 1].diagnostics
     assert rotated.is_rotated is True
     assert rotated.rotation == 90
+
+
+def test_long_pdf_import_diagnostics_summary(
+    imported_long: tuple[object, Database, Path, list[tuple[int, int]]],
+) -> None:
+    result, _, _, _ = imported_long
+    summary = result.diagnostics
+    assert summary.total_pages == LONG_PAGE_COUNT
+    assert summary.successful_pages == LONG_PAGE_COUNT
+    assert summary.failed_pages == 0
+    assert summary.failed_page_numbers == ()
+    assert summary.blank_pages == 0
+    assert summary.short_text_pages == 0
+    assert summary.needs_review_pages == 0
+    # Page 45 is rotated 90 degrees, so its display geometry is landscape too.
+    assert summary.landscape_page_numbers == tuple(
+        sorted((*LONG_LANDSCAPE_PAGES, LONG_ROTATED_PAGE))
+    )
+    assert summary.rotated_page_numbers == (LONG_ROTATED_PAGE,)

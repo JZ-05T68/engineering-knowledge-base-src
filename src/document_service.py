@@ -6,13 +6,18 @@ import hashlib
 import logging
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 from uuid import uuid4
 
 from src.models import Document, ImportRecord, ImportStatus, Page, PageStatus
-from src.pdf_service import PdfProcessingError, PdfService
+from src.pdf_service import (
+    DocumentDiagnosticsSummary,
+    PdfProcessingError,
+    PdfService,
+    summarize_page_diagnostics,
+)
 
 if TYPE_CHECKING:
     from src.database import Database
@@ -28,12 +33,19 @@ class DocumentImportError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class ImportResult:
-    """Outcome of a PDF import, including an intentional duplicate result."""
+    """Outcome of a PDF import, including an intentional duplicate result.
+
+    ``diagnostics`` summarizes this run's processed pages; a duplicate import
+    re-runs nothing, so it keeps the empty default summary.
+    """
 
     document: Document
     pages: tuple[Page, ...]
     duplicate: bool = False
     import_record: ImportRecord | None = None
+    diagnostics: DocumentDiagnosticsSummary = field(
+        default_factory=DocumentDiagnosticsSummary
+    )
 
 
 def first_reviewable_import_page(result: ImportResult) -> Page | None:
@@ -140,7 +152,7 @@ class DocumentService:
                     "检测到未完成的 PDF 导入，将复用原文件和已有页面继续：document_id=%s",
                     existing_document.id,
                 )
-                document, pages = self._process_document(
+                document, pages, summary = self._process_document(
                     existing_document,
                     source_path,
                     reuse_existing_images=True,
@@ -148,7 +160,10 @@ class DocumentService:
                 )
                 completed_record = self._record_result(import_record, document, pages)
                 return ImportResult(
-                    document=document, pages=pages, import_record=completed_record
+                    document=document,
+                    pages=pages,
+                    import_record=completed_record,
+                    diagnostics=summary,
                 )
 
             self.raw_dir.mkdir(parents=True, exist_ok=True)
@@ -170,7 +185,7 @@ class DocumentService:
                 page_count=0,
                 import_status=ImportStatus.PROCESSING,
             )
-            document, pages = self._process_document(
+            document, pages, summary = self._process_document(
                 document,
                 source_path,
                 reuse_existing_images=False,
@@ -184,7 +199,10 @@ class DocumentService:
                 len(pages),
             )
             return ImportResult(
-                document=document, pages=pages, import_record=completed_record
+                document=document,
+                pages=pages,
+                import_record=completed_record,
+                diagnostics=summary,
             )
         except (DocumentImportError, PdfProcessingError) as exc:
             self._record_failure(import_record, document, str(exc))
@@ -204,7 +222,7 @@ class DocumentService:
         *,
         reuse_existing_images: bool,
         progress_callback: Callable[[int, int], None] | None = None,
-    ) -> tuple[Document, tuple[Page, ...]]:
+    ) -> tuple[Document, tuple[Page, ...], DocumentDiagnosticsSummary]:
         """Render and persist pages, optionally completing an interrupted import."""
 
         if not source_path.is_file():
@@ -282,7 +300,7 @@ class DocumentService:
             updated_document = self.database.update_document_page_count(
                 document.id, len(processed_pages)
             )
-        return updated_document, tuple(pages)
+        return updated_document, tuple(pages), summarize_page_diagnostics(processed_pages)
 
     def save_page_markdown(
         self,

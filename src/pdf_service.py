@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -47,6 +47,74 @@ class ProcessedPage:
     effective_text_length: int
     processing_error: str = ""
     diagnostics: PageDiagnostics = field(default_factory=PageDiagnostics)
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentDiagnosticsSummary:
+    """Deterministic document-level aggregation of one import's page results.
+
+    Content-type counts (blank/short/landscape/rotated) cover only pages that
+    were processed successfully: a failed page carries default diagnostics and
+    must not be mistaken for a blank page. ``needs_review`` likewise counts
+    only successful pages, because the flag on a failed page is a meaningless
+    default. Page-number tuples are sorted and duplicate-free, and each count
+    equals the length of its page-number tuple.
+    """
+
+    total_pages: int = 0
+    successful_pages: int = 0
+    failed_pages: int = 0
+    blank_pages: int = 0
+    short_text_pages: int = 0
+    landscape_pages: int = 0
+    rotated_pages: int = 0
+    needs_review_pages: int = 0
+    failed_page_numbers: tuple[int, ...] = ()
+    blank_page_numbers: tuple[int, ...] = ()
+    short_text_page_numbers: tuple[int, ...] = ()
+    landscape_page_numbers: tuple[int, ...] = ()
+    rotated_page_numbers: tuple[int, ...] = ()
+    needs_review_page_numbers: tuple[int, ...] = ()
+
+
+def summarize_page_diagnostics(
+    pages: Sequence[ProcessedPage],
+) -> DocumentDiagnosticsSummary:
+    """Aggregate processed pages into a deterministic document summary.
+
+    Pure function: no file I/O, no database access, no PDF re-opening, no
+    mutation of the input pages, and no recomputation of text length or page
+    geometry — it only reads existing ``ProcessedPage``/``PageDiagnostics``
+    fields.
+    """
+
+    successful = [page for page in pages if not page.processing_error]
+    failed = [page for page in pages if page.processing_error]
+
+    def _numbers(selected: Iterable[ProcessedPage]) -> tuple[int, ...]:
+        return tuple(sorted({page.page_number for page in selected}))
+
+    blank = [page for page in successful if page.diagnostics.is_blank]
+    short = [page for page in successful if page.diagnostics.is_short_text]
+    landscape = [page for page in successful if page.diagnostics.is_landscape]
+    rotated = [page for page in successful if page.diagnostics.is_rotated]
+    review = [page for page in successful if page.needs_review]
+    return DocumentDiagnosticsSummary(
+        total_pages=len(pages),
+        successful_pages=len(successful),
+        failed_pages=len(failed),
+        blank_pages=len(blank),
+        short_text_pages=len(short),
+        landscape_pages=len(landscape),
+        rotated_pages=len(rotated),
+        needs_review_pages=len(review),
+        failed_page_numbers=_numbers(failed),
+        blank_page_numbers=_numbers(blank),
+        short_text_page_numbers=_numbers(short),
+        landscape_page_numbers=_numbers(landscape),
+        rotated_page_numbers=_numbers(rotated),
+        needs_review_page_numbers=_numbers(review),
+    )
 
 
 def _load_pymupdf() -> Any:
@@ -303,4 +371,12 @@ class PdfService:
 # Keep the common acronym spelling available to callers without duplicating logic.
 PDFService = PdfService
 
-__all__ = ["PDFService", "PageDiagnostics", "PdfProcessingError", "PdfService", "ProcessedPage"]
+__all__ = [
+    "DocumentDiagnosticsSummary",
+    "PDFService",
+    "PageDiagnostics",
+    "PdfProcessingError",
+    "PdfService",
+    "ProcessedPage",
+    "summarize_page_diagnostics",
+]
