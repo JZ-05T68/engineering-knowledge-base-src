@@ -806,8 +806,7 @@ with editor_column:
             st.warning("● 未保存")
         else:
             st.success("● 已保存")
-        save_column, clear_column = st.columns(2)
-        if save_column.button("保存笔记", type="primary", use_container_width=True):
+        if st.button("保存笔记", type="primary", use_container_width=True):
             try:
                 with st.spinner("正在保存……"):
                     document_service.save_page_markdown(
@@ -820,20 +819,6 @@ with editor_column:
                 st.error(f"保存失败：{exc}")
             else:
                 st.success("已保存")
-                st.rerun()
-        confirm_clear = clear_column.checkbox("确认清空", key=f"confirm_clear_{page.id}")
-        if clear_column.button(
-            "清空笔记",
-            disabled=not confirm_clear,
-            use_container_width=True,
-            key=f"clear_note_{page.id}",
-        ):
-            try:
-                document_service.clear_page_markdown(document.id, page.page_number)
-            except Exception as exc:
-                st.error(f"清空失败：{exc}")
-            else:
-                st.success("本页笔记已清空。")
                 st.rerun()
     with preview_tab:
         if markdown_content.strip():
