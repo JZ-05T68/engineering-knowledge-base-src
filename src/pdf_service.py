@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -14,6 +14,26 @@ LOGGER = logging.getLogger(__name__)
 
 class PdfProcessingError(RuntimeError):
     """Raised when a local PDF cannot be opened or processed completely."""
+
+
+@dataclass(frozen=True, slots=True)
+class PageDiagnostics:
+    """Deterministic, independently flagged geometry/text facts about one page.
+
+    ``width``/``height`` describe the page's display geometry (PyMuPDF
+    ``page.rect``, which already reflects rotation); ``rotation`` is the
+    normalized ``page.rotation`` value. The boolean flags are independent by
+    design: one page may be landscape, rotated and short-text at once.
+    """
+
+    width: float = 0.0
+    height: float = 0.0
+    rotation: int = 0
+    effective_char_count: int = 0
+    is_blank: bool = True
+    is_short_text: bool = False
+    is_landscape: bool = False
+    is_rotated: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +46,7 @@ class ProcessedPage:
     needs_review: bool
     effective_text_length: int
     processing_error: str = ""
+    diagnostics: PageDiagnostics = field(default_factory=PageDiagnostics)
 
 
 def _load_pymupdf() -> Any:
@@ -78,6 +99,27 @@ class PdfService:
         """Count meaningful Unicode letters and digits, ignoring layout noise."""
 
         return sum(character.isalnum() for character in text)
+
+    def _diagnose_page(self, page: Any, effective_char_count: int) -> PageDiagnostics:
+        """Build deterministic diagnostics from the shared page and text facts.
+
+        ``effective_char_count`` is the exact value already computed for the
+        ``needs_review`` decision, so both share one counting rule.
+        """
+
+        width = float(page.rect.width)
+        height = float(page.rect.height)
+        rotation = int(page.rotation) % 360
+        return PageDiagnostics(
+            width=width,
+            height=height,
+            rotation=rotation,
+            effective_char_count=effective_char_count,
+            is_blank=effective_char_count == 0,
+            is_short_text=0 < effective_char_count < self.minimum_text_length,
+            is_landscape=width > height,
+            is_rotated=rotation != 0,
+        )
 
     @staticmethod
     def _open_document(source_path: Path) -> tuple[Any, Any]:
@@ -155,6 +197,7 @@ class PdfService:
             extracted_text=extracted_text,
             needs_review=effective_length < self.minimum_text_length,
             effective_text_length=effective_length,
+            diagnostics=self._diagnose_page(page, effective_length),
         )
 
     def process(
@@ -260,4 +303,4 @@ class PdfService:
 # Keep the common acronym spelling available to callers without duplicating logic.
 PDFService = PdfService
 
-__all__ = ["PDFService", "PdfProcessingError", "PdfService", "ProcessedPage"]
+__all__ = ["PDFService", "PageDiagnostics", "PdfProcessingError", "PdfService", "ProcessedPage"]

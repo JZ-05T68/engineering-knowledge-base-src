@@ -14,12 +14,21 @@ from pathlib import Path
 import pytest
 from pdf_test_helpers import (
     BLANK_PAGE,
+    DIAG_BLANK_PAGE,
+    DIAG_LANDSCAPE_PAGE,
+    DIAG_MIXED_PAGE,
+    DIAG_NORMAL_PAGE,
+    DIAG_PAGE_COUNT,
+    DIAG_ROTATED_PAGE,
+    DIAG_ROTATION,
+    DIAG_SHORT_PAGE,
     NORMAL_PAGES,
     PAGE_COUNT,
     ROTATED_PAGE,
     SHORT_PAGE_TEXT,
     SHORT_TEXT_PAGE,
     WIDE_PAGE,
+    build_diagnostics_pdf,
     build_sample_pdf,
     expected_page_line,
 )
@@ -27,7 +36,12 @@ from pdf_test_helpers import (
 from src.database import Database
 from src.document_service import DocumentService
 from src.models import ImportStatus, PageStatus
-from src.pdf_service import PdfProcessingError, PdfService, ProcessedPage
+from src.pdf_service import (
+    PageDiagnostics,
+    PdfProcessingError,
+    PdfService,
+    ProcessedPage,
+)
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
 
@@ -341,3 +355,98 @@ def test_reprocess_page_only_touches_the_target_page(
     assert reloaded.page_count == PAGE_COUNT
     assert reloaded.import_status is ImportStatus.COMPLETED
     assert reloaded.import_error == ""
+
+
+# ---------------------------------------------------------------------------
+# Page diagnostics (stage D)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def diagnostics_pdf(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Build the diagnostics sample PDF once for the diagnostics tests."""
+
+    return build_diagnostics_pdf(tmp_path_factory.mktemp("diag_pdf") / "diag.pdf")
+
+
+@pytest.fixture(scope="module")
+def processed_diagnostics(
+    diagnostics_pdf: Path, tmp_path_factory: pytest.TempPathFactory
+) -> list[ProcessedPage]:
+    """Process the diagnostics PDF once through the real PdfService."""
+
+    return PdfService().process(
+        diagnostics_pdf, tmp_path_factory.mktemp("diag_pages")
+    )
+
+
+def _diagnostics(pages: list[ProcessedPage], page_number: int) -> PageDiagnostics:
+    return _page_by_number(pages, page_number).diagnostics
+
+
+def test_normal_page_diagnostics(processed_diagnostics: list[ProcessedPage]) -> None:
+    diag = _diagnostics(processed_diagnostics, DIAG_NORMAL_PAGE)
+    assert diag.is_blank is False
+    assert diag.is_short_text is False
+    assert diag.is_landscape is False
+    assert diag.is_rotated is False
+    assert diag.rotation == 0
+    assert diag.effective_char_count >= 20
+    assert diag.width < diag.height
+
+
+def test_blank_page_diagnostics(processed_diagnostics: list[ProcessedPage]) -> None:
+    page = _page_by_number(processed_diagnostics, DIAG_BLANK_PAGE)
+    diag = page.diagnostics
+    assert diag.is_blank is True
+    assert diag.is_short_text is False
+    assert diag.effective_char_count == 0
+    assert page.needs_review is True
+
+
+def test_short_text_page_diagnostics(processed_diagnostics: list[ProcessedPage]) -> None:
+    page = _page_by_number(processed_diagnostics, DIAG_SHORT_PAGE)
+    diag = page.diagnostics
+    assert diag.is_blank is False
+    assert diag.is_short_text is True
+    assert 0 < diag.effective_char_count < 20
+    assert page.needs_review is True
+
+
+def test_landscape_page_diagnostics(processed_diagnostics: list[ProcessedPage]) -> None:
+    diag = _diagnostics(processed_diagnostics, DIAG_LANDSCAPE_PAGE)
+    assert diag.is_landscape is True
+    assert diag.width > diag.height
+    assert diag.is_rotated is False
+
+
+def test_rotated_page_diagnostics(processed_diagnostics: list[ProcessedPage]) -> None:
+    diag = _diagnostics(processed_diagnostics, DIAG_ROTATED_PAGE)
+    assert diag.is_rotated is True
+    assert diag.rotation == DIAG_ROTATION
+    assert 0 <= diag.rotation < 360
+
+
+def test_one_page_can_carry_multiple_flags(
+    processed_diagnostics: list[ProcessedPage],
+) -> None:
+    diag = _diagnostics(processed_diagnostics, DIAG_MIXED_PAGE)
+    assert diag.is_short_text is True
+    assert diag.is_rotated is True
+    assert diag.rotation == DIAG_ROTATION
+    # A 595x842 page rotated 90 degrees displays as 842x595.
+    assert diag.is_landscape is True
+    assert diag.is_blank is False
+
+
+def test_process_and_process_page_produce_identical_diagnostics(
+    diagnostics_pdf: Path,
+    processed_diagnostics: list[ProcessedPage],
+    tmp_path: Path,
+) -> None:
+    service = PdfService()
+    for page_number in range(1, DIAG_PAGE_COUNT + 1):
+        single = service.process_page(
+            diagnostics_pdf, tmp_path / f"single_{page_number}", page_number
+        )
+        assert single.diagnostics == _diagnostics(processed_diagnostics, page_number)

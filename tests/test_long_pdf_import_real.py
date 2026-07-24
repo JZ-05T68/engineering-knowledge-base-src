@@ -12,7 +12,13 @@ import shutil
 from pathlib import Path
 
 import pytest
-from pdf_test_helpers import LONG_PAGE_COUNT, build_long_pdf, long_page_line
+from pdf_test_helpers import (
+    LONG_LANDSCAPE_PAGES,
+    LONG_PAGE_COUNT,
+    LONG_ROTATED_PAGE,
+    build_long_pdf,
+    long_page_line,
+)
 
 from src.database import Database
 from src.document_service import DocumentService
@@ -207,3 +213,26 @@ def test_import_temp_tree_can_be_removed_cleanly(
     shutil.copytree(base, copy_dir)
     shutil.rmtree(copy_dir)
     assert not copy_dir.exists()
+
+
+def test_long_pdf_page_diagnostics(
+    processed_long: tuple[list[ProcessedPage], Path, list[tuple[int, int]]],
+) -> None:
+    pages, _, _ = processed_long
+    assert len(pages) == LONG_PAGE_COUNT
+    assert all(page.processing_error == "" for page in pages)
+
+    normal = pages[0].diagnostics
+    assert normal.is_blank is False
+    assert normal.is_short_text is False
+    assert normal.is_landscape is False
+    assert normal.is_rotated is False
+
+    for number in LONG_LANDSCAPE_PAGES:
+        diag = pages[number - 1].diagnostics
+        assert diag.is_landscape is True
+        assert diag.width > diag.height
+
+    rotated = pages[LONG_ROTATED_PAGE - 1].diagnostics
+    assert rotated.is_rotated is True
+    assert rotated.rotation == 90

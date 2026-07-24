@@ -470,6 +470,8 @@ class FakePyMuPdfPage:
     def __init__(self, page_number: int, text: str) -> None:
         self.page_number = page_number
         self.text = text
+        self.rect = SimpleNamespace(width=595.0, height=842.0)
+        self.rotation = 0
 
     def get_pixmap(self, *, matrix: object, alpha: bool) -> FakePixmap:
         assert matrix == (2.0, 2.0)
