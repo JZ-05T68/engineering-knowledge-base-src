@@ -31,6 +31,44 @@ def _normal_page_text(page_number: int) -> str:
     return f"{expected_page_line(page_number)} Normal text page for real PyMuPDF coverage."
 
 
+LONG_PAGE_COUNT = 120
+# A few pages use a landscape size and one page is rotated so the long
+# document still covers differing page dimensions and orientations.
+LONG_LANDSCAPE_PAGES: tuple[int, ...] = (30, 60, 90, 120)
+LONG_ROTATED_PAGE = 45
+
+
+def long_page_line(page_number: int) -> str:
+    """Return the unique, verifiable line written into each long-PDF page."""
+
+    return (
+        f"Engineering long document baseline page {page_number} "
+        f"of {LONG_PAGE_COUNT}."
+    )
+
+
+def build_long_pdf(path: Path | str, page_count: int = LONG_PAGE_COUNT) -> Path:
+    """Create a long text PDF with a few landscape/rotated pages mixed in."""
+
+    pdf_path = Path(path)
+    pdf_path.parent.mkdir(parents=True, exist_ok=True)
+    document = pymupdf.open()
+    try:
+        for page_number in range(1, page_count + 1):
+            if page_number in LONG_LANDSCAPE_PAGES:
+                page = document.new_page(width=842, height=595)
+            else:
+                page = document.new_page(width=595, height=842)
+            page.insert_text((72, 72), long_page_line(page_number), fontsize=12)
+            if page_number == LONG_ROTATED_PAGE:
+                page.set_rotation(90)
+
+        document.save(str(pdf_path))
+    finally:
+        document.close()
+    return pdf_path
+
+
 def build_sample_pdf(path: Path | str) -> Path:
     """Create a 10-page PDF mixing normal, blank, short, rotated and wide pages."""
 
