@@ -14,6 +14,15 @@ from src.batch_ui import (
     render_visible_page_batch_ui,
 )
 from src.models import Page, PageStatus
+from src.ocr_engine import OcrUnavailable
+from src.ocr_policy import has_reusable_ocr_text
+from src.ocr_ui import (
+    OCR_DRAFT_HEADING,
+    OCR_DRAFT_HINT,
+    OCR_RUNNING_HINT,
+    page_ocr_feedback,
+    page_ocr_unavailable_feedback,
+)
 from src.review_shortcuts import review_shortcuts_html
 from src.runtime import (
     application_classification_metadata_service,
@@ -325,6 +334,29 @@ with image_column:
             st.error(f"页面图片缺失：{page.image_path}")
     with st.expander("查看已提取文本"):
         st.text(page.extracted_text or "（没有提取到文本）")
+    if has_reusable_ocr_text(page.ocr_text):
+        st.markdown(f"**{OCR_DRAFT_HEADING}**")
+        st.caption(OCR_DRAFT_HINT)
+        st.text_area(
+            "OCR 初稿",
+            value=page.ocr_text,
+            height=200,
+            disabled=True,
+            key=f"review_ocr_draft_{page.id}",
+            label_visibility="collapsed",
+        )
+    elif st.button("执行本地 OCR", key=f"review_run_ocr_{page.id}"):
+        try:
+            with st.spinner(OCR_RUNNING_HINT):
+                ocr_result = document_service.run_page_ocr(page.id)
+        except OcrUnavailable:
+            level, message = page_ocr_unavailable_feedback()
+        else:
+            level, message = page_ocr_feedback(
+                ocr_result.outcome, ocr_result.page.ocr_text
+            )
+        st.session_state[_FLASH_KEY] = (level, message)
+        st.rerun()
     if page.processing_error:
         st.error(f"失败原因：{page.processing_error}")
         if st.button("重新处理此页"):
