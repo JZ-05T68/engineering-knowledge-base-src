@@ -30,6 +30,10 @@ INVALID_FILENAME_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MAX_STORED_STEM_LENGTH = 150
 OCR_ERROR_PREFIX = "OCR："
 OCR_ERROR_MESSAGE_LIMIT = 200
+_LOCAL_PATH_PLACEHOLDER = "[本地路径]"
+_FILE_URI_PATTERN = re.compile(r"file://\S*", re.IGNORECASE)
+_WINDOWS_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:[\\/]|\\\\)[^\s，]*")
+_POSIX_PATH_PATTERN = re.compile(r"(?:(?<=^)|(?<=[\s（(\"'：:，,；;]))/[^\s，]+")
 
 
 class DocumentImportError(RuntimeError):
@@ -83,6 +87,29 @@ def _merge_ocr_error(processing_error: str, ocr_error: str) -> str:
     ]
     kept.append(ocr_error)
     return "；".join(kept)
+
+
+def _sanitize_ocr_error_message(message: str) -> str:
+    """Normalize one engine error for durable, privacy-safe persistence.
+
+    The stored message keeps the engine's failure description but drops
+    tracebacks, local absolute paths (Windows, POSIX, UNC and ``file://``
+    URIs — replaced by a fixed placeholder), the fullwidth segment
+    separator ``；`` (normalized to ``，`` so it cannot masquerade as a
+    ``processing_error`` segment boundary), and all excess whitespace.
+    The result is bounded and never empty. Detection is purely textual:
+    no filesystem, network, or path-existence checks are involved.
+    """
+
+    compact = " ".join((message or "").split()).replace("；", "，")
+    for pattern in (
+        _FILE_URI_PATTERN,
+        _WINDOWS_PATH_PATTERN,
+        _POSIX_PATH_PATTERN,
+    ):
+        compact = pattern.sub(_LOCAL_PATH_PLACEHOLDER, compact)
+    compact = " ".join(compact.split())
+    return compact[:OCR_ERROR_MESSAGE_LIMIT] or "识别失败。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -589,7 +616,7 @@ class DocumentService:
     def _record_page_ocr_failure(self, page: Page, message: str) -> PageOcrResult:
         """Persist a bounded OCR-prefixed error without touching page content."""
 
-        detail = message.strip()[:OCR_ERROR_MESSAGE_LIMIT] or "识别失败。"
+        detail = _sanitize_ocr_error_message(message)
         ocr_error = OCR_ERROR_PREFIX + detail
         merged_error = _merge_ocr_error(page.processing_error, ocr_error)
         updated = self.database.update_page(page.id, processing_error=merged_error)

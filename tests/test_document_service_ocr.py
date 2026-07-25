@@ -473,3 +473,162 @@ def test_missing_page_uses_existing_not_found_semantics(tmp_path: Path) -> None:
         service.run_page_ocr(999999)
 
     assert engine.calls == []
+
+
+# Persisted error sanitization -----------------------------------------------
+
+
+def test_windows_absolute_path_is_sanitized(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message=r"识别失败：C:\Users\Test\private\page.png")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path)
+
+    result = service.run_page_ocr(page.id)
+
+    assert result.outcome is PageOcrOutcome.FAILED
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error.startswith("OCR：")
+    assert "[本地路径]" in persisted.processing_error
+    assert "C:\\" not in persisted.processing_error
+    assert "Test" not in persisted.processing_error
+    assert "private" not in persisted.processing_error
+
+
+def test_posix_absolute_path_is_sanitized(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="识别失败：/tmp/private/model.onnx 无法加载")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path)
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert "[本地路径]" in persisted.processing_error
+    assert "/tmp" not in persisted.processing_error
+    assert "model.onnx" not in persisted.processing_error
+    assert "无法加载" in persisted.processing_error
+
+
+def test_file_uri_is_sanitized(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="无法打开 file:///D:/secret/page.png 文件")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path)
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert "[本地路径]" in persisted.processing_error
+    assert "file://" not in persisted.processing_error
+    assert "secret" not in persisted.processing_error
+
+
+def test_fullwidth_semicolon_cannot_create_ghost_segment(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="识别失败；详细原因")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path)
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == "OCR：识别失败，详细原因"
+    # 随后一次成功必须完整清除 OCR 段，不残留幽灵错误。
+    service.ocr_engine = FakeOcrEngine(result="恢复后的文本")
+    result = service.run_page_ocr(page.id)
+    assert result.outcome is PageOcrOutcome.COMPLETED
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == ""
+
+
+def test_semicolon_message_preserves_unrelated_error(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="识别失败；详细原因")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path, processing_error="页面渲染失败")
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == "页面渲染失败；OCR：识别失败，详细原因"
+    service.ocr_engine = FakeOcrEngine(result="恢复后的文本")
+    service.run_page_ocr(page.id)
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == "页面渲染失败"
+
+
+def test_empty_exception_message_gets_stable_default(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path)
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == "OCR：识别失败。"
+
+
+def test_multiple_old_ocr_segments_collapse_to_one(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="新的失败")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(
+        database, tmp_path, processing_error="OCR：旧错误一；OCR：旧错误二"
+    )
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error.count("OCR：") == 1
+    assert "新的失败" in persisted.processing_error
+    assert "旧错误" not in persisted.processing_error
+
+
+def test_non_prefixed_ocr_mention_is_never_removed(tmp_path: Path) -> None:
+    database, service = _make_service(tmp_path, ocr_engine=FakeOcrEngine())
+    _, page = _create_page(database, tmp_path, processing_error="OCR文件读取失败")
+
+    result = service.run_page_ocr(page.id)
+
+    assert result.outcome is PageOcrOutcome.COMPLETED
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == "OCR文件读取失败"
+
+
+def test_non_ocr_prefixed_foreign_error_is_never_removed(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="新的失败")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path, processing_error="非OCR：提示")
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert "非OCR：提示" in persisted.processing_error
+    service.ocr_engine = FakeOcrEngine(result="恢复后的文本")
+    service.run_page_ocr(page.id)
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error == "非OCR：提示"
+
+
+def test_whitespace_is_collapsed_and_length_is_bounded(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="第一行\n第二行\t第三行   第四行" + "长" * 500)
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(database, tmp_path)
+
+    service.run_page_ocr(page.id)
+
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    error = persisted.processing_error
+    assert error.startswith("OCR：第一行 第二行 第三行 第四行")
+    assert "\n" not in error
+    assert "\t" not in error
+    assert "  " not in error
+    assert len(error) <= len("OCR：") + 200
