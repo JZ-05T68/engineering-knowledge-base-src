@@ -262,6 +262,12 @@ class EvidenceBasketService:
         projects = tuple(
             project.name for project in self._database.get_page_projects(page.id)
         )
+        normalized_ocr = _match_text(page.ocr_text)
+        from_ocr = (
+            item.text_kind is EvidenceTextKind.ORIGINAL
+            and bool(normalized_ocr)
+            and _match_text(item.evidence_text) in normalized_ocr
+        )
         return replace(
             item,
             document_title=document.title,
@@ -272,6 +278,7 @@ class EvidenceBasketService:
             document_source_path=document.source_path,
             image_path=page.image_path,
             document_sha256=document.sha256,
+            from_ocr_text=from_ocr,
         )
 
     def _validated_source(self, document_id: int, page_id: int) -> tuple[Document, Page]:

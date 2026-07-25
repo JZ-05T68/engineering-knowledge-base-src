@@ -390,6 +390,7 @@ class EvidenceItem:
     document_source_path: Path | None = None
     image_path: Path | None = None
     document_sha256: str = ""
+    from_ocr_text: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -23,6 +23,9 @@ _UNREVIEWED_STATUSES = {
     PageStatus.FAILED,
 }
 _MARKDOWN_INLINE = re.compile(r"([\\`*_{}\[\]<>#+|])")
+OCR_EVIDENCE_WARNING = (
+    "本段内容来自本地 OCR 初稿，未经人工核验，请以原始页面图像为准。"
+)
 
 
 class EvidencePackageError(RuntimeError):
@@ -101,8 +104,13 @@ class EvidencePackageBuilder:
                 "",
             ]
         )
-        source_text, source_label = _original_material(result, matched_excerpt)
-        lines.extend([f"来源：{source_label}", "", _markdown_block(source_text)])
+        source_text, source_label, source_is_ocr = _original_material(
+            result, matched_excerpt
+        )
+        lines.append(f"来源：{source_label}")
+        if source_is_ocr:
+            lines.extend(["", f"> OCR 提示：{OCR_EVIDENCE_WARNING}"])
+        lines.extend(["", _markdown_block(source_text)])
         if result.markdown_content.strip():
             lines.extend(
                 [
@@ -209,10 +217,11 @@ class EvidenceBasketPackageBuilder:
             lines.extend(
                 [
                     "可信度：该选区已在加入时匹配当前 PDF 文本层或 OCR 原始文本。",
-                    "",
-                    _markdown_block(item.evidence_text),
                 ]
             )
+            if item.from_ocr_text:
+                lines.extend(["", f"> OCR 提示：{OCR_EVIDENCE_WARNING}"])
+            lines.extend(["", _markdown_block(item.evidence_text)])
         else:
             lines.append("（本条选区未匹配原始文本；不得视为已验证原文。）")
 
@@ -271,25 +280,27 @@ def _fallback_match_fields(result: SearchResult) -> tuple[SearchField, ...]:
     return (SearchField.DOCUMENT_TITLE,)
 
 
-def _original_material(result: SearchResult, matched_excerpt: str) -> tuple[str, str]:
+def _original_material(
+    result: SearchResult, matched_excerpt: str
+) -> tuple[str, str, bool]:
     content = result.content.strip()
     if (
         SearchField.OCR_TEXT in result.match_fields
         and result.ocr_text.strip()
         and content == result.ocr_text.strip()
     ):
-        return matched_excerpt or result.ocr_text.strip(), "OCR 文本"
+        return matched_excerpt or result.ocr_text.strip(), "OCR 文本", True
     if (
         SearchField.EXTRACTED_TEXT in result.match_fields
         and result.extracted_text.strip()
         and content == result.extracted_text.strip()
     ):
-        return matched_excerpt or result.extracted_text.strip(), "PDF 文本层"
+        return matched_excerpt or result.extracted_text.strip(), "PDF 文本层", False
     if result.ocr_text.strip():
-        return result.ocr_text.strip(), "OCR 文本"
+        return result.ocr_text.strip(), "OCR 文本", True
     if result.extracted_text.strip():
-        return result.extracted_text.strip(), "PDF 文本层"
-    return "（本页没有可用的原始文本，请核对页面图像。）", "页面图像"
+        return result.extracted_text.strip(), "PDF 文本层", False
+    return "（本页没有可用的原始文本，请核对页面图像。）", "页面图像", False
 
 
 def _markdown_inline(value: str) -> str:
@@ -307,6 +318,7 @@ def _markdown_block(value: str) -> str:
 
 
 __all__ = [
+    "OCR_EVIDENCE_WARNING",
     "EvidenceBasketPackageBuilder",
     "EvidencePackageBuilder",
     "EvidencePackageError",

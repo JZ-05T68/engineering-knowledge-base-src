@@ -13,6 +13,7 @@ from uuid import uuid4
 
 import pytest
 
+import src.ocr_engine as ocr_engine_module
 from src.database import Database, DatabaseError
 from src.document_service import (
     DocumentImportError,
@@ -20,7 +21,7 @@ from src.document_service import (
     PageOcrOutcome,
 )
 from src.models import Page, PageStatus
-from src.ocr_engine import OcrExecutionError, OcrUnavailable
+from src.ocr_engine import OcrExecutionError
 from src.pdf_service import PdfService
 
 LONG_TEXT = "工程正文内容" * 10
@@ -353,7 +354,9 @@ def test_missing_engine_raises_unavailable_without_writes(tmp_path: Path) -> Non
     _, page = _create_page(database, tmp_path)
     before = database.get_page(page.id)
 
-    with pytest.raises(OcrUnavailable):
+    # 通过模块属性引用异常类：阶段 B 的 importlib.reload 测试会重建
+    # src.ocr_engine 的类对象，模块级旧引用在特定执行顺序下会失配。
+    with pytest.raises(ocr_engine_module.OcrUnavailable):
         service.run_page_ocr(page.id)
 
     after = database.get_page(page.id)
