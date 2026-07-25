@@ -1,4 +1,4 @@
-"""Unified v0.2.0 release-readiness checks with clear process exit status."""
+"""Unified v0.2.1 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.2.0"
+EXPECTED_VERSION: Final[str] = "0.2.1"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -647,7 +647,7 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.2.0 统一发布检查")
+    parser = argparse.ArgumentParser(description="工程知识库 v0.2.1 统一发布检查")
     backup_group = parser.add_mutually_exclusive_group()
     backup_group.add_argument(
         "--skip-backup",
