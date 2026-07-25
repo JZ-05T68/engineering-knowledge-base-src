@@ -1,4 +1,4 @@
-"""Application service for durable local document and Markdown imports."""
+"""Application service for durable local document, Markdown, and page OCR flows."""
 
 from __future__ import annotations
 
@@ -7,11 +7,14 @@ import logging
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 from uuid import uuid4
 
 from src.models import Document, ImportRecord, ImportStatus, Page, PageStatus
+from src.ocr_engine import OcrEngine, OcrExecutionError, require_ocr_engine
+from src.ocr_policy import is_page_eligible_for_ocr
 from src.pdf_service import (
     DocumentDiagnosticsSummary,
     PdfProcessingError,
@@ -25,10 +28,61 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 INVALID_FILENAME_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MAX_STORED_STEM_LENGTH = 150
+OCR_ERROR_PREFIX = "OCR："
+OCR_ERROR_MESSAGE_LIMIT = 200
 
 
 class DocumentImportError(RuntimeError):
     """Raised when a document cannot be imported into local storage safely."""
+
+
+class PageOcrOutcome(StrEnum):
+    """Typed outcome of one :meth:`DocumentService.run_page_ocr` call.
+
+    ``OcrUnavailable`` is raised instead of an outcome when no usable
+    engine exists, so callers distinguish the four results without any
+    string parsing: completed, not eligible, engine unavailable
+    (exception), and per-page execution failure.
+    """
+
+    COMPLETED = "completed"
+    NOT_ELIGIBLE = "not_eligible"
+    FAILED = "failed"
+
+
+@dataclass(frozen=True, slots=True)
+class PageOcrResult:
+    """Result of one isolated single-page OCR attempt.
+
+    ``page`` is the current page state after the attempt; it is unchanged
+    unless the outcome is ``COMPLETED`` (OCR text persisted) or ``FAILED``
+    (OCR error recorded in ``processing_error``).
+    """
+
+    page: Page
+    outcome: PageOcrOutcome
+
+
+def _clear_ocr_error(processing_error: str) -> str:
+    """Remove only OCR-prefixed segments, preserving unrelated errors."""
+
+    return "；".join(
+        segment
+        for segment in processing_error.split("；")
+        if segment and not segment.startswith(OCR_ERROR_PREFIX)
+    )
+
+
+def _merge_ocr_error(processing_error: str, ocr_error: str) -> str:
+    """Replace any previous OCR error while preserving unrelated errors."""
+
+    kept = [
+        segment
+        for segment in processing_error.split("；")
+        if segment and not segment.startswith(OCR_ERROR_PREFIX)
+    ]
+    kept.append(ocr_error)
+    return "；".join(kept)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,12 +132,14 @@ class DocumentService:
         pages_dir: Path | str,
         markdown_dir: Path | str,
         pdf_service: PdfService | None = None,
+        ocr_engine: OcrEngine | None = None,
     ) -> None:
         self.database = database
         self.raw_dir = Path(raw_dir)
         self.pages_dir = Path(pages_dir)
         self.markdown_dir = Path(markdown_dir)
         self.pdf_service = pdf_service or PdfService()
+        self.ocr_engine = ocr_engine
 
     def import_pdf(
         self,
@@ -481,6 +537,79 @@ class DocumentService:
             processing_error="",
         )
 
+    def run_page_ocr(self, page_id: int) -> PageOcrResult:
+        """Run local OCR for one page with failure isolated to that page.
+
+        The page's rendered PNG is checked, the stage-A eligibility policy
+        decides whether OCR may run, and only then is the injected engine
+        required and called exactly once. A missing engine raises
+        ``OcrUnavailable`` without touching the database; an eligible page
+        that fails recognition keeps all existing content and records only
+        a bounded OCR-prefixed ``processing_error``. ``extracted_text``,
+        user Markdown, ``review_status`` and the PNG are never modified.
+        """
+
+        page = self.database.get_page(page_id)
+        if page is None:
+            raise DocumentImportError(f"找不到页面：{page_id}")
+
+        image_path = Path(page.image_path)
+        image_available = self._page_image_available(image_path)
+        if not is_page_eligible_for_ocr(
+            extracted_text=page.extracted_text,
+            ocr_text=page.ocr_text,
+            image_available=image_available,
+            minimum_text_length=self.pdf_service.minimum_text_length,
+        ):
+            return PageOcrResult(page=page, outcome=PageOcrOutcome.NOT_ELIGIBLE)
+
+        engine = require_ocr_engine(self.ocr_engine)
+        try:
+            recognized = engine.recognize(image_path)
+        except OcrExecutionError as exc:
+            return self._record_page_ocr_failure(page, str(exc))
+        if not isinstance(recognized, str):
+            return self._record_page_ocr_failure(page, "引擎返回了非文本结果。")
+
+        cleared_error = _clear_ocr_error(page.processing_error)
+        update_fields: dict[str, object] = {
+            "ocr_text": recognized,
+            "processing_status": "ocr_completed",
+        }
+        if cleared_error != page.processing_error:
+            update_fields["processing_error"] = cleared_error
+        updated = self.database.update_page(page.id, **update_fields)  # type: ignore[arg-type]
+        LOGGER.info(
+            "页面 OCR 完成：document_id=%s page_number=%s",
+            page.document_id,
+            page.page_number,
+        )
+        return PageOcrResult(page=updated, outcome=PageOcrOutcome.COMPLETED)
+
+    def _record_page_ocr_failure(self, page: Page, message: str) -> PageOcrResult:
+        """Persist a bounded OCR-prefixed error without touching page content."""
+
+        detail = message.strip()[:OCR_ERROR_MESSAGE_LIMIT] or "识别失败。"
+        ocr_error = OCR_ERROR_PREFIX + detail
+        merged_error = _merge_ocr_error(page.processing_error, ocr_error)
+        updated = self.database.update_page(page.id, processing_error=merged_error)
+        LOGGER.warning(
+            "页面 OCR 失败：document_id=%s page_number=%s error=%s",
+            page.document_id,
+            page.page_number,
+            ocr_error,
+        )
+        return PageOcrResult(page=updated, outcome=PageOcrOutcome.FAILED)
+
+    @staticmethod
+    def _page_image_available(image_path: Path) -> bool:
+        """Whether the page PNG is a non-empty regular file, without reading it."""
+
+        try:
+            return image_path.is_file() and image_path.stat().st_size > 0
+        except OSError:
+            return False
+
     def delete_document(self, document_id: int, *, confirmed: bool = False) -> None:
         """Delete one document after explicit confirmation and clean only its files."""
 
@@ -649,5 +778,7 @@ __all__ = [
     "DocumentImportError",
     "DocumentService",
     "ImportResult",
+    "PageOcrOutcome",
+    "PageOcrResult",
     "first_reviewable_import_page",
 ]
