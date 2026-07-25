@@ -513,6 +513,32 @@ def test_posix_absolute_path_is_sanitized(tmp_path: Path) -> None:
     assert "无法加载" in persisted.processing_error
 
 
+def test_assigned_posix_path_is_sanitized(tmp_path: Path) -> None:
+    engine = FailingOcrEngine(message="path=/tmp/private/page.png")
+    database, service = _make_service(tmp_path, ocr_engine=engine)
+    _, page = _create_page(
+        database,
+        tmp_path,
+        extracted_text="已有文本层",
+        markdown_content="人工整理笔记",
+    )
+
+    result = service.run_page_ocr(page.id)
+
+    assert result.outcome is PageOcrOutcome.FAILED
+    persisted = database.get_page(page.id)
+    assert persisted is not None
+    assert persisted.processing_error.startswith("OCR：")
+    assert "[本地路径]" in persisted.processing_error
+    assert "/tmp/private/page.png" not in persisted.processing_error
+    assert "private" not in persisted.processing_error
+    assert persisted.ocr_text == page.ocr_text == ""
+    assert persisted.processing_status != "ocr_completed"
+    assert persisted.extracted_text == page.extracted_text
+    assert persisted.markdown_content == page.markdown_content
+    assert persisted.status is page.status
+
+
 def test_file_uri_is_sanitized(tmp_path: Path) -> None:
     engine = FailingOcrEngine(message="无法打开 file:///D:/secret/page.png 文件")
     database, service = _make_service(tmp_path, ocr_engine=engine)

@@ -33,7 +33,7 @@ OCR_ERROR_MESSAGE_LIMIT = 200
 _LOCAL_PATH_PLACEHOLDER = "[本地路径]"
 _FILE_URI_PATTERN = re.compile(r"file://\S*", re.IGNORECASE)
 _WINDOWS_PATH_PATTERN = re.compile(r"(?:[A-Za-z]:[\\/]|\\\\)[^\s，]*")
-_POSIX_PATH_PATTERN = re.compile(r"(?:(?<=^)|(?<=[\s（(\"'：:，,；;]))/[^\s，]+")
+_POSIX_PATH_PATTERN = re.compile(r"(?:(?<=^)|(?<=[\s（(\"'：:，,；;=]))/[^\s，]+")
 
 
 class DocumentImportError(RuntimeError):
