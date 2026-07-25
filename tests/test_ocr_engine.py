@@ -125,8 +125,15 @@ def test_module_source_has_no_network_or_subprocess_usage() -> None:
 
 def test_import_has_no_filesystem_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(tmp_path)
-    importlib.reload(ocr_engine_module)
-    assert list(tmp_path.iterdir()) == []
+    # reload re-executes class definitions inside the shared module object;
+    # snapshot and restore so later tests keep the original class identity.
+    snapshot = dict(ocr_engine_module.__dict__)
+    try:
+        importlib.reload(ocr_engine_module)
+        assert list(tmp_path.iterdir()) == []
+    finally:
+        ocr_engine_module.__dict__.clear()
+        ocr_engine_module.__dict__.update(snapshot)
 
 
 def test_module_coimports_with_ocr_policy() -> None:

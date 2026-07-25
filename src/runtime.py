@@ -18,6 +18,7 @@ from src.diagnostic_service import DiagnosticService
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.pdf_service import PdfService
+from src.rapidocr_engine import RapidOcrEngine
 
 
 def configure_logging(log_path: Path) -> None:
@@ -84,6 +85,19 @@ def application_database() -> Database:
 
 
 @lru_cache(maxsize=1)
+def application_ocr_engine() -> RapidOcrEngine:
+    """Return the shared lazy local OCR engine adapter.
+
+    Construction is cheap: no third-party OCR package is imported and no
+    model is loaded here. The heavy initialization happens only on the
+    first actual ``recognize`` call, and the single cached instance is
+    reused by the document service for the whole process.
+    """
+
+    return RapidOcrEngine()
+
+
+@lru_cache(maxsize=1)
 def application_document_service() -> DocumentService:
     """Return the document import and Markdown editing service."""
 
@@ -98,6 +112,7 @@ def application_document_service() -> DocumentService:
         pages_dir=settings.pages_dir,
         markdown_dir=settings.markdown_dir,
         pdf_service=pdf_service,
+        ocr_engine=application_ocr_engine(),
     )
 
 
