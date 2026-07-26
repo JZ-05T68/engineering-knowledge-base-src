@@ -11,6 +11,7 @@ import pytest
 from scripts.scale_metrics import (
     FormalPathError,
     ScaleMetricsCollector,
+    current_working_set_bytes,
     peak_working_set_bytes,
 )
 
@@ -22,6 +23,8 @@ REQUIRED_FIELDS = {
     "pdf_pages",
     "pdf_size_bytes",
     "peak_working_set_bytes",
+    "working_set_start_bytes",
+    "working_set_end_bytes",
     "disk_free_start_bytes",
     "disk_free_end_bytes",
     "dir_growth_bytes",
@@ -66,6 +69,8 @@ def test_success_record_is_complete_and_parseable(tmp_path: Path) -> None:
     assert metric.disk_free_end_bytes > 0
     if os.name == "nt":
         assert metric.peak_working_set_bytes > 0
+        assert metric.working_set_start_bytes > 0
+        assert metric.working_set_end_bytes > 0
 
     records = _read_jsonl(metrics_path)
     assert len(records) == 1
@@ -135,6 +140,15 @@ def test_explicit_finish_is_not_duplicated_on_exit(tmp_path: Path) -> None:
 
 def test_peak_working_set_helper() -> None:
     value = peak_working_set_bytes()
+
+    if os.name == "nt":
+        assert value is not None and value > 0
+    else:
+        assert value is None
+
+
+def test_current_working_set_helper() -> None:
+    value = current_working_set_bytes()
 
     if os.name == "nt":
         assert value is not None and value > 0

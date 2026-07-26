@@ -49,6 +49,8 @@ class ScaleMetric:
     pdf_pages: int = 0
     pdf_size_bytes: int = 0
     peak_working_set_bytes: int | None = None
+    working_set_start_bytes: int | None = None
+    working_set_end_bytes: int | None = None
     disk_free_start_bytes: int | None = None
     disk_free_end_bytes: int | None = None
     dir_growth_bytes: int = 0
@@ -76,14 +78,13 @@ class _PROCESS_MEMORY_COUNTERS(ctypes.Structure):
     ]
 
 
-def peak_working_set_bytes() -> int | None:
-    """Return this process's PeakWorkingSetSize via GetProcessMemoryInfo.
+def _memory_counters() -> _PROCESS_MEMORY_COUNTERS | None:
+    """Return this process's memory counters via GetProcessMemoryInfo.
 
-    Windows-only; returns ``None`` on other platforms or when the call fails,
-    so an unavailable measurement is never disguised as a real zero peak.  The
-    64-bit HANDLE restype/argtypes declarations are required — with ctypes
-    defaults the current-process pseudo-handle is truncated to 32 bits and the
-    call fails silently.
+    Windows-only; returns ``None`` on other platforms or when the call fails.
+    The 64-bit HANDLE restype/argtypes declarations are required — with
+    ctypes defaults the current-process pseudo-handle is truncated to 32
+    bits and the call fails silently.
     """
 
     if os.name != "nt":
@@ -103,7 +104,24 @@ def peak_working_set_bytes() -> int | None:
         kernel32.GetCurrentProcess(), ctypes.byref(counters), counters.cb
     ):
         return None
-    return int(counters.PeakWorkingSetSize)
+    return counters
+
+
+def peak_working_set_bytes() -> int | None:
+    """Return this process's PeakWorkingSetSize, or ``None`` when unavailable.
+
+    An unavailable measurement is never disguised as a real zero peak.
+    """
+
+    counters = _memory_counters()
+    return None if counters is None else int(counters.PeakWorkingSetSize)
+
+
+def current_working_set_bytes() -> int | None:
+    """Return this process's current WorkingSetSize, or ``None`` when unavailable."""
+
+    counters = _memory_counters()
+    return None if counters is None else int(counters.WorkingSetSize)
 
 
 class ScaleMetricsCollector:
@@ -154,6 +172,7 @@ class ScaleMetricsCollector:
         self.metric.streamlit_version = _package_version("streamlit")
         self.metric.os_version = platform.platform()
         self.metric.disk_free_start_bytes = _disk_free_bytes(self.watch_dir)
+        self.metric.working_set_start_bytes = current_working_set_bytes()
         self._dir_size_start = directory_size_bytes(self.watch_dir)
         self._started = time.perf_counter()
         self._finished = False
@@ -173,6 +192,7 @@ class ScaleMetricsCollector:
         self.metric.pdf_pages = int(pdf_pages)
         self.metric.pdf_size_bytes = int(pdf_size_bytes)
         self.metric.peak_working_set_bytes = peak_working_set_bytes()
+        self.metric.working_set_end_bytes = current_working_set_bytes()
         self.metric.disk_free_end_bytes = _disk_free_bytes(self.watch_dir)
         self.metric.dir_growth_bytes = directory_size_bytes(self.watch_dir) - self._dir_size_start
         self.metric.status = "failed" if error is not None else status
@@ -199,6 +219,8 @@ class ScaleMetricsCollector:
         print(f"PDF：{metric.pdf_pages} 页 / {metric.pdf_size_bytes} 字节")
         print(
             f"峰值工作集：{_format_optional_bytes(metric.peak_working_set_bytes)}    "
+            f"工作集：{_format_optional_bytes(metric.working_set_start_bytes)} → "
+            f"{_format_optional_bytes(metric.working_set_end_bytes)}    "
             f"目录增长：{metric.dir_growth_bytes:+d} 字节（{self.watch_dir}）"
         )
         print(
@@ -283,6 +305,7 @@ __all__ = [
     "FormalPathError",
     "ScaleMetric",
     "ScaleMetricsCollector",
+    "current_working_set_bytes",
     "directory_size_bytes",
     "peak_working_set_bytes",
 ]
