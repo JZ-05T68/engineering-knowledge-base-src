@@ -155,3 +155,30 @@ def test_formal_metrics_targets_are_rejected(tmp_path: Path) -> None:
             metrics_path=tmp_path / "metrics.jsonl",
             watch_dir="D:/Projects/engineering-kb/data",
         )
+
+
+def test_disk_free_failure_is_recorded_as_unavailable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A failed disk-space call must surface as null/不可用, never as fake 0."""
+
+    def _raise_oserror(_path: object) -> object:
+        raise OSError("simulated disk API failure")
+
+    monkeypatch.setattr("scripts.scale_metrics.shutil.disk_usage", _raise_oserror)
+    metrics_path = tmp_path / "metrics.jsonl"
+
+    collector = ScaleMetricsCollector(
+        "unit-disk-unavailable", metrics_path=metrics_path, watch_dir=tmp_path
+    )
+    collector.start()
+    collector.finish()
+    metric = collector.metric
+
+    assert metric.disk_free_start_bytes is None
+    assert metric.disk_free_end_bytes is None
+
+    record = _read_jsonl(metrics_path)[0]
+    assert record["disk_free_start_bytes"] is None
+    assert record["disk_free_end_bytes"] is None
+    assert "不可用" in capsys.readouterr().out

@@ -49,8 +49,8 @@ class ScaleMetric:
     pdf_pages: int = 0
     pdf_size_bytes: int = 0
     peak_working_set_bytes: int | None = None
-    disk_free_start_bytes: int = 0
-    disk_free_end_bytes: int = 0
+    disk_free_start_bytes: int | None = None
+    disk_free_end_bytes: int | None = None
     dir_growth_bytes: int = 0
     python_version: str = ""
     pymupdf_version: str = ""
@@ -202,8 +202,8 @@ class ScaleMetricsCollector:
             f"目录增长：{metric.dir_growth_bytes:+d} 字节（{self.watch_dir}）"
         )
         print(
-            f"磁盘可用：{_format_bytes(metric.disk_free_start_bytes)} → "
-            f"{_format_bytes(metric.disk_free_end_bytes)}"
+            f"磁盘可用：{_format_optional_bytes(metric.disk_free_start_bytes)} → "
+            f"{_format_optional_bytes(metric.disk_free_end_bytes)}"
         )
         print(
             f"版本：Python {metric.python_version} / PyMuPDF {metric.pymupdf_version} / "
@@ -238,14 +238,20 @@ def directory_size_bytes(root: Path) -> int:
     return total
 
 
-def _disk_free_bytes(path: Path) -> int:
+def _disk_free_bytes(path: Path) -> int | None:
+    """Return free bytes at ``path``, or ``None`` when the OS call fails.
+
+    A failed measurement is reported as unavailable (JSON ``null``), never as
+    a fake zero that would look like a full disk.
+    """
+
     probe = path
     while not probe.exists() and probe.parent != probe:
         probe = probe.parent
     try:
         return int(shutil.disk_usage(probe).free)
     except OSError:
-        return 0
+        return None
 
 
 def _package_version(distribution: str) -> str:
