@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -28,6 +29,15 @@ if TYPE_CHECKING:
 LOGGER = logging.getLogger(__name__)
 INVALID_FILENAME_CHARACTERS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MAX_STORED_STEM_LENGTH = 150
+# Raw PDFs are written into a sibling temporary file first and atomically
+# moved into place only after the temp file's SHA-256 matches the upload.
+# The infix keeps temp files recognizable and invisible to PDF scans
+# (``Path("x.pdf.tmp-y").suffix`` is not ``.pdf``) — the same convention the
+# page renderer uses for page-PNG temp files.
+TEMP_RAW_INFIX = ".tmp-"
+# Uploaded bytes are written to the temp file in bounded chunks so the copy
+# loop never allocates a second full-size buffer.
+_PDF_WRITE_CHUNK_SIZE = 1024 * 1024
 OCR_ERROR_PREFIX = "OCR："
 OCR_ERROR_MESSAGE_LIMIT = 200
 _LOCAL_PATH_PLACEHOLDER = "[本地路径]"
@@ -110,6 +120,29 @@ def _sanitize_ocr_error_message(message: str) -> str:
         compact = pattern.sub(_LOCAL_PATH_PLACEHOLDER, compact)
     compact = " ".join(compact.split())
     return compact[:OCR_ERROR_MESSAGE_LIMIT] or "识别失败。"
+
+
+def _write_pdf_content(temp_path: Path, content: bytes) -> None:
+    """Write PDF bytes to a fresh temp file in bounded chunks, then flush/close."""
+
+    with temp_path.open("wb") as handle:
+        for offset in range(0, len(content), _PDF_WRITE_CHUNK_SIZE):
+            handle.write(content[offset : offset + _PDF_WRITE_CHUNK_SIZE])
+        handle.flush()
+
+
+def _cleanup_stale_temp_raws(raw_path: Path) -> None:
+    """Remove temp saves of this exact raw target left by killed earlier runs.
+
+    Only temps whose names start with the exact target filename are removed;
+    temp files of any other PDF in the same directory are left untouched.
+    """
+
+    for stale in raw_path.parent.glob(f"{raw_path.name}{TEMP_RAW_INFIX}*"):
+        try:
+            stale.unlink()
+        except OSError:
+            LOGGER.warning("无法清理旧临时原文件：%s", stale)
 
 
 @dataclass(frozen=True, slots=True)
@@ -255,14 +288,7 @@ class DocumentService:
 
             self.raw_dir.mkdir(parents=True, exist_ok=True)
             source_path = self._choose_raw_path(sha256, safe_filename)
-            if not source_path.exists():
-                with source_path.open("xb") as destination:
-                    destination.write(content)
-            stored_sha256 = self.pdf_service.calculate_sha256(source_path)
-            if stored_sha256 != sha256:
-                raise DocumentImportError(
-                    f"PDF 保存后校验失败，文件已保留以便排查：{source_path}"
-                )
+            self._save_raw_pdf(source_path, content, sha256)
 
             document = self.database.create_document(
                 title=document_title,
@@ -788,21 +814,64 @@ class DocumentService:
         return sanitized
 
     def _choose_raw_path(self, sha256: str, filename: str) -> Path:
-        """Choose a non-overwriting local path, reusing only byte-identical files."""
+        """Return the content-addressed raw path for one upload.
+
+        The SHA-256 prefix ties the path to exactly one byte sequence, so an
+        existing file at this path either is that content (reuse) or is
+        interrupted-save residue of the same target (rebuilt atomically by
+        :meth:`_save_raw_pdf`) — never a different document's file to protect.
+        """
 
         filename_path = Path(filename)
         stem = filename_path.stem[:MAX_STORED_STEM_LENGTH].rstrip(" .") or "document"
-        candidate = self.raw_dir / f"{sha256}_{stem}.pdf"
-        suffix_number = 1
-        while candidate.exists():
+        return self.raw_dir / f"{sha256}_{stem}.pdf"
+
+    def _require_managed_raw_path(self, raw_path: Path) -> None:
+        """Refuse to create or replace anything outside the managed raw directory."""
+
+        resolved_dir = self.raw_dir.resolve(strict=False)
+        resolved_path = raw_path.resolve(strict=False)
+        if resolved_path.parent != resolved_dir:
+            raise DocumentImportError(f"原文件目标路径不在受管 raw 目录内：{raw_path}")
+
+    def _save_raw_pdf(self, raw_path: Path, content: bytes, sha256: str) -> None:
+        """Persist the uploaded PDF through a verified temp file and atomic replace.
+
+        An existing file at the content-addressed target is reused untouched
+        only when its SHA-256 equals the upload's. A zero-byte, unreadable, or
+        hash-mismatching file there is interrupted-save residue of this same
+        target and is rebuilt in place — never deleted first, never written to
+        directly — by writing a unique same-directory temp file, verifying its
+        SHA-256, and only then ``os.replace``-ing it onto the final path, so a
+        killed or failed save never leaves a new partial formal file behind.
+        """
+
+        self._require_managed_raw_path(raw_path)
+        if raw_path.is_file():
             try:
-                if self.pdf_service.calculate_sha256(candidate) == sha256:
-                    return candidate
+                if self.pdf_service.calculate_sha256(raw_path) == sha256:
+                    return
             except OSError:
-                LOGGER.warning("无法读取已存在的原文件，将使用新路径：%s", candidate, exc_info=True)
-            candidate = self.raw_dir / f"{sha256}_{stem}_{suffix_number}.pdf"
-            suffix_number += 1
-        return candidate
+                LOGGER.warning(
+                    "无法读取已存在的原文件，将按中断残留重建：%s", raw_path, exc_info=True
+                )
+            else:
+                LOGGER.warning("已存在的原文件校验不一致，按中断残留重建：%s", raw_path)
+        _cleanup_stale_temp_raws(raw_path)
+        temp_path = raw_path.with_name(
+            f"{raw_path.name}{TEMP_RAW_INFIX}{uuid4().hex[:12]}"
+        )
+        try:
+            _write_pdf_content(temp_path, content)
+            if self.pdf_service.calculate_sha256(temp_path) != sha256:
+                raise DocumentImportError(f"PDF 保存后校验失败：{raw_path}")
+            os.replace(temp_path, raw_path)
+        except Exception:
+            try:
+                temp_path.unlink(missing_ok=True)
+            except OSError:
+                LOGGER.warning("无法删除失败的临时原文件：%s", temp_path)
+            raise
 
 
 __all__ = [
