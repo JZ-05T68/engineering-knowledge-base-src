@@ -31,6 +31,7 @@ from pdf_test_helpers import (
     build_diagnostics_pdf,
     build_sample_pdf,
     expected_page_line,
+    png_bytes_for,
 )
 
 from src.database import Database
@@ -263,17 +264,18 @@ def test_process_page_reuse_existing_keeps_image_and_extracts_text(
     service = PdfService()
     first = service.process_page(sample_pdf, output_dir, 3)
 
-    # Replace the image with sentinel bytes: reuse_existing must not re-render.
-    first.image_path.write_bytes(b"sentinel image bytes")
+    # Replace the image with sentinel (decodable) bytes: reuse must keep them.
+    sentinel_bytes = png_bytes_for(b"sentinel image bytes")
+    first.image_path.write_bytes(sentinel_bytes)
     resumed = service.process_page(sample_pdf, output_dir, 3, reuse_existing=True)
 
-    assert resumed.image_path.read_bytes() == b"sentinel image bytes"
+    assert resumed.image_path.read_bytes() == sentinel_bytes
     assert expected_page_line(3) in resumed.extracted_text
     assert resumed.processing_error == ""
 
     with pytest.raises(PdfProcessingError, match="已存在"):
         service.process_page(sample_pdf, output_dir, 3)
-    assert first.image_path.read_bytes() == b"sentinel image bytes"
+    assert first.image_path.read_bytes() == sentinel_bytes
 
 
 def test_process_page_rejects_out_of_range_page_numbers(

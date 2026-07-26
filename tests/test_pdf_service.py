@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pdf_test_helpers import png_bytes_for
 from test_document_service import FakePyMuPdf, FakePyMuPdfDocument
 
 import src.pdf_service as pdf_service_module
@@ -39,7 +40,7 @@ def test_process_page_loads_only_the_requested_page(
     assert page.effective_text_length == 0
     assert page.processing_error == ""
     assert page.image_path.name == "page_0002.png"
-    assert page.image_path.read_bytes() == b"png-2"
+    assert page.image_path.read_bytes() == png_bytes_for(b"png-2")
     assert not (tmp_path / "rendered" / "page_0001.png").exists()
     assert fake_document.closed is True
 
@@ -54,18 +55,21 @@ def test_process_page_reuses_existing_image_without_rerendering(
     output_dir = tmp_path / "rendered"
 
     first = service.process_page(source_path, output_dir, 1)
-    assert first.image_path.read_bytes() == b"png-1"
+    assert first.image_path.read_bytes() == png_bytes_for(b"png-1")
 
-    # Simulate a pre-existing page image: it must not be overwritten.
-    first.image_path.write_bytes(b"user edited png")
+    # Simulate a pre-existing valid page image: it must not be overwritten.
+    edited_bytes = png_bytes_for(b"user edited png")
+    first.image_path.write_bytes(edited_bytes)
+    edited_mtime = first.image_path.stat().st_mtime_ns
     resumed = service.process_page(source_path, output_dir, 1, reuse_existing=True)
-    assert resumed.image_path.read_bytes() == b"user edited png"
+    assert resumed.image_path.read_bytes() == edited_bytes
+    assert resumed.image_path.stat().st_mtime_ns == edited_mtime
     assert resumed.extracted_text == "A B C 123"
     assert resumed.needs_review is False
 
     with pytest.raises(PdfProcessingError, match="已存在"):
         service.process_page(source_path, output_dir, 1)
-    assert first.image_path.read_bytes() == b"user edited png"
+    assert first.image_path.read_bytes() == edited_bytes
 
 
 def test_process_page_rejects_out_of_range_page_numbers(

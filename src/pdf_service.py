@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 LOGGER = logging.getLogger(__name__)
+
+# Page images are rendered into a sibling temporary file first and atomically
+# moved into place only after the temp file is verified complete and decodable.
+# The suffix keeps temp files recognizable and invisible to page-PNG scans
+# (``Path("page_0001.png.tmp-x").suffix`` is not ``.png``).
+TEMP_IMAGE_INFIX = ".tmp-"
 
 
 class PdfProcessingError(RuntimeError):
@@ -135,6 +143,68 @@ def _load_pymupdf() -> Any:
             ) from exc
 
 
+def is_complete_png(path: Path) -> bool:
+    """Return True only for an existing, non-empty, fully decodable PNG.
+
+    Existence and a positive size are not enough: an interrupted write can
+    leave a truncated file that a strict decode rejects.  Any failure means
+    "incomplete", so callers can safely re-render instead of reusing or
+    refusing the file.
+    """
+
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        pixmap = _load_pymupdf().Pixmap(str(path))
+        return pixmap.width > 0 and pixmap.height > 0
+    except Exception:
+        return False
+
+
+def _cleanup_stale_temp_images(image_path: Path) -> None:
+    """Remove temp renders of this exact page left by killed earlier runs."""
+
+    for stale in image_path.parent.glob(f"{image_path.name}{TEMP_IMAGE_INFIX}*"):
+        try:
+            stale.unlink()
+        except OSError:
+            LOGGER.warning("无法清理旧临时页图：%s", stale)
+
+
+def render_page_image_atomically(
+    page: Any, image_path: Path, matrix: Any, page_number: int
+) -> None:
+    """Render one page image and move it into place atomically.
+
+    The pixmap is written to a unique temp file in the same directory (same
+    filesystem), verified non-empty and decodable, then ``os.replace``d onto
+    the final path — Windows-atomic even when replacing a corrupt previous
+    file, so a verified image is never deleted to make room and a failed
+    render never leaves a plausible-looking final PNG behind.
+    """
+
+    _cleanup_stale_temp_images(image_path)
+    temp_path = image_path.with_name(
+        f"{image_path.name}{TEMP_IMAGE_INFIX}{uuid4().hex[:12]}"
+    )
+    try:
+        pixmap = page.get_pixmap(matrix=matrix, alpha=False)
+        # tobytes() pins the PNG encoder explicitly: the temp name carries no
+        # .png extension (by design), so save() cannot infer the format.
+        temp_path.write_bytes(pixmap.tobytes("png"))
+        if not is_complete_png(temp_path):
+            raise PdfProcessingError(
+                f"第 {page_number} 页的 PNG 图片未能完整写入：{image_path}"
+            )
+        os.replace(temp_path, image_path)
+    except Exception:
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            LOGGER.warning("无法删除失败的临时页图：%s", temp_path)
+        raise
+
+
 class PdfService:
     """Render PDF pages to PNG and extract any available text layer."""
 
@@ -230,20 +300,20 @@ class PdfService:
             raise PdfProcessingError(
                 f"第 {page_number} 页的目标图片已存在，为避免覆盖已停止导入：{image_path}"
             )
-        if image_exists and (not image_path.is_file() or image_path.stat().st_size == 0):
+        if image_exists and not image_path.is_file():
             raise PdfProcessingError(
-                f"第 {page_number} 页已有图片不完整，程序不会自动覆盖：{image_path}"
+                f"第 {page_number} 页的图片路径不是常规文件，为避免误操作已停止导入：{image_path}"
             )
+
+        # Reuse only a fully verified image; a zero-byte or undecodable file
+        # is an interrupted write and is re-rendered (via a verified temp file
+        # + atomic replace, never a delete-first overwrite).
+        reuse_image = image_exists and reuse_existing and is_complete_png(image_path)
 
         try:
             page = document.load_page(page_index)
-            if not image_exists:
-                pixmap = page.get_pixmap(matrix=matrix, alpha=False)
-                pixmap.save(str(image_path))
-                if not image_path.is_file() or image_path.stat().st_size == 0:
-                    raise PdfProcessingError(
-                        f"第 {page_number} 页的 PNG 图片未能完整写入：{image_path}"
-                    )
+            if not reuse_image:
+                render_page_image_atomically(page, image_path, matrix, page_number)
             extracted_text = (page.get_text("text") or "").strip()
         except Exception as exc:
             LOGGER.exception(
@@ -279,8 +349,11 @@ class PdfService:
         """Render every page and extract text, preserving all generated page images.
 
         ``reuse_existing`` is reserved for recovering an interrupted import. It
-        reuses non-empty page images instead of overwriting them while still
-        reopening the PDF to extract the page text again.
+        reuses page images that pass a strict completeness check (non-empty and
+        decodable) instead of overwriting them, while zero-byte or truncated
+        leftovers of a killed run are rendered again via a verified temp file
+        and an atomic replace.  The PDF is always reopened to extract the page
+        text again.
         """
 
         source_path = Path(pdf_path)

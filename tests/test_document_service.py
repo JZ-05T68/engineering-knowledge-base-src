@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from pdf_test_helpers import open_image, png_bytes_for
 
 import src.pdf_service as pdf_service_module
 from src.database import Database
@@ -455,13 +456,17 @@ def test_single_page_failure_keeps_other_completed_pages(tmp_path: Path) -> None
 
 
 class FakePixmap:
-    """Minimal PyMuPDF pixmap substitute that writes deterministic bytes."""
+    """Minimal PyMuPDF pixmap substitute writing real decodable PNG bytes."""
 
     def __init__(self, payload: bytes) -> None:
         self.payload = payload
 
     def save(self, path: str) -> None:
-        Path(path).write_bytes(self.payload)
+        Path(path).write_bytes(png_bytes_for(self.payload))
+
+    def tobytes(self, fmt: str) -> bytes:
+        assert fmt == "png"
+        return png_bytes_for(self.payload)
 
 
 class FakePyMuPdfPage:
@@ -512,6 +517,10 @@ class FakePyMuPdf:
     def Matrix(x_scale: float, y_scale: float) -> tuple[float, float]:  # noqa: N802
         return (x_scale, y_scale)
 
+    @staticmethod
+    def Pixmap(path: str) -> object:  # noqa: N802
+        return open_image(path)
+
     def open(self, path: str) -> FakePyMuPdfDocument:
         assert Path(path).is_file()
         return self.document
@@ -534,8 +543,8 @@ def test_pdf_service_renders_pages_and_marks_short_text_pending(
 
     assert [page.effective_text_length for page in pages] == [6, 0]
     assert [page.needs_review for page in pages] == [False, True]
-    assert pages[0].image_path.read_bytes() == b"png-1"
-    assert pages[1].image_path.read_bytes() == b"png-2"
+    assert pages[0].image_path.read_bytes() == png_bytes_for(b"png-1")
+    assert pages[1].image_path.read_bytes() == png_bytes_for(b"png-2")
     assert fake_document.closed is True
 
     resumed_pages = service.process(
@@ -543,11 +552,14 @@ def test_pdf_service_renders_pages_and_marks_short_text_pending(
         tmp_path / "rendered",
         reuse_existing=True,
     )
-    assert [page.image_path.read_bytes() for page in resumed_pages] == [b"png-1", b"png-2"]
+    assert [page.image_path.read_bytes() for page in resumed_pages] == [
+        png_bytes_for(b"png-1"),
+        png_bytes_for(b"png-2"),
+    ]
 
     with pytest.raises(PdfProcessingError, match="已存在"):
         service.process(source_path, tmp_path / "rendered")
-    assert pages[0].image_path.read_bytes() == b"png-1"
+    assert pages[0].image_path.read_bytes() == png_bytes_for(b"png-1")
 
 
 def test_pdf_sha256_reads_file_in_chunks(tmp_path: Path) -> None:

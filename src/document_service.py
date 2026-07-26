@@ -231,6 +231,10 @@ class DocumentService:
                     )
 
                 source_path = Path(existing_document.source_path)
+                # Keep the row identity even when the resume below raises, so
+                # _record_failure can mark THIS document failed instead of
+                # leaving it stuck in PROCESSING forever.
+                document = existing_document
                 LOGGER.warning(
                     "检测到未完成的 PDF 导入，将复用原文件和已有页面继续：document_id=%s",
                     existing_document.id,

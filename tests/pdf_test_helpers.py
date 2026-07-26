@@ -7,6 +7,7 @@ All files are written under pytest's ``tmp_path`` and never into the repo.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pymupdf
@@ -19,6 +20,40 @@ ROTATED_PAGE = 9
 WIDE_PAGE = 10
 
 SHORT_PAGE_TEXT = "-- --"
+
+
+def png_bytes_for(seed: bytes) -> bytes:
+    """Return deterministic, real, decodable PNG bytes derived from ``seed``.
+
+    Fake renderers use these bytes so production code that verifies page-image
+    decodability exercises a realistic path in unit tests.
+    """
+
+    digest = hashlib.sha256(seed).digest()
+    size = 8
+    pixmap = pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, size, size), False)
+    for index in range(size * size):
+        pixmap.set_pixel(
+            index % size,
+            index // size,
+            (digest[index % 32], digest[(index + 7) % 32], digest[(index + 13) % 32]),
+        )
+    return pixmap.tobytes("png")
+
+
+def open_image(path: Path | str) -> pymupdf.Pixmap:
+    """Open an image file with real PyMuPDF (decode verification helper)."""
+
+    return pymupdf.Pixmap(str(path))
+
+
+def assert_decodable_png(path: Path) -> None:
+    """Assert the file is non-empty and fully decodable as an image."""
+
+    assert Path(path).is_file(), f"缺少图片文件：{path}"
+    assert Path(path).stat().st_size > 0, f"图片文件为空：{path}"
+    pixmap = open_image(path)
+    assert pixmap.width > 0 and pixmap.height > 0, f"图片不可解码：{path}"
 
 
 def expected_page_line(page_number: int) -> str:

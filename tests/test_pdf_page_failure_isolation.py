@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from pdf_test_helpers import open_image, png_bytes_for
 
 import src.pdf_service as pdf_service_module
 from src.database import Database
@@ -30,7 +31,11 @@ class _FakePixmap:
         self.payload = payload
 
     def save(self, path: str) -> None:
-        Path(path).write_bytes(self.payload)
+        Path(path).write_bytes(png_bytes_for(self.payload))
+
+    def tobytes(self, fmt: str) -> bytes:
+        assert fmt == "png"
+        return png_bytes_for(self.payload)
 
 
 class _IsolationPage:
@@ -95,6 +100,10 @@ class _IsolationModule:
     @staticmethod
     def Matrix(x_scale: float, y_scale: float) -> tuple[float, float]:  # noqa: N802
         return (x_scale, y_scale)
+
+    @staticmethod
+    def Pixmap(path: str) -> object:  # noqa: N802
+        return open_image(path)
 
     def open(self, path: str) -> _IsolationDocument:
         assert Path(path).is_file()
@@ -169,7 +178,9 @@ def test_process_continues_after_middle_page_render_failure(
         assert PAGE_TEXT_TEMPLATE.format(page.page_number) in page.extracted_text
         assert page.needs_review is False
         assert page.diagnostics.effective_char_count >= 20
-        assert page.image_path.read_bytes() == f"png-{page.page_number}".encode()
+        assert page.image_path.read_bytes() == png_bytes_for(
+            f"png-{page.page_number}".encode()
+        )
     later_pages = isolation_document.pages[FAILING_PAGE:]
     assert all(page.get_text_calls == 1 for page in later_pages)
     assert all(page.pixmap_calls == 1 for page in later_pages)
@@ -204,14 +215,16 @@ def test_process_continues_after_middle_page_text_failure(
     assert failed.diagnostics == PageDiagnostics()
     # The PNG was rendered before the text failure; it stays as a FAILED page's
     # image and is never deleted or reused for another page.
-    assert (output_dir / f"page_{FAILING_PAGE:04d}.png").read_bytes() == (
+    assert (output_dir / f"page_{FAILING_PAGE:04d}.png").read_bytes() == png_bytes_for(
         f"png-{FAILING_PAGE}".encode()
     )
 
     for page in _successful_pages(pages):
         assert page.processing_error == ""
         assert PAGE_TEXT_TEMPLATE.format(page.page_number) in page.extracted_text
-        assert page.image_path.read_bytes() == f"png-{page.page_number}".encode()
+        assert page.image_path.read_bytes() == png_bytes_for(
+            f"png-{page.page_number}".encode()
+        )
     assert isolation_document.load_page_calls == list(range(FAILING_PAGE_COUNT))
     assert isolation_document.closed is True
 
@@ -254,7 +267,7 @@ def test_document_service_persists_partial_failure(
             assert page.processing_status == "text_extracted"
             assert page.processing_error == ""
             assert PAGE_TEXT_TEMPLATE.format(page.page_number) in page.extracted_text
-            assert Path(page.image_path).read_bytes() == (
+            assert Path(page.image_path).read_bytes() == png_bytes_for(
                 f"png-{page.page_number}".encode()
             )
 
