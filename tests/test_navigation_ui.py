@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PIL import Image
 from streamlit.testing.v1 import AppTest
 
 import src.runtime as runtime
@@ -53,6 +54,152 @@ def _local_runtime(tmp_path: Path, monkeypatch) -> tuple[Database, DocumentServi
     )
     monkeypatch.setattr(runtime, "application_settings", lambda: settings)
     return database, service
+
+
+def _reader_navigation_runtime(
+    tmp_path: Path, monkeypatch
+) -> tuple[Database, int]:
+    database = Database(tmp_path / "database" / "knowledge.db")
+    raw_dir = tmp_path / "raw"
+    pages_dir = tmp_path / "pages"
+    raw_dir.mkdir(parents=True)
+    pages_dir.mkdir(parents=True)
+
+    document = database.create_document(
+        title="八页导航测试",
+        filename="eight-pages.pdf",
+        source_path=raw_dir / "eight-pages.pdf",
+        sha256="7" * 64,
+    )
+    document.source_path.write_bytes(b"pdf")
+    for page_number in range(1, 9):
+        image_path = pages_dir / str(document.id) / f"page_{page_number:04d}.png"
+        image_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (2, 2), "white").save(image_path)
+        database.create_page(
+            document_id=document.id,
+            page_number=page_number,
+            image_path=image_path,
+            extracted_text=f"PAGE {page_number} TOKEN NAV-{page_number:04d}",
+        )
+    database.update_document_page_count(document.id, 8)
+
+    other_document = database.create_document(
+        title="其他文档",
+        filename="other.pdf",
+        source_path=raw_dir / "other.pdf",
+        sha256="8" * 64,
+    )
+    other_document.source_path.write_bytes(b"pdf")
+    other_image_path = pages_dir / str(other_document.id) / "page_0001.png"
+    other_image_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (2, 2), "white").save(other_image_path)
+    database.create_page(
+        document_id=other_document.id,
+        page_number=1,
+        image_path=other_image_path,
+        extracted_text="OTHER DOCUMENT PAGE 1",
+    )
+    database.update_document_page_count(other_document.id, 1)
+
+    ordered_list_pages = database.list_pages
+
+    def reversed_list_pages(document_id: int):
+        return list(reversed(ordered_list_pages(document_id)))
+
+    monkeypatch.setattr(database, "list_pages", reversed_list_pages)
+    service = DocumentService(
+        database,
+        raw_dir,
+        pages_dir,
+        tmp_path / "markdown",
+    )
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+    monkeypatch.setattr(runtime, "application_document_service", lambda: service)
+    monkeypatch.setattr(
+        runtime,
+        "application_evidence_basket_service",
+        lambda: EvidenceBasketService(database),
+    )
+    return database, document.id
+
+
+def _reader_page_selector(app: AppTest):
+    return next(selectbox for selectbox in app.selectbox if selectbox.label == "页码")
+
+
+def _reader_button(app: AppTest, label: str):
+    return next(button for button in app.button if button.label == label)
+
+
+def _has_caption(app: AppTest, text: str) -> bool:
+    return any(text in caption.value for caption in app.caption)
+
+
+def test_reader_page_selection_synchronizes_position_and_ordinary_navigation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    app = AppTest.from_file(str(reader_path))
+    app.query_params = {"document": str(document_id)}
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert _reader_page_selector(app).value == 1
+    assert app.query_params["page"] == ["1"]
+    assert _has_caption(app, "当前文档记录位置：第 1 / 8 页（PDF 页码 1）")
+    assert _reader_button(app, "← 普通上一页").disabled
+    assert not _reader_button(app, "普通下一页 →").disabled
+    assert _has_caption(app, "普通下一页：第 2 页")
+
+    _reader_page_selector(app).set_value(4).run(timeout=10)
+
+    assert not app.exception
+    assert _reader_page_selector(app).value == 4
+    assert app.query_params["page"] == ["4"]
+    assert _has_caption(app, "当前文档记录位置：第 4 / 8 页（PDF 页码 4）")
+    assert not _reader_button(app, "← 普通上一页").disabled
+    assert not _reader_button(app, "普通下一页 →").disabled
+    assert _has_caption(app, "普通上一页：第 3 页")
+    assert _has_caption(app, "普通下一页：第 5 页")
+
+    _reader_button(app, "← 普通上一页").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 3
+    assert app.query_params["page"] == ["3"]
+    assert _has_caption(app, "当前文档记录位置：第 3 / 8 页（PDF 页码 3）")
+
+    _reader_page_selector(app).set_value(4).run(timeout=10)
+    _reader_button(app, "普通下一页 →").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 5
+    assert app.query_params["page"] == ["5"]
+    assert _has_caption(app, "当前文档记录位置：第 5 / 8 页（PDF 页码 5）")
+
+    _reader_page_selector(app).set_value(8).run(timeout=10)
+    assert _reader_page_selector(app).value == 8
+    assert app.query_params["page"] == ["8"]
+    assert _has_caption(app, "当前文档记录位置：第 8 / 8 页（PDF 页码 8）")
+    assert not _reader_button(app, "← 普通上一页").disabled
+    assert _reader_button(app, "普通下一页 →").disabled
+    assert _has_caption(app, "普通上一页：第 7 页")
+    assert not _has_caption(app, "普通下一页：第 1 页")
+
+
+def test_reader_query_target_uses_same_sorted_document_navigation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    app = AppTest.from_file(str(reader_path))
+    app.query_params = {"document": str(document_id), "page": "4"}
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert _reader_page_selector(app).value == 4
+    assert app.query_params["page"] == ["4"]
+    assert _has_caption(app, "当前文档记录位置：第 4 / 8 页（PDF 页码 4）")
+    assert _has_caption(app, "普通上一页：第 3 页")
+    assert _has_caption(app, "普通下一页：第 5 页")
 
 
 def test_home_and_browser_show_review_continuation_entry(tmp_path: Path, monkeypatch) -> None:

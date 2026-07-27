@@ -330,7 +330,10 @@ with st.expander("文档标签与所属项目"):
         else:
             st.success("文档分类已保存。")
 
-document_pages = database.list_pages(document.id)
+document_pages = sorted(
+    database.list_pages(document.id),
+    key=lambda item: (item.page_number, item.id),
+)
 if not document_pages:
     st.warning("该文档还没有页面记录，可能在导入时发生了错误。")
     st.stop()
@@ -362,17 +365,27 @@ if query_page:
 else:
     initial_page = document_pages[0].page_number
 
-navigation = st.columns([1, 1, 3, 1, 1])
 page_numbers = list(page_by_number)
-initial_page_index = page_numbers.index(initial_page)
+requested_page_index = page_numbers.index(initial_page)
+navigation = st.columns([1, 1, 3, 1, 1])
+page_number = navigation[2].selectbox(
+    "页码",
+    options=page_numbers,
+    index=requested_page_index,
+    format_func=lambda value: f"第 {value} 页",
+    label_visibility="collapsed",
+)
+st.query_params["page"] = str(page_number)
+page = page_by_number[page_number]
+current_page_index = page_numbers.index(page.page_number)
 previous_page = (
-    page_by_number[page_numbers[initial_page_index - 1]]
-    if initial_page_index > 0
+    page_by_number[page_numbers[current_page_index - 1]]
+    if current_page_index > 0
     else None
 )
 next_page = (
-    page_by_number[page_numbers[initial_page_index + 1]]
-    if initial_page_index + 1 < len(page_numbers)
+    page_by_number[page_numbers[current_page_index + 1]]
+    if current_page_index + 1 < len(page_numbers)
     else None
 )
 
@@ -400,24 +413,15 @@ def _open_adjacent_page(adjacent_page: Page) -> None:
 
 
 if navigation[0].button(
-    "← 普通上一页", disabled=initial_page_index <= 0, use_container_width=True
+    "← 普通上一页", disabled=current_page_index <= 0, use_container_width=True
 ) and previous_page is not None:
     _open_adjacent_page(previous_page)
 if navigation[1].button(
     "普通下一页 →",
-    disabled=initial_page_index >= len(page_numbers) - 1,
+    disabled=current_page_index >= len(page_numbers) - 1,
     use_container_width=True,
 ) and next_page is not None:
     _open_adjacent_page(next_page)
-page_number = navigation[2].selectbox(
-    "页码",
-    options=page_numbers,
-    index=initial_page_index,
-    format_func=lambda value: f"第 {value} 页",
-    label_visibility="collapsed",
-)
-st.query_params["page"] = str(page_number)
-page = page_by_number[page_number]
 try:
     page = database.mark_page_viewed(page.id)
 except Exception as exc:
@@ -426,7 +430,7 @@ except Exception as exc:
 navigation[3].metric("状态", page.status.label)
 navigation[4].metric("笔记", "有" if page.has_note else "无")
 st.caption(
-    f"当前文档记录位置：第 {initial_page_index + 1} / {len(page_numbers)} 页"
+    f"当前文档记录位置：第 {current_page_index + 1} / {len(page_numbers)} 页"
     f"（PDF 页码 {page.page_number}）。"
 )
 
