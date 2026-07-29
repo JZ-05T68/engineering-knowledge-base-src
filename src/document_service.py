@@ -217,9 +217,9 @@ class DocumentService:
 
         sha256 = hashlib.sha256(content).hexdigest()
         document_title = (title or "").strip() or Path(safe_filename).stem
-        import_record = self._create_import_record(safe_filename, document_title, sha256)
         source_path: Path | None = None
         document: Document | None = None
+        import_record: ImportRecord | None = None
         try:
             existing_document = self.database.get_document_by_sha256(sha256)
             if existing_document is not None:
@@ -233,36 +233,19 @@ class DocumentService:
                         safe_filename,
                         existing_document.id,
                     )
-                    completed_record = None
-                    if import_record is not None:
-                        completed_record = self._finish_import_record(
-                            import_record,
-                            status=ImportStatus.COMPLETED,
-                            document_id=existing_document.id,
-                            total_pages=recorded_page_count,
-                            processed_pages=len(existing_pages),
-                            text_pages=sum(
-                                page.processing_status
-                                in {"text_extracted", "ocr_completed"}
-                                for page in existing_pages
-                            ),
-                            review_pages=sum(
-                                page.status
-                                in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
-                                for page in existing_pages
-                            ),
-                            failed_pages=sum(
-                                page.status is PageStatus.FAILED for page in existing_pages
-                            ),
-                            error_message="该文件已经导入",
-                        )
+                    # A complete duplicate returns before any import record is
+                    # created: the deduplicated run must stay a zero-write no-op.
                     return ImportResult(
                         document=existing_document,
                         pages=existing_pages,
                         duplicate=True,
-                        import_record=completed_record,
+                        import_record=None,
                     )
 
+            import_record = self._create_import_record(
+                safe_filename, document_title, sha256
+            )
+            if existing_document is not None:
                 source_path = Path(existing_document.source_path)
                 # Keep the row identity even when the resume below raises, so
                 # _record_failure can mark THIS document failed instead of
