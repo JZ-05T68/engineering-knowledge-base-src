@@ -301,11 +301,21 @@ class DocumentService:
                 diagnostics=summary,
             )
         except (DocumentImportError, PdfProcessingError) as exc:
-            self._record_failure(import_record, document, str(exc))
+            self._record_failure(
+                import_record,
+                document,
+                str(exc),
+                record_context=(safe_filename, document_title, sha256),
+            )
             LOGGER.exception("PDF 导入失败，已保留已写入的原文件和页面图片：%s", source_path)
             raise
         except Exception as exc:
-            self._record_failure(import_record, document, str(exc))
+            self._record_failure(
+                import_record,
+                document,
+                str(exc),
+                record_context=(safe_filename, document_title, sha256),
+            )
             LOGGER.exception("PDF 导入失败，已保留已写入的文件：%s", source_path)
             raise DocumentImportError(
                 f"导入 PDF“{safe_filename}”失败：{exc}。已写入的原文件和页面图片不会被删除。"
@@ -730,8 +740,23 @@ class DocumentService:
         )
 
     def _record_failure(
-        self, record: ImportRecord | None, document: Document | None, message: str
+        self,
+        record: ImportRecord | None,
+        document: Document | None,
+        message: str,
+        *,
+        record_context: tuple[str, str, str] | None = None,
     ) -> None:
+        if record is None and record_context is not None:
+            # The failure happened before the import record was created (for
+            # example while probing for a duplicate). Create the record now on
+            # a best-effort basis so the failure stays diagnosable; a failure
+            # of this write itself must never mask the original exception.
+            filename, title, sha256 = record_context
+            try:
+                record = self._create_import_record(filename, title, sha256)
+            except Exception:
+                LOGGER.exception("无法为本次导入失败创建 import record")
         try:
             self._finish_import_record(
                 record,

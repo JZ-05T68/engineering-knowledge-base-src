@@ -138,6 +138,16 @@ def test_duplicate_import_creates_no_import_record(
             "WHERE d.id IS NULL"
         ).fetchone()[0]
         assert orphan_pages == 0
+        orphan_page_search = connection.execute(
+            "SELECT COUNT(*) FROM page_search ps "
+            "LEFT JOIN pages p ON p.id = ps.rowid "
+            "WHERE p.id IS NULL"
+        ).fetchone()[0]
+        assert orphan_page_search == 0
+        processing_records = connection.execute(
+            "SELECT COUNT(*) FROM import_records WHERE status = 'processing'"
+        ).fetchone()[0]
+        assert processing_records == 0
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     finally:
