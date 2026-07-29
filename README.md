@@ -1,8 +1,18 @@
-# Engineering Knowledge Base v0.2.2
+# Engineering Knowledge Base v0.2.3
 
 一个本地优先、单用户的个人工程知识管理系统。它把 PDF 资料转化为可长期整理、检索和复用的页面级知识资产：**文档 → 理解 → 检索 → 复用 → 工程能力**。
 
 正式服务固定监听 `127.0.0.1:8501`，核心功能可离线使用，不需要账号、VPN、云存储、API Key 或付费服务。系统不包含注册、登录、权限、OAuth、JWT 或云同步。
+
+## v0.2.3 收口版本
+
+v0.2.3 是 v0.2.x 超长工程文档与非标准页面底座的**最终收口版本**，以测试、缺陷收敛和
+发布判断为主，不新增大型产品能力，不接入 LangChain、LangGraph 或真实 AI。主要内容：
+导入中断后 raw PDF 与页面 PNG 原子写入并可自动恢复；大量搜索结果连续阅读时页码与导航
+状态保持同步；重复导入已实现 documents、pages、page_search、import_records、raw、PNG
+和 Markdown 的全部零增量；重复探测异常会留下可诊断的 failed 导入记录。自动化测试
+553 项全部通过，S4 人工测试矩阵以 S4-13 修复复测通过正式结束（S4-14 按止损决策取消）。
+详见 [v0.2.3 发布说明](docs/v0.2.3-release-notes.md)。
 
 ## v0.2.2 本地 OCR
 
