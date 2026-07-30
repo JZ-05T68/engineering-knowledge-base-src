@@ -148,6 +148,48 @@ class EvidenceContextKind(StrEnum):
         }[self]
 
 
+class NoteType(StrEnum):
+    """The four structured note scopes frozen for v0.3.0."""
+
+    DOCUMENT = "document"
+    PAGE = "page"
+    TEXT_SELECTION = "text_selection"
+    IMAGE_REGION = "image_region"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese type label used in note lists."""
+
+        return {
+            self.DOCUMENT: "文档级笔记",
+            self.PAGE: "页面级笔记",
+            self.TEXT_SELECTION: "文字选区笔记",
+            self.IMAGE_REGION: "图片区域笔记",
+        }[self]
+
+
+class NoteSourceStatus(StrEnum):
+    """Freshness of a note's text or image anchor, recomputed on every read."""
+
+    VALID = "valid"
+    CHANGED = "changed"
+    MISSING = "missing"
+    UNAVAILABLE = "unavailable"
+    UNREADABLE = "unreadable"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese status label shown beside anchored notes."""
+
+        return {
+            self.VALID: "锚点有效",
+            self.CHANGED: "来源已变化，无法重新定位",
+            self.MISSING: "来源不存在",
+            self.UNAVAILABLE: "来源暂时无法读取",
+            self.UNREADABLE: "页面图像无法读取",
+        }[self]
+
+
 @dataclass(frozen=True, slots=True)
 class SearchFilters:
     """Composable search filters; multiple tags and projects use AND semantics."""
@@ -434,3 +476,41 @@ class ReviewProgress:
     reviewed: int
     skipped: int
     failed: int
+
+
+@dataclass(frozen=True, slots=True)
+class Note:
+    """One structured note row; anchor fields are populated per ``note_type``."""
+
+    id: int
+    note_type: NoteType
+    document_id: int | None
+    page_id: int | None
+    personal_note: str
+    created_at: datetime
+    updated_at: datetime
+    source_kind: str | None = None
+    source_page_text_sha256: str | None = None
+    source_excerpt_snapshot: str | None = None
+    selection_start: int | None = None
+    selection_end: int | None = None
+    user_excerpt: str | None = None
+    region_image_sha256: str | None = None
+    region_image_width: int | None = None
+    region_image_height: int | None = None
+    region_x0: int | None = None
+    region_y0: int | None = None
+    region_x1: int | None = None
+    region_y1: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NoteView:
+    """A note plus the freshly recomputed status of its anchor.
+
+    ``source_status`` is only set for anchored types (text selections and
+    image regions); document and page notes always carry ``None``.
+    """
+
+    note: Note
+    source_status: NoteSourceStatus | None = None
