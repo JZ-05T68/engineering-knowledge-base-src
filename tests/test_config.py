@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from src import __version__
 from src.config import (
     OFFICIAL_HOST,
     OFFICIAL_PORT,
@@ -13,6 +14,14 @@ from src.config import (
     get_settings,
     require_official_endpoint,
 )
+
+
+def test_current_application_version_is_v024() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.app_title == "工程知识库 v0.2.4"
+    assert settings.app_version == "0.2.4"
+    assert __version__ == "0.2.4"
 
 
 def test_official_configuration_accepts_only_loopback_8501() -> None:

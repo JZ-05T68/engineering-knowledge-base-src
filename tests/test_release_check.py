@@ -8,6 +8,7 @@ import pytest
 
 import scripts.release_check as release_check
 from scripts.release_check import (
+    EXPECTED_VERSION,
     CheckResult,
     CheckStatus,
     ReleaseChecker,
@@ -26,6 +27,10 @@ from scripts.release_check import (
 )
 from src.backup_service import BackupValidation
 from src.config import OfficialEndpointError, Settings
+
+
+def test_release_gate_targets_v024() -> None:
+    assert EXPECTED_VERSION == "0.2.4"
 
 
 def test_all_pass_report_returns_zero_and_clear_summary() -> None:

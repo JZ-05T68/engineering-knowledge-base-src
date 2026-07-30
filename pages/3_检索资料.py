@@ -58,7 +58,7 @@ from src.search_state import (
 LOGGER = logging.getLogger(__name__)
 RESULTS_PER_PAGE = 10
 
-st.set_page_config(page_title="检索资料｜工程知识库 v0.2.3", page_icon="🔎", layout="wide")
+st.set_page_config(page_title="检索资料｜工程知识库 v0.2.4", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
 st.markdown(
