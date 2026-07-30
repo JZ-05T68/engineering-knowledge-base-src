@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from PIL import Image
 
 from src.database import Database, DatabaseError
-from src.models import Note, NoteSourceStatus, NoteType, NoteView
+from src.models import Note, NoteSourceStatus, NoteType, NoteView, TextSourcePreview
 from src.note_geometry import normalize_original_rect
 
 if TYPE_CHECKING:
@@ -178,6 +178,19 @@ class NoteService:
         with self._database._connection() as connection:
             rows = connection.execute(sql, (*parameters, limit, offset)).fetchall()
         return [self._view(_note_from_row(row)) for row in rows]
+
+    def get_text_selection_source_preview(self, page_id: int) -> TextSourcePreview:
+        """Read-only preview of the canonical source text for one page.
+
+        Never modifies page or note data; raises TextSourceUnavailableError
+        when the page has neither extracted nor OCR text.
+        """
+
+        page = self._require_page(page_id)
+        source_kind, source_text = self._select_source_text(
+            page.extracted_text, page.ocr_text
+        )
+        return TextSourcePreview(source_kind=source_kind, source_text=source_text)
 
     # ---------------------------------------------------------------- creates
 
@@ -363,12 +376,14 @@ class NoteService:
         page = self._require_page(note.page_id)  # type: ignore[arg-type]
         excerpt = self._validate_excerpt("原文选区", source_excerpt)
         source_kind, source_text = self._select_source_text(page.extracted_text, page.ocr_text)
-        self._locate_unique(source_text, excerpt)
+        start, end = self._locate_unique(source_text, excerpt)
         return {
             "old_source_kind": note.source_kind or "",
             "old_snapshot": note.source_excerpt_snapshot or "",
             "new_source_kind": source_kind,
             "new_snapshot": excerpt,
+            "selection_start": start,
+            "selection_end": end,
         }
 
     def rebind_image_region(

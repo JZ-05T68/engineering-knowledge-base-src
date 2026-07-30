@@ -514,3 +514,20 @@ class NoteView:
 
     note: Note
     source_status: NoteSourceStatus | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class TextSourcePreview:
+    """Read-only view of the canonical text source for selection notes."""
+
+    source_kind: str
+    source_text: str
+
+    @property
+    def label(self) -> str:
+        """Return the fixed Chinese label for the resolved source kind."""
+
+        return {
+            "pdf_text": "来源：PDF 文本层",
+            "ocr_text": "来源：OCR 初稿",
+        }[self.source_kind]

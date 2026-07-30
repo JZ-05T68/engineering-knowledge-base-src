@@ -337,9 +337,63 @@ def test_preview_text_selection_rebind(env: dict) -> None:
         "old_snapshot": "阀体",
         "new_source_kind": "pdf_text",
         "new_snapshot": "回路",
+        "selection_start": 8,
+        "selection_end": 10,
     }
     # 预览不得写入
     assert service.get_note(note.id).note.source_excerpt_snapshot == "阀体"
+
+
+# --- source preview (read-only) ------------------------------------------------
+
+
+def test_source_preview_prefers_pdf_text(env: dict) -> None:
+    preview = env["service"].get_text_selection_source_preview(1)
+    assert preview.source_kind == "pdf_text"
+    assert preview.source_text == EXTRACTED
+    assert preview.label == "来源：PDF 文本层"
+
+
+def test_source_preview_falls_back_to_ocr(env: dict) -> None:
+    _set_page_text(env["database"], "", "仅 OCR 内容")
+    preview = env["service"].get_text_selection_source_preview(1)
+    assert preview.source_kind == "ocr_text"
+    assert preview.source_text == "仅 OCR 内容"
+    assert preview.label == "来源：OCR 初稿"
+
+
+def test_source_preview_rejected_without_text(env: dict) -> None:
+    _set_page_text(env["database"], "", "")
+    with pytest.raises(TextSourceUnavailableError):
+        env["service"].get_text_selection_source_preview(1)
+
+
+def test_source_preview_requires_existing_page(env: dict) -> None:
+    with pytest.raises(NotePageNotFoundError):
+        env["service"].get_text_selection_source_preview(999)
+
+
+def test_source_preview_is_read_only(env: dict) -> None:
+    service: NoteService = env["service"]
+    service.create_text_selection_note(1, "阀体", "笔记")
+    before_page = dict(_page_row(env["database"]))
+    before_notes = _note_count(env["database"])
+    service.get_text_selection_source_preview(1)
+    assert dict(_page_row(env["database"])) == before_page
+    assert _note_count(env["database"]) == before_notes
+
+
+def test_text_selection_status_unavailable_on_read_error(
+    env: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service: NoteService = env["service"]
+    note = service.create_text_selection_note(1, "阀体", "笔记").note
+
+    def fail_get_page(page_id: int):
+        raise RuntimeError("simulated read failure")
+
+    monkeypatch.setattr(Database, "get_page", fail_get_page)
+    assert service.get_note(note.id).source_status is NoteSourceStatus.UNAVAILABLE
 
 
 # --- E. image region creation --------------------------------------------------
