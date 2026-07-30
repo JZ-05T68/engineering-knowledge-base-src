@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 
 class MigrationError(RuntimeError):
@@ -66,6 +66,8 @@ def migrate_database(database_path: Path) -> Path | None:
             current_version = 3
         if current_version < 4:
             _apply_version_four(connection)
+        if current_version < 5:
+            _apply_version_five(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -485,6 +487,132 @@ def _apply_version_four(connection: sqlite3.Connection) -> None:
             raise MigrationError("schema v4 迁移改变了现有文档、页面或 FTS 数据")
         connection.commit()
         LOGGER.info("数据库已迁移到 schema v4")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _apply_version_five(connection: sqlite3.Connection) -> None:
+    """Add the unified structured-notes table without touching existing data.
+
+    v0.3.0 structured notes: one table, four ``note_type`` values. Ownership is
+    mutually exclusive (document notes reference documents; page-scoped notes
+    reference pages only). Anchor fields are type-exclusive and validated by
+    CHECK constraints so the database itself rejects malformed combinations.
+    """
+
+    fingerprint = _core_data_fingerprint(connection)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                note_type TEXT NOT NULL CHECK (note_type IN (
+                    'document', 'page', 'text_selection', 'image_region'
+                )),
+                document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+                page_id INTEGER REFERENCES pages(id) ON DELETE CASCADE,
+
+                personal_note TEXT NOT NULL CHECK (
+                    length(personal_note) BETWEEN 1 AND 20000
+                ),
+
+                source_kind TEXT CHECK (source_kind IS NULL
+                    OR source_kind IN ('pdf_text', 'ocr_text')),
+                source_page_text_sha256 TEXT CHECK (source_page_text_sha256 IS NULL
+                    OR length(source_page_text_sha256) = 64),
+                source_excerpt_snapshot TEXT CHECK (source_excerpt_snapshot IS NULL
+                    OR length(source_excerpt_snapshot) BETWEEN 1 AND 20000),
+                selection_start INTEGER,
+                selection_end INTEGER,
+                user_excerpt TEXT CHECK (user_excerpt IS NULL
+                    OR length(user_excerpt) BETWEEN 1 AND 20000),
+
+                region_image_sha256 TEXT CHECK (region_image_sha256 IS NULL
+                    OR length(region_image_sha256) = 64),
+                region_image_width INTEGER,
+                region_image_height INTEGER,
+                region_x0 INTEGER,
+                region_y0 INTEGER,
+                region_x1 INTEGER,
+                region_y1 INTEGER,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                CHECK (
+                    note_type = 'document'
+                    AND document_id IS NOT NULL
+                    AND page_id IS NULL
+                OR
+                    note_type IN ('page', 'text_selection', 'image_region')
+                    AND document_id IS NULL
+                    AND page_id IS NOT NULL
+                ),
+
+                CHECK (
+                    note_type IN ('document', 'page')
+                    AND source_kind IS NULL
+                    AND source_page_text_sha256 IS NULL
+                    AND source_excerpt_snapshot IS NULL
+                    AND selection_start IS NULL AND selection_end IS NULL
+                    AND user_excerpt IS NULL
+                    AND region_image_sha256 IS NULL
+                    AND region_image_width IS NULL AND region_image_height IS NULL
+                    AND region_x0 IS NULL AND region_y0 IS NULL
+                    AND region_x1 IS NULL AND region_y1 IS NULL
+                OR
+                    note_type = 'text_selection'
+                    AND source_kind IS NOT NULL
+                    AND source_page_text_sha256 IS NOT NULL
+                    AND source_excerpt_snapshot IS NOT NULL
+                    AND selection_start IS NOT NULL AND selection_start >= 0
+                    AND selection_end IS NOT NULL AND selection_end > selection_start
+                    AND length(source_excerpt_snapshot)
+                        = selection_end - selection_start
+                    AND user_excerpt IS NOT NULL
+                    AND region_image_sha256 IS NULL
+                    AND region_image_width IS NULL AND region_image_height IS NULL
+                    AND region_x0 IS NULL AND region_y0 IS NULL
+                    AND region_x1 IS NULL AND region_y1 IS NULL
+                OR
+                    note_type = 'image_region'
+                    AND region_image_sha256 IS NOT NULL
+                    AND region_image_width IS NOT NULL AND region_image_width > 0
+                    AND region_image_height IS NOT NULL AND region_image_height > 0
+                    AND region_x0 IS NOT NULL AND region_x0 >= 0
+                    AND region_y0 IS NOT NULL AND region_y0 >= 0
+                    AND region_x1 IS NOT NULL AND region_x1 > region_x0
+                    AND region_y1 IS NOT NULL AND region_y1 > region_y0
+                    AND region_x1 <= region_image_width
+                    AND region_y1 <= region_image_height
+                    AND source_kind IS NULL
+                    AND source_page_text_sha256 IS NULL
+                    AND source_excerpt_snapshot IS NULL
+                    AND selection_start IS NULL AND selection_end IS NULL
+                    AND user_excerpt IS NULL
+                )
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_notes_document ON notes(document_id, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_notes_page ON notes(page_id, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_notes_type ON notes(note_type, updated_at DESC)"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (5, ?)",
+            (_utc_now(),),
+        )
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v5 迁移改变了现有文档、页面或 FTS 数据")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v5")
     except Exception:
         connection.rollback()
         raise

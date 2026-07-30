@@ -126,7 +126,7 @@ def test_normal_backup_captures_database_assets_hashes_and_all_metadata(
     assert validation.database_summary.integrity_check == "ok"
     assert validation.database_summary.foreign_key_violations == 0
     assert validation.database_summary.evidence == 1
-    assert result.manifest["schema_version"] == 4
+    assert result.manifest["schema_version"] == 5
     assert result.manifest["statistics"] == {
         "documents": 1,
         "pages": 1,
@@ -304,7 +304,7 @@ def test_patch_upgrade_can_restore_older_same_minor_backup(tmp_path: Path) -> No
 
     result = target.restore_backup(backup, service_is_running=lambda: False)
 
-    assert result.database_summary.schema_version == 4
+    assert result.database_summary.schema_version == 5
     assert (target.raw_dir / "manual.pdf").read_bytes() == b"v0.1.1"
     assert result.pre_restore_backup is not None
 
