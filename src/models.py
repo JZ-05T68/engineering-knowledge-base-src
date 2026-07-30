@@ -541,3 +541,19 @@ class ImageSourcePreview:
     width: int
     height: int
     sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class NoteListItem:
+    """One note row enriched for the standalone list page (single JOIN).
+
+    ``source_status`` is computed inline for text selections (no extra file
+    reads); image-region identity stays lazy and is checked only when the
+    user explicitly opens a region preview.
+    """
+
+    note: Note
+    document_id: int | None
+    document_title: str | None
+    page_number: int | None
+    source_status: NoteSourceStatus | None = None

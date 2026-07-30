@@ -24,6 +24,7 @@ from src.database import Database, DatabaseError
 from src.models import (
     ImageSourcePreview,
     Note,
+    NoteListItem,
     NoteSourceStatus,
     NoteType,
     NoteView,
@@ -110,7 +111,9 @@ class NoteService:
 
     # ------------------------------------------------------------------ reads
 
-    def get_note(self, note_id: int) -> NoteView:
+    def get_note(
+        self, note_id: int, *, image_cache: dict[str, _PageImageInfo] | None = None
+    ) -> NoteView:
         """Return one note with its freshly recomputed anchor status."""
 
         with self._database._connection() as connection:
@@ -120,7 +123,7 @@ class NoteService:
             ).fetchone()
         if row is None:
             raise NoteNotFoundError(f"笔记不存在：{note_id}")
-        return self._view(_note_from_row(row))
+        return self._view(_note_from_row(row), image_cache)
 
     def list_document_notes(self, document_id: int) -> list[NoteView]:
         """Return notes attached directly to the document (not its pages)."""
@@ -158,32 +161,8 @@ class NoteService:
         redundant column). No full-text search, importance or tag filters.
         """
 
-        if (
-            isinstance(limit, bool)
-            or not isinstance(limit, int)
-            or not 1 <= limit <= LIST_LIMIT_MAX
-        ):
-            raise NoteValidationError(f"limit 必须是 1～{LIST_LIMIT_MAX} 的整数")
-        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
-            raise NoteValidationError("offset 必须是非负整数")
-
-        conditions: list[str] = []
-        parameters: list[object] = []
-        if document_id is not None:
-            conditions.append("(notes.document_id = ? OR pages.document_id = ?)")
-            parameters.extend((document_id, document_id))
-        if page_id is not None:
-            conditions.append("notes.page_id = ?")
-            parameters.append(page_id)
-        if note_type is not None:
-            try:
-                resolved = NoteType(note_type)
-            except ValueError as exc:
-                raise NoteValidationError(f"未知笔记类型：{note_type}") from exc
-            conditions.append("notes.note_type = ?")
-            parameters.append(resolved.value)
-
-        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        self._validate_pagination(limit, offset)
+        where, parameters = self._list_filters(document_id, page_id, note_type)
         sql = (
             f"SELECT {', '.join(f'notes.{c}' for c in NOTE_COLUMNS)} FROM notes "
             f"LEFT JOIN pages ON notes.page_id = pages.id {where} "
@@ -206,7 +185,9 @@ class NoteService:
         )
         return TextSourcePreview(source_kind=source_kind, source_text=source_text)
 
-    def get_image_region_source_preview(self, page_id: int) -> ImageSourcePreview:
+    def get_image_region_source_preview(
+        self, page_id: int, *, image_cache: dict[str, _PageImageInfo] | None = None
+    ) -> ImageSourcePreview:
         """Read-only identity facts (path, size, SHA-256) of the page PNG.
 
         Never modifies page or note data; raises PageImageMissingError or
@@ -214,12 +195,147 @@ class NoteService:
         """
 
         page = self._require_page(page_id)
-        image = self._read_page_image(page.image_path)
+        image = self._read_page_image_cached(page.image_path, image_cache)
         return ImageSourcePreview(
             path=page.image_path,
             width=image.width,
             height=image.height,
             sha256=image.sha256,
+        )
+
+    # ------------------------------------------------------------- list page
+
+    def count_notes(
+        self,
+        *,
+        document_id: int | None = None,
+        page_id: int | None = None,
+        note_type: NoteType | str | None = None,
+    ) -> int:
+        """Count notes with exactly the same filter semantics as list_notes."""
+
+        where, parameters = self._list_filters(document_id, page_id, note_type)
+        sql = (
+            "SELECT COUNT(*) FROM notes "
+            "LEFT JOIN pages ON notes.page_id = pages.id "
+            f"{where}"
+        )
+        with self._database._connection() as connection:
+            return int(connection.execute(sql, parameters).fetchone()[0])
+
+    def list_note_summaries(
+        self,
+        *,
+        document_id: int | None = None,
+        page_id: int | None = None,
+        note_type: NoteType | str | None = None,
+        limit: int = LIST_LIMIT_DEFAULT,
+        offset: int = 0,
+    ) -> list[NoteListItem]:
+        """Paginated note listing with document titles and page numbers.
+
+        One JOIN provides ownership (never a redundant notes column) and the
+        page text columns needed to compute text-selection status inline, so
+        rendering a page of cards issues no per-note queries. Image-region
+        identity is deliberately not checked here (lazy preview only).
+        """
+
+        self._validate_pagination(limit, offset)
+        where, parameters = self._list_filters(document_id, page_id, note_type)
+        sql = (
+            f"SELECT {', '.join(f'notes.{c}' for c in NOTE_COLUMNS)}, "
+            "documents.title AS document_title, "
+            "documents.id AS joined_document_id, "
+            "pages.page_number AS page_number, "
+            "pages.extracted_text AS page_extracted_text, "
+            "pages.ocr_text AS page_ocr_text "
+            "FROM notes "
+            "LEFT JOIN pages ON notes.page_id = pages.id "
+            "LEFT JOIN documents "
+            "ON documents.id = COALESCE(notes.document_id, pages.document_id) "
+            f"{where} "
+            "ORDER BY notes.updated_at DESC, notes.id DESC LIMIT ? OFFSET ?"
+        )
+        with self._database._connection() as connection:
+            rows = connection.execute(sql, (*parameters, limit, offset)).fetchall()
+        return [self._summary_from_row(row) for row in rows]
+
+    def list_note_document_options(self) -> list[tuple[int, str]]:
+        """Documents that currently own at least one note (id, title)."""
+
+        sql = (
+            "SELECT DISTINCT documents.id, documents.title FROM notes "
+            "LEFT JOIN pages ON notes.page_id = pages.id "
+            "JOIN documents "
+            "ON documents.id = COALESCE(notes.document_id, pages.document_id) "
+            "ORDER BY documents.title COLLATE NOCASE, documents.id"
+        )
+        with self._database._connection() as connection:
+            return [(int(row[0]), str(row[1])) for row in connection.execute(sql)]
+
+    def _list_filters(
+        self,
+        document_id: int | None,
+        page_id: int | None,
+        note_type: NoteType | str | None,
+    ) -> tuple[str, tuple[object, ...]]:
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if document_id is not None:
+            conditions.append("(notes.document_id = ? OR pages.document_id = ?)")
+            parameters.extend((document_id, document_id))
+        if page_id is not None:
+            conditions.append("notes.page_id = ?")
+            parameters.append(page_id)
+        if note_type is not None:
+            try:
+                resolved = NoteType(note_type)
+            except ValueError as exc:
+                raise NoteValidationError(f"未知笔记类型：{note_type}") from exc
+            conditions.append("notes.note_type = ?")
+            parameters.append(resolved.value)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        return where, tuple(parameters)
+
+    def _validate_pagination(self, limit: int, offset: int) -> None:
+        if (
+            isinstance(limit, bool)
+            or not isinstance(limit, int)
+            or not 1 <= limit <= LIST_LIMIT_MAX
+        ):
+            raise NoteValidationError(f"limit 必须是 1～{LIST_LIMIT_MAX} 的整数")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise NoteValidationError("offset 必须是非负整数")
+
+    def _summary_from_row(self, row: sqlite3.Row) -> NoteListItem:
+        note = _note_from_row(row)
+        status: NoteSourceStatus | None = None
+        if note.note_type is NoteType.TEXT_SELECTION:
+            source = (
+                row["page_extracted_text"]
+                if note.source_kind == "pdf_text"
+                else row["page_ocr_text"]
+            )
+            if row["page_number"] is None:
+                status = NoteSourceStatus.MISSING
+            elif not (source or "").strip():
+                status = NoteSourceStatus.MISSING
+            elif _sha256(source) == note.source_page_text_sha256:
+                status = NoteSourceStatus.VALID
+            else:
+                status = NoteSourceStatus.CHANGED
+        title = row["document_title"]
+        joined_document_id = row["joined_document_id"]
+        return NoteListItem(
+            note=note,
+            document_id=(
+                int(joined_document_id) if joined_document_id is not None else None
+            ),
+            document_title=str(title) if title is not None else None,
+            page_number=(
+                int(row["page_number"]) if row["page_number"] is not None else None
+            ),
+            source_status=status,
         )
 
     # ---------------------------------------------------------------- creates
