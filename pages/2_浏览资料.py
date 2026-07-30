@@ -13,6 +13,8 @@ from src.evidence_basket_service import (
     EvidenceBasketError,
 )
 from src.models import ImportStatus, Page, SearchResult
+from src.note_service import NoteService
+from src.note_ui import render_structured_notes_tab
 from src.runtime import (
     application_database,
     application_document_service,
@@ -57,6 +59,7 @@ try:
     document_service = application_document_service()
     basket_service = application_evidence_basket_service()
     search_service = SearchService(database)
+    note_service = NoteService(database)
     all_tags = database.list_tags()
     all_projects = database.list_projects()
 except Exception as exc:
@@ -771,7 +774,7 @@ with image_column:
             st.error(f"失败原因：{page.processing_error}")
 
 with editor_column:
-    st.subheader("页面 Markdown 笔记")
+    st.subheader("页面整理稿（Markdown）")
     if page.markdown_content.strip() and (
         page.markdown_path is None or not page.markdown_path.exists()
     ):
@@ -780,7 +783,9 @@ with editor_column:
             "系统不会自动覆盖资料；请先在“系统维护”检查引用和备份。"
             "确认内容无误后再次保存笔记，可显式重建本地 Markdown 文件。"
         )
-    editor_tab, preview_tab = st.tabs(["编辑", "预览"])
+    editor_tab, preview_tab, notes_tab = st.tabs(
+        ["整理稿-编辑", "整理稿-预览", "结构化笔记"]
+    )
     with editor_tab:
         uploaded_markdown = st.file_uploader(
             "可选：导入 Markdown 文件",
@@ -829,6 +834,10 @@ with editor_column:
             st.markdown(markdown_content)
         else:
             st.info("输入 Markdown 后可在这里预览。")
+    with notes_tab:
+        render_structured_notes_tab(
+            note_service, document_id=document.id, page_id=page.id
+        )
 
     st.subheader("页面分类")
     page_tags = database.get_page_tags(page.id)
