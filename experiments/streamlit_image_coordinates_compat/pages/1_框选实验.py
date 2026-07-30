@@ -60,7 +60,8 @@ tab_drag, tab_note = st.tabs(["框选实验", "对照说明"])
 with tab_drag:
     # key 含显示宽度令牌：组件缺陷 —— width 参数变化但图片不变时前端不重新缩放，
     # 换 key 强制重建 iframe 才能使新宽度生效（详见 results.md）
-    component_key = f"{make_component_key(DOC_ID, page_id, mode='region', anchor_version=0)}_w{disp_w}"
+    base_key = make_component_key(DOC_ID, page_id, mode="region", anchor_version=0)
+    component_key = f"{base_key}_w{disp_w}"
     st.code(f"component key = {component_key}")
 
     source = str(image_path) if input_mode == "本地文件路径" else Image.open(image_path)
