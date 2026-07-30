@@ -21,7 +21,14 @@ from typing import TYPE_CHECKING
 from PIL import Image
 
 from src.database import Database, DatabaseError
-from src.models import Note, NoteSourceStatus, NoteType, NoteView, TextSourcePreview
+from src.models import (
+    ImageSourcePreview,
+    Note,
+    NoteSourceStatus,
+    NoteType,
+    NoteView,
+    TextSourcePreview,
+)
 from src.note_geometry import normalize_original_rect
 
 if TYPE_CHECKING:
@@ -123,10 +130,17 @@ class NoteService:
             (NoteType.DOCUMENT.value, document_id),
         )
 
-    def list_page_notes(self, page_id: int) -> list[NoteView]:
-        """Return all notes anchored to one page, newest update first."""
+    def list_page_notes(
+        self, page_id: int, *, image_cache: dict[str, _PageImageInfo] | None = None
+    ) -> list[NoteView]:
+        """Return all notes anchored to one page, newest update first.
 
-        return self._list_where("page_id = ?", (page_id,))
+        ``image_cache`` optionally memoizes PNG measurements for the duration
+        of a single render so multiple region notes on one page do not re-read
+        and re-hash the same file. The cache is caller-scoped only.
+        """
+
+        return self._list_where("page_id = ?", (page_id,), image_cache=image_cache)
 
     def list_notes(
         self,
@@ -191,6 +205,22 @@ class NoteService:
             page.extracted_text, page.ocr_text
         )
         return TextSourcePreview(source_kind=source_kind, source_text=source_text)
+
+    def get_image_region_source_preview(self, page_id: int) -> ImageSourcePreview:
+        """Read-only identity facts (path, size, SHA-256) of the page PNG.
+
+        Never modifies page or note data; raises PageImageMissingError or
+        PageImageUnreadableError when the PNG cannot be measured.
+        """
+
+        page = self._require_page(page_id)
+        image = self._read_page_image(page.image_path)
+        return ImageSourcePreview(
+            path=page.image_path,
+            width=image.width,
+            height=image.height,
+            sha256=image.sha256,
+        )
 
     # ---------------------------------------------------------------- creates
 
@@ -441,20 +471,29 @@ class NoteService:
 
     # ------------------------------------------------------------- internals
 
-    def _list_where(self, clause: str, parameters: Iterable[object]) -> list[NoteView]:
+    def _list_where(
+        self,
+        clause: str,
+        parameters: Iterable[object],
+        image_cache: dict[str, _PageImageInfo] | None = None,
+    ) -> list[NoteView]:
         sql = (
             f"SELECT {', '.join(NOTE_COLUMNS)} FROM notes WHERE {clause} "
             "ORDER BY updated_at DESC, id DESC"
         )
         with self._database._connection() as connection:
             rows = connection.execute(sql, tuple(parameters)).fetchall()
-        return [self._view(_note_from_row(row)) for row in rows]
+        return [self._view(_note_from_row(row), image_cache) for row in rows]
 
-    def _view(self, note: Note) -> NoteView:
+    def _view(
+        self, note: Note, image_cache: dict[str, _PageImageInfo] | None = None
+    ) -> NoteView:
         if note.note_type is NoteType.TEXT_SELECTION:
             return NoteView(note=note, source_status=self._text_selection_status(note))
         if note.note_type is NoteType.IMAGE_REGION:
-            return NoteView(note=note, source_status=self._image_region_status(note))
+            return NoteView(
+                note=note, source_status=self._image_region_status(note, image_cache)
+            )
         return NoteView(note=note)
 
     def _require_page(self, page_id: int):
@@ -590,7 +629,9 @@ class NoteService:
             return NoteSourceStatus.VALID
         return NoteSourceStatus.CHANGED
 
-    def _image_region_status(self, note: Note) -> NoteSourceStatus:
+    def _image_region_status(
+        self, note: Note, image_cache: dict[str, _PageImageInfo] | None = None
+    ) -> NoteSourceStatus:
         try:
             page = self._database.get_page(note.page_id)  # type: ignore[arg-type]
         except Exception:
@@ -599,7 +640,7 @@ class NoteService:
         if page is None:
             return NoteSourceStatus.MISSING
         try:
-            image = self._read_page_image(page.image_path)
+            image = self._read_page_image_cached(page.image_path, image_cache)
         except PageImageMissingError:
             return NoteSourceStatus.MISSING
         except PageImageUnreadableError:
@@ -611,6 +652,16 @@ class NoteService:
         ):
             return NoteSourceStatus.VALID
         return NoteSourceStatus.CHANGED
+
+    def _read_page_image_cached(
+        self, image_path: Path, cache: dict[str, _PageImageInfo] | None
+    ) -> _PageImageInfo:
+        if cache is None:
+            return self._read_page_image(image_path)
+        key = str(image_path)
+        if key not in cache:
+            cache[key] = self._read_page_image(image_path)
+        return cache[key]
 
 
 class _PageImageInfo:

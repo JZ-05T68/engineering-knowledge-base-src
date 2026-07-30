@@ -411,12 +411,11 @@ def test_image_region_stays_readonly_and_types_stay_separate(
     assert not app.exception
     captions = _captions(app)
     assert any("图片区域笔记" in value for value in captions)
-    assert any("后续版本开放" in value for value in captions)
-    # 可编辑入口 = 页面级 1 + 选区 1；删除按钮 = 页面级 + 选区（区域不开放）
+    # 四类均已开放：页面级 + 选区 + 区域均有编辑/删除入口
     edit_buttons = [b for b in app.button if b.label == "编辑"]
     delete_buttons = [b for b in app.button if b.label == "永久删除这条笔记"]
-    assert len(edit_buttons) == 2
-    assert len(delete_buttons) == 2
+    assert len(edit_buttons) == 3
+    assert len(delete_buttons) == 3
 
 
 # --- J. page-switch isolation --------------------------------------------------------------

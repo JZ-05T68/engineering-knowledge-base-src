@@ -836,7 +836,10 @@ with editor_column:
             st.info("输入 Markdown 后可在这里预览。")
     with notes_tab:
         render_structured_notes_tab(
-            note_service, document_id=document.id, page_id=page.id
+            note_service,
+            document_id=document.id,
+            page_id=page.id,
+            display_width=image_width,
         )
 
     st.subheader("页面分类")

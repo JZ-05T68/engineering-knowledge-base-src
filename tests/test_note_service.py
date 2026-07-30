@@ -478,6 +478,10 @@ def test_image_region_status_transitions(env: dict) -> None:
     env["png"].unlink()
     assert service.get_note(note.id).source_status is NoteSourceStatus.MISSING
 
+    _make_png(env["png"])
+    env["png"].write_bytes(b"definitely not a png")
+    assert service.get_note(note.id).source_status is NoteSourceStatus.UNREADABLE
+
 
 def test_rebind_image_region_atomic_update(env: dict) -> None:
     service: NoteService = env["service"]

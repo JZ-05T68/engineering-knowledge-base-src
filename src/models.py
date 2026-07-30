@@ -531,3 +531,13 @@ class TextSourcePreview:
             "pdf_text": "来源：PDF 文本层",
             "ocr_text": "来源：OCR 初稿",
         }[self.source_kind]
+
+
+@dataclass(frozen=True, slots=True)
+class ImageSourcePreview:
+    """Read-only identity facts of the stored page PNG for region notes."""
+
+    path: Path
+    width: int
+    height: int
+    sha256: str

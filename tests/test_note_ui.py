@@ -276,11 +276,11 @@ def test_anchor_types_render_readonly_and_sections_stay_separate(
     assert any("图片区域笔记" in value for value in captions)
     assert any("区域：(10, 20) - (300, 400)" in value for value in captions)
     assert "页面级内容" in markdowns and "文档级内容" in markdowns
-    # 可编辑入口 = 文档级 1 + 页面级 1 + 选区 1；图片区域仍只读（无编辑/删除按钮）
+    # 可编辑入口 = 文档级 1 + 页面级 1 + 选区 1 + 区域 1（四类均已开放）
     edit_buttons = [b for b in app.button if b.label == "编辑"]
     delete_buttons = [b for b in app.button if b.label == "永久删除这条笔记"]
-    assert len(edit_buttons) == 3
-    assert len(delete_buttons) == 3
+    assert len(edit_buttons) == 4
+    assert len(delete_buttons) == 4
 
 
 # --- F. regression: markdown flow & review status ---------------------------------
