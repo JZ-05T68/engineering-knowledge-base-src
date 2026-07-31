@@ -15,6 +15,7 @@ from src.classification_metadata import ClassificationMetadataService
 from src.config import Settings, get_settings
 from src.database import Database
 from src.diagnostic_service import DiagnosticService
+from src.document_deletion_service import DocumentDeletionService
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.pdf_service import PdfService
@@ -113,6 +114,20 @@ def application_document_service() -> DocumentService:
         markdown_dir=settings.markdown_dir,
         pdf_service=pdf_service,
         ocr_engine=application_ocr_engine(),
+    )
+
+
+@lru_cache(maxsize=1)
+def application_document_deletion_service() -> DocumentDeletionService:
+    """Return the process-wide staged document deletion service."""
+
+    settings = application_settings()
+    return DocumentDeletionService(
+        database=application_database(),
+        raw_dir=settings.raw_dir,
+        pages_dir=settings.pages_dir,
+        markdown_dir=settings.markdown_dir,
+        data_dir=settings.data_dir,
     )
 
 

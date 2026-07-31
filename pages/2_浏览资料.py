@@ -17,6 +17,7 @@ from src.note_service import NoteService
 from src.note_ui import render_structured_notes_tab
 from src.runtime import (
     application_database,
+    application_document_deletion_service,
     application_document_service,
     application_evidence_basket_service,
 )
@@ -54,9 +55,21 @@ def decode_markdown(file_bytes: bytes) -> str:
     raise ValueError("Markdown 文件不是可识别的 UTF-8 或 GB18030 文本。")
 
 
+def _format_file_size(size_bytes: int) -> str:
+    """Format a byte count with human-readable binary units."""
+
+    size = float(size_bytes)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
 try:
     database = application_database()
     document_service = application_document_service()
+    deletion_service = application_document_deletion_service()
     basket_service = application_evidence_basket_service()
     search_service = SearchService(database)
     note_service = NoteService(database)
@@ -93,6 +106,22 @@ def _open_search_result(
 basket_flash = st.session_state.pop("basket_flash", "")
 if basket_flash:
     st.success(basket_flash)
+
+deletion_flash = st.session_state.pop("doc_delete_flash", None)
+if deletion_flash:
+    flash_message, flash_warnings = deletion_flash
+    st.success(flash_message)
+    for flash_warning in flash_warnings:
+        st.warning(flash_warning)
+
+# Widget keys may only be removed before their widgets are instantiated in a
+# run, so a successful deletion defers the cleanup of its confirmation inputs
+# to the top of the next run via this flag.
+if st.session_state.pop("doc_delete_reset_pending", False):
+    for stale_key in [
+        key for key in st.session_state if key.startswith("doc_delete_")
+    ]:
+        del st.session_state[stale_key]
 
 pending_reader_params = st.session_state.pop("pending_reader_query_params", None)
 if isinstance(pending_reader_params, dict):
@@ -899,23 +928,74 @@ with st.expander("页面列表与缩略图"):
                     st.query_params["page"] = str(thumbnail_page.page_number)
                     st.rerun()
 
-with st.expander("危险操作：删除文档"):
-    st.warning("删除会清理该文档的数据库记录、独占原 PDF、页面图片和笔记文件。")
-    confirmation = st.text_input(
-        f"请输入文档标题“{document.title}”进行二次确认",
-        key=f"delete_confirmation_{document.id}",
-    )
-    if st.button(
-        "永久删除此文档",
-        disabled=confirmation != document.title,
-        key=f"delete_document_{document.id}",
-    ):
-        try:
-            document_service.delete_document(document.id, confirmed=True)
-        except Exception as exc:
-            LOGGER.exception("删除文档失败：document_id=%s", document.id)
-            st.error(f"删除失败：{exc}")
-        else:
-            st.query_params.clear()
-            st.success("文档及其独占文件已删除。")
-            st.rerun()
+with st.expander("删除导入文件"):
+    try:
+        deletion_preview = deletion_service.preview_document_deletion(document.id)
+    except Exception as exc:
+        LOGGER.exception("生成删除预览失败：document_id=%s", document.id)
+        st.error(f"无法生成删除预览：{exc}")
+    else:
+        st.warning(
+            f"此操作不可撤销：将永久删除导入文件“{document.title}”及其全部页面、"
+            "笔记、证据和派生数据。项目与标签本身保留。"
+        )
+        preview_metrics = st.columns(4)
+        preview_metrics[0].metric("页面", deletion_preview.page_count)
+        preview_metrics[1].metric("结构化笔记", deletion_preview.note_count)
+        preview_metrics[2].metric("证据项", deletion_preview.evidence_item_count)
+        preview_metrics[3].metric("搜索记录", deletion_preview.search_record_count)
+        st.caption(
+            f"笔记明细：文档级 {deletion_preview.document_note_count} 条 · "
+            f"页面级 {deletion_preview.page_note_count} 条 · "
+            f"文字选区 {deletion_preview.text_selection_note_count} 条 · "
+            f"图片区域 {deletion_preview.image_region_note_count} 条　|　"
+            f"标签与项目关联 {deletion_preview.association_count} 条　|　"
+            f"导入记录 {deletion_preview.import_record_count} 条（保留，仅解除关联）"
+        )
+        st.caption(
+            f"独占文件：PDF {deletion_preview.pdf_file_count} 个 · "
+            f"页面图片 {deletion_preview.page_image_count} 个 · "
+            f"Markdown {deletion_preview.markdown_file_count} 个，"
+            f"共 {_format_file_size(deletion_preview.total_size_bytes)}"
+        )
+        if deletion_preview.missing_files:
+            st.warning(
+                "以下登记文件在磁盘上缺失，删除时将跳过：\n"
+                + "\n".join(f"- {path}" for path in deletion_preview.missing_files)
+            )
+        if deletion_preview.path_anomalies:
+            st.error(
+                "检测到路径异常，已禁止删除：\n"
+                + "\n".join(f"- {item}" for item in deletion_preview.path_anomalies)
+            )
+        delete_confirmed = st.checkbox(
+            "我确认删除此导入文件及其全部页面、笔记和派生数据。",
+            key=f"doc_delete_confirm_{document.id}",
+        )
+        delete_title = st.text_input(
+            f"请输入文档标题“{document.title}”以确认删除",
+            key=f"doc_delete_title_{document.id}",
+        )
+        if st.button(
+            "永久删除此导入文件",
+            disabled=(
+                not delete_confirmed
+                or delete_title != document.title
+                or bool(deletion_preview.path_anomalies)
+            ),
+            key=f"doc_delete_execute_{document.id}",
+        ):
+            try:
+                deletion_result = deletion_service.delete_document(document.id)
+            except Exception as exc:
+                LOGGER.exception("删除导入文件失败：document_id=%s", document.id)
+                st.error(f"删除失败：{exc}")
+            else:
+                st.session_state["doc_delete_reset_pending"] = True
+                st.session_state["doc_delete_flash"] = (
+                    f"已永久删除导入文件“{document.title}”及其 "
+                    f"{deletion_result.preview.page_count} 个页面与全部派生数据。",
+                    deletion_result.cleanup_warnings,
+                )
+                st.query_params.clear()
+                st.rerun()

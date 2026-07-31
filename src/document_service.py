@@ -13,6 +13,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 from uuid import uuid4
 
+from src.document_deletion_service import (
+    DocumentDeletionError,
+    DocumentDeletionService,
+)
 from src.models import Document, ImportRecord, ImportStatus, Page, PageStatus
 from src.ocr_engine import OcrEngine, OcrExecutionError, require_ocr_engine
 from src.ocr_policy import is_page_eligible_for_ocr
@@ -661,35 +665,30 @@ class DocumentService:
             return False
 
     def delete_document(self, document_id: int, *, confirmed: bool = False) -> None:
-        """Delete one document after explicit confirmation and clean only its files."""
+        """Delete one document after explicit confirmation via the staged service.
+
+        Deprecated entry point kept for existing tests: the browser page now
+        calls :class:`DocumentDeletionService` directly. The staged service
+        quarantines recorded files before the database transaction and
+        restores them on any failure, so unrecorded leftover files next to
+        the document's own files are always preserved.
+        """
 
         if not confirmed:
             raise DocumentImportError("删除文档需要明确二次确认。")
-        document = self.database.get_document(document_id)
-        if document is None:
-            raise DocumentImportError(f"找不到文档：{document_id}")
-        pages = self.database.list_pages(document_id)
-        self.database.delete_document(document_id)
-        failures: list[str] = []
-        paths = [document.source_path]
-        paths.extend(page.image_path for page in pages)
-        paths.extend(page.markdown_path for page in pages if page.markdown_path is not None)
-        for path in paths:
-            try:
-                path.unlink(missing_ok=True)
-            except OSError as exc:
-                failures.append(f"{path}: {exc}")
-        for directory in (self.pages_dir / str(document_id), self.markdown_dir / str(document_id)):
-            try:
-                directory.rmdir()
-            except FileNotFoundError:
-                pass
-            except OSError:
-                LOGGER.warning("文档目录非空，已保留：%s", directory)
-        if failures:
-            raise DocumentImportError(
-                "文档记录已删除，但部分独占文件未能清理：" + "；".join(failures)
-            )
+        deletion_service = DocumentDeletionService(
+            database=self.database,
+            raw_dir=self.raw_dir,
+            pages_dir=self.pages_dir,
+            markdown_dir=self.markdown_dir,
+            data_dir=self.raw_dir.parent,
+        )
+        try:
+            result = deletion_service.delete_document(document_id)
+        except DocumentDeletionError as exc:
+            raise DocumentImportError(str(exc)) from exc
+        for warning in result.cleanup_warnings:
+            LOGGER.warning("文档删除清理警告：%s", warning)
 
     def _create_import_record(
         self, filename: str, title: str, sha256: str

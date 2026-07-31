@@ -557,3 +557,92 @@ class NoteListItem:
     document_title: str | None
     page_number: int | None
     source_status: NoteSourceStatus | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentDeletionFile:
+    """One database-recorded file targeted by a document deletion.
+
+    ``size_bytes`` is ``None`` when the record exists but the file itself is
+    missing from disk; such files are reported, never silently skipped.
+    """
+
+    path: Path
+    kind: str
+    exists: bool
+    size_bytes: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentDeletionPreview:
+    """Read-only impact summary of deleting one imported document.
+
+    Counts cover exactly the rows removed by the schema v5 cascades plus the
+    FTS cleanup trigger. ``import_record_count`` is reported separately
+    because those rows survive with ``document_id`` set to NULL
+    (``ON DELETE SET NULL``). Projects and tags are shared entities and are
+    never part of a deletion; files of other documents are never listed.
+    """
+
+    document_id: int
+    document_title: str
+    page_count: int
+    document_note_count: int
+    page_note_count: int
+    text_selection_note_count: int
+    image_region_note_count: int
+    evidence_item_count: int
+    search_record_count: int
+    association_count: int
+    import_record_count: int
+    files: tuple[DocumentDeletionFile, ...]
+    total_size_bytes: int
+    missing_files: tuple[Path, ...]
+    path_anomalies: tuple[str, ...]
+
+    @property
+    def note_count(self) -> int:
+        """Total structured notes of all four types for this document."""
+
+        return (
+            self.document_note_count
+            + self.page_note_count
+            + self.text_selection_note_count
+            + self.image_region_note_count
+        )
+
+    @property
+    def pdf_file_count(self) -> int:
+        """Number of recorded raw-PDF files (always zero or one)."""
+
+        return sum(file.kind == "pdf" for file in self.files)
+
+    @property
+    def page_image_count(self) -> int:
+        """Number of recorded page-PNG files."""
+
+        return sum(file.kind == "page_image" for file in self.files)
+
+    @property
+    def markdown_file_count(self) -> int:
+        """Number of recorded page-Markdown files."""
+
+        return sum(file.kind == "markdown" for file in self.files)
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentDeletionResult:
+    """Outcome of one completed document deletion.
+
+    ``deleted`` is only ever ``True`` after the database transaction has
+    committed and every recorded file has been removed or quarantined.
+    A committed deletion whose quarantine cleanup failed still reports
+    ``deleted=True`` together with explicit ``cleanup_warnings`` — the
+    deletion is real, the residue is visible, and nothing fakes success.
+    """
+
+    document_id: int
+    document_title: str
+    preview: DocumentDeletionPreview
+    deleted: bool
+    cleanup_warnings: tuple[str, ...] = ()
