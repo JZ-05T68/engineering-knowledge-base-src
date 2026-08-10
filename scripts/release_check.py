@@ -1,14 +1,16 @@
-"""Unified v0.3.0 release-readiness checks with clear process exit status."""
+"""Unified v0.3.1 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
 import argparse
 import os
 import re
+import sqlite3
 import subprocess
 import sys
 import time
 import uuid
+from contextlib import closing
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -38,7 +40,7 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.3.0"
+EXPECTED_VERSION: Final[str] = "0.3.1"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -212,6 +214,7 @@ class ReleaseChecker:
                     f"fts={database.fts}, evidence={database.evidence}",
                 )
             )
+            results.append(schema_v6_invariants_check(self.settings.database_path))
 
         results.append(data_pollution_check(self.settings.data_dir))
 
@@ -446,6 +449,46 @@ def version_consistency_check(
     )
 
 
+def schema_v6_invariants_check(database_path: Path) -> CheckResult:
+    """Read-only v0.3.1 structural invariants of the formal database."""
+
+    try:
+        with closing(sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)) as connection:
+            note_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(notes)")
+            }
+            preference_rows = connection.execute(
+                "SELECT COUNT(*) FROM note_display_preferences"
+            ).fetchone()[0]
+            indexes = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'index'"
+                    " AND tbl_name = 'notes'"
+                )
+            }
+            levels = {
+                row[0]
+                for row in connection.execute("SELECT DISTINCT importance FROM notes")
+            }
+    except (OSError, sqlite3.Error) as exc:
+        return CheckResult("Schema v6 invariants", CheckStatus.FAIL, str(exc))
+    issues: list[str] = []
+    if "importance" not in note_columns:
+        issues.append("notes.importance 缺失")
+    if preference_rows != 1:
+        issues.append(f"note_display_preferences 行数为 {preference_rows}")
+    if "idx_notes_importance" not in indexes:
+        issues.append("idx_notes_importance 缺失")
+    if not levels <= {"primary", "secondary", "normal"}:
+        issues.append(f"存在非法 importance 值：{sorted(levels)}")
+    return CheckResult(
+        "Schema v6 invariants",
+        CheckStatus.PASS if not issues else CheckStatus.FAIL,
+        "importance 列 / 偏好单行 / 索引 / 枚举 全部在位" if not issues else "；".join(issues),
+    )
+
+
 def listener_check(
     configured_host: str,
     port: int,
@@ -647,7 +690,7 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.3.0 统一发布检查")
+    parser = argparse.ArgumentParser(description="工程知识库 v0.3.1 统一发布检查")
     backup_group = parser.add_mutually_exclusive_group()
     backup_group.add_argument(
         "--skip-backup",
