@@ -1,4 +1,6 @@
-streamlit
+# streamlit 1.61 removed streamlit.elements.image.UseColumnWith, which the
+# pinned streamlit-image-coordinates 0.4.0 (latest available) still imports.
+streamlit>=1.59.1,<1.61
 streamlit-image-coordinates==0.4.0
 PyMuPDF
 Pillow
