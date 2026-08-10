@@ -39,7 +39,7 @@ _FLASH_KEY = "review_flash"
 _BATCH_NUMBER_KEY = "review_visible_batch_number"
 _VISIBLE_BATCH_SIZE = 20
 
-st.set_page_config(page_title="待复核页面｜工程知识库 v0.3.1", page_icon="📝", layout="wide")
+st.set_page_config(page_title="待复核页面｜工程知识库 v0.3.2", page_icon="📝", layout="wide")
 st.title("待复核页面")
 st.caption("连续保存草稿、人工复核或暂时跳过；所有内容仅保存在本机。")
 

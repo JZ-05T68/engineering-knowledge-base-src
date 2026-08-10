@@ -1,4 +1,4 @@
-"""Unified v0.3.1 release-readiness checks with clear process exit status."""
+"""Unified v0.3.2 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.3.1"
+EXPECTED_VERSION: Final[str] = "0.3.2"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -450,7 +450,7 @@ def version_consistency_check(
 
 
 def schema_v6_invariants_check(database_path: Path) -> CheckResult:
-    """Read-only v0.3.1 structural invariants of the formal database."""
+    """Read-only v0.3.2 structural invariants of the formal database."""
 
     try:
         with closing(sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)) as connection:
@@ -690,7 +690,7 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.3.1 统一发布检查")
+    parser = argparse.ArgumentParser(description="工程知识库 v0.3.2 统一发布检查")
     backup_group = parser.add_mutually_exclusive_group()
     backup_group.add_argument(
         "--skip-backup",
