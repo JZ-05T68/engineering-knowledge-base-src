@@ -561,7 +561,7 @@ def _render_image_region_create(
                 f"({region['x1']}, {region['y1']}) · 区域 "
                 f"{region['x1'] - region['x0']} × {region['y1'] - region['y0']} 像素"
             )
-            st.image(_region_overlay_bytes(preview.path, region))
+            _render_region_overlay(preview.path, region)
             if st.button("清除框选", key=f"note_image_create_clear_{page_id}"):
                 _queue_key_clear(region_key)
                 st.rerun()
@@ -669,16 +669,14 @@ def _render_image_region_note(
                 except Exception:
                     st.caption("当前页面图像不可用，无法生成预览。")
                 else:
-                    st.image(
-                        _region_overlay_bytes(
-                            preview.path,
-                            {
-                                "x0": note.region_x0,
-                                "y0": note.region_y0,
-                                "x1": note.region_x1,
-                                "y1": note.region_y1,
-                            },
-                        )
+                    _render_region_overlay(
+                        preview.path,
+                        {
+                            "x0": note.region_x0,
+                            "y0": note.region_y0,
+                            "x1": note.region_x1,
+                            "y1": note.region_y1,
+                        },
                     )
         if st.session_state.get(f"note_image_edit_mode_{note.id}"):
             _render_image_region_edit(note_service, view)
@@ -823,7 +821,7 @@ def _render_image_rebind_area(
                 f"{region['x1'] - region['x0']} × {region['y1'] - region['y0']} 像素\n\n"
                 "确认后区域锚点将被替换，个人笔记内容会保留。"
             )
-            st.image(_region_overlay_bytes(preview.path, region))
+            _render_region_overlay(preview.path, region)
             confirmed = st.checkbox(
                 "确认重新框选区域：当前图片区域锚点将被替换，个人笔记内容会保留。",
                 key=f"note_image_rebind_confirm_{note.id}",
@@ -866,6 +864,20 @@ def _region_overlay_bytes(image_path: Path, region: dict) -> bytes:
     buffer = BytesIO()
     canvas.save(buffer, format="PNG")
     return buffer.getvalue()
+
+
+def _render_region_overlay(image_path: Path, region: dict) -> None:
+    """Render one region overlay with failure isolation at the render boundary.
+
+    A corrupted or undecodable PNG must degrade this single preview to a
+    warning; it must never escape and crash the whole Streamlit page.
+    """
+
+    try:
+        st.image(_region_overlay_bytes(image_path, region))
+    except (OSError, ValueError) as exc:
+        LOGGER.warning("区域预览生成失败：%s（%s）", image_path, exc)
+        st.warning(f"区域预览生成失败：页面图像无法解码（{image_path.name}）。")
 
 
 def _format_time(value) -> str:

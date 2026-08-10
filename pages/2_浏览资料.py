@@ -782,11 +782,21 @@ with image_column:
     fit_width = zoom_columns[1].checkbox("适应宽度", value=True)
     with st.container(height=760, border=True):
         if page.image_path.exists():
-            st.image(
-                str(page.image_path),
-                caption=f"{document.title} · 第 {page.page_number} 页",
-                width="stretch" if fit_width else image_width,
-            )
+            try:
+                st.image(
+                    str(page.image_path),
+                    caption=f"{document.title} · 第 {page.page_number} 页",
+                    width="stretch" if fit_width else image_width,
+                )
+            except (OSError, ValueError) as exc:
+                # 单张损坏图片只降级本栏显示，绝不让整页崩溃。
+                LOGGER.warning(
+                    "页面图片无法显示：%s（%s）", page.image_path, exc
+                )
+                st.error(
+                    f"页面图片无法显示：{page.image_path}。"
+                    "文件可能已损坏，请在“系统维护”检查引用和备份。"
+                )
         else:
             st.error(f"页面图片缺失：{page.image_path}")
     with st.expander("查看原始提取文本"):
@@ -912,7 +922,10 @@ with st.expander("页面列表与缩略图"):
         ):
             with column:
                 if thumbnail_page.image_path.exists():
-                    st.image(str(thumbnail_page.image_path), width="stretch")
+                    try:
+                        st.image(str(thumbnail_page.image_path), width="stretch")
+                    except (OSError, ValueError):
+                        st.caption("缩略图无法显示（文件可能已损坏）")
                 st.caption(
                     f"第 {thumbnail_page.page_number} 页 · {thumbnail_page.status.label} · "
                     f"{'有笔记' if thumbnail_page.has_note else '无笔记'}"

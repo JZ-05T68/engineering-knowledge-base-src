@@ -18,7 +18,7 @@ from src.note_service import (
     NoteService,
     NoteValidationError,
 )
-from src.note_ui import _region_overlay_bytes, _render_region_status, _render_source_status
+from src.note_ui import _render_region_overlay, _render_region_status, _render_source_status
 
 LOGGER = logging.getLogger(__name__)
 
@@ -221,16 +221,14 @@ def _render_image_region_body(
             st.warning(f"无法生成区域预览：{exc}")
             return
         _render_region_status(view)
-        st.image(
-            _region_overlay_bytes(
-                preview.path,
-                {
-                    "x0": note.region_x0,
-                    "y0": note.region_y0,
-                    "x1": note.region_x1,
-                    "y1": note.region_y1,
-                },
-            )
+        _render_region_overlay(
+            preview.path,
+            {
+                "x0": note.region_x0,
+                "y0": note.region_y0,
+                "x1": note.region_x1,
+                "y1": note.region_y1,
+            },
         )
         if st.button("隐藏区域预览", key=f"note_list_preview_hide_{note.id}"):
             st.session_state.pop(preview_key, None)
