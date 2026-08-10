@@ -8,6 +8,7 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.document_deletion_ui import render_document_deletion_section
 from src.evidence_basket_service import (
     DuplicateEvidenceError,
     EvidenceBasketError,
@@ -53,17 +54,6 @@ def decode_markdown(file_bytes: bytes) -> str:
         except UnicodeDecodeError:
             continue
     raise ValueError("Markdown 文件不是可识别的 UTF-8 或 GB18030 文本。")
-
-
-def _format_file_size(size_bytes: int) -> str:
-    """Format a byte count with human-readable binary units."""
-
-    size = float(size_bytes)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
-        size /= 1024
-    return f"{size:.1f} GB"
 
 
 try:
@@ -361,6 +351,13 @@ with st.expander("文档标签与所属项目"):
             st.error(f"保存文档分类失败：{exc}")
         else:
             st.success("文档分类已保存。")
+
+with st.expander("文档管理"):
+    st.caption("针对当前文档的管理操作。以下操作会影响整份文档，请谨慎执行。")
+    render_document_deletion_section(
+        deletion_service=deletion_service,
+        document=document,
+    )
 
 document_pages = sorted(
     database.list_pages(document.id),
@@ -940,75 +937,3 @@ with st.expander("页面列表与缩略图"):
                 ):
                     st.query_params["page"] = str(thumbnail_page.page_number)
                     st.rerun()
-
-with st.expander("删除导入文件"):
-    try:
-        deletion_preview = deletion_service.preview_document_deletion(document.id)
-    except Exception as exc:
-        LOGGER.exception("生成删除预览失败：document_id=%s", document.id)
-        st.error(f"无法生成删除预览：{exc}")
-    else:
-        st.warning(
-            f"此操作不可撤销：将永久删除导入文件“{document.title}”及其全部页面、"
-            "笔记、证据和派生数据。项目与标签本身保留。"
-        )
-        preview_metrics = st.columns(4)
-        preview_metrics[0].metric("页面", deletion_preview.page_count)
-        preview_metrics[1].metric("结构化笔记", deletion_preview.note_count)
-        preview_metrics[2].metric("证据项", deletion_preview.evidence_item_count)
-        preview_metrics[3].metric("搜索记录", deletion_preview.search_record_count)
-        st.caption(
-            f"笔记明细：文档级 {deletion_preview.document_note_count} 条 · "
-            f"页面级 {deletion_preview.page_note_count} 条 · "
-            f"文字选区 {deletion_preview.text_selection_note_count} 条 · "
-            f"图片区域 {deletion_preview.image_region_note_count} 条　|　"
-            f"标签与项目关联 {deletion_preview.association_count} 条　|　"
-            f"导入记录 {deletion_preview.import_record_count} 条（保留，仅解除关联）"
-        )
-        st.caption(
-            f"独占文件：PDF {deletion_preview.pdf_file_count} 个 · "
-            f"页面图片 {deletion_preview.page_image_count} 个 · "
-            f"Markdown {deletion_preview.markdown_file_count} 个，"
-            f"共 {_format_file_size(deletion_preview.total_size_bytes)}"
-        )
-        if deletion_preview.missing_files:
-            st.warning(
-                "以下登记文件在磁盘上缺失，删除时将跳过：\n"
-                + "\n".join(f"- {path}" for path in deletion_preview.missing_files)
-            )
-        if deletion_preview.path_anomalies:
-            st.error(
-                "检测到路径异常，已禁止删除：\n"
-                + "\n".join(f"- {item}" for item in deletion_preview.path_anomalies)
-            )
-        delete_confirmed = st.checkbox(
-            "我确认删除此导入文件及其全部页面、笔记和派生数据。",
-            key=f"doc_delete_confirm_{document.id}",
-        )
-        delete_title = st.text_input(
-            f"请输入文档标题“{document.title}”以确认删除",
-            key=f"doc_delete_title_{document.id}",
-        )
-        if st.button(
-            "永久删除此导入文件",
-            disabled=(
-                not delete_confirmed
-                or delete_title != document.title
-                or bool(deletion_preview.path_anomalies)
-            ),
-            key=f"doc_delete_execute_{document.id}",
-        ):
-            try:
-                deletion_result = deletion_service.delete_document(document.id)
-            except Exception as exc:
-                LOGGER.exception("删除导入文件失败：document_id=%s", document.id)
-                st.error(f"删除失败：{exc}")
-            else:
-                st.session_state["doc_delete_reset_pending"] = True
-                st.session_state["doc_delete_flash"] = (
-                    f"已永久删除导入文件“{document.title}”及其 "
-                    f"{deletion_result.preview.page_count} 个页面与全部派生数据。",
-                    deletion_result.cleanup_warnings,
-                )
-                st.query_params.clear()
-                st.rerun()

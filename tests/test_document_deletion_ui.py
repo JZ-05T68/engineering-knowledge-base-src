@@ -7,6 +7,7 @@ and port 8501 are never touched.
 from __future__ import annotations
 
 import shutil
+import sqlite3
 from pathlib import Path
 
 from PIL import Image
@@ -211,7 +212,7 @@ def test_successful_deletion_updates_page_and_cleans_state(
     _button(app, f"doc_delete_execute_{document.id}").click().run()
 
     assert not app.exception
-    assert any("已永久删除导入文件“甲文档”" in success.value for success in app.success)
+    assert any("已永久删除导入文档“甲文档”" in success.value for success in app.success)
     assert database.get_document(document.id) is None
     selectbox = next(sb for sb in app.selectbox if sb.label == "选择文档")
     option_labels = [str(option) for option in selectbox.options]
@@ -306,5 +307,64 @@ def test_no_batch_deletion_entry(tmp_path: Path, monkeypatch) -> None:
     button_labels = [button.label for button in app.button]
     assert not any("全部删除" in label for label in button_labels)
     expander_labels = [expander.label for expander in app.expander]
-    assert expander_labels.count("删除导入文件") == 1
+    # The single deletion entry lives in the document-management section near
+    # the document summary; no second, drifting implementation exists.
+    assert expander_labels.count("文档管理") == 1
+    assert "删除导入文件" not in expander_labels
     assert "危险操作：删除文档" not in expander_labels
+
+
+# --- evidence-basket confirmation ------------------------------------------------
+
+
+def test_evidence_items_require_independent_confirmation(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, database, _, document, _, _ = _build_app(tmp_path, monkeypatch)
+    page_id = database.list_pages(document.id)[0].id
+    EvidenceBasketService(database).add_item(
+        document_id=document.id, page_id=page_id, evidence_text="阀体"
+    )
+    _select_document(app, document.id)
+    key = f"doc_delete_execute_{document.id}"
+
+    app.checkbox(key=f"doc_delete_confirm_{document.id}").check().run()
+    app.text_input(key=f"doc_delete_title_{document.id}").input(document.title).run()
+    # The generic confirmation alone must not be enough while evidence exists.
+    assert _button(app, key).disabled
+
+    evidence_checkbox = app.checkbox(key=f"doc_delete_evidence_{document.id}")
+    assert "1 条证据篮条目" in evidence_checkbox.label
+    assert "摘录、快照和用户批注" in evidence_checkbox.label
+    evidence_checkbox.check().run()
+    assert not _button(app, key).disabled
+
+
+def test_no_evidence_checkbox_without_evidence_items(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app, _, _, document, _, _ = _build_app(tmp_path, monkeypatch)
+    _select_document(app, document.id)
+
+    checkbox_keys = [checkbox.key for checkbox in app.checkbox]
+    assert f"doc_delete_evidence_{document.id}" not in checkbox_keys
+    app.checkbox(key=f"doc_delete_confirm_{document.id}").check().run()
+    app.text_input(key=f"doc_delete_title_{document.id}").input(document.title).run()
+    assert not _button(app, f"doc_delete_execute_{document.id}").disabled
+
+
+def test_path_anomaly_disables_execute(tmp_path: Path, monkeypatch) -> None:
+    app, database, _, document, _, _ = _build_app(tmp_path, monkeypatch)
+    page_id = database.list_pages(document.id)[0].id
+    with sqlite3.connect(database.database_path) as connection:
+        connection.execute(
+            "UPDATE pages SET image_path = ? WHERE id = ?",
+            (str(tmp_path / "outside.png"), page_id),
+        )
+    app.run(timeout=30)
+    _select_document(app, document.id)
+
+    assert any("路径异常" in error.value for error in app.error)
+    app.checkbox(key=f"doc_delete_confirm_{document.id}").check().run()
+    app.text_input(key=f"doc_delete_title_{document.id}").input(document.title).run()
+    assert _button(app, f"doc_delete_execute_{document.id}").disabled
