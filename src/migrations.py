@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 
 class MigrationError(RuntimeError):
@@ -68,6 +68,8 @@ def migrate_database(database_path: Path) -> Path | None:
             _apply_version_four(connection)
         if current_version < 5:
             _apply_version_five(connection)
+        if current_version < 6:
+            _apply_version_six(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -613,6 +615,58 @@ def _apply_version_five(connection: sqlite3.Connection) -> None:
             raise MigrationError("schema v5 迁移改变了现有文档、页面或 FTS 数据")
         connection.commit()
         LOGGER.info("数据库已迁移到 schema v5")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _apply_version_six(connection: sqlite3.Connection) -> None:
+    """Add note importance and display preferences without touching existing data.
+
+    v0.3.1 (frozen design): one additive column on ``notes`` (constant default
+    'normal', so legacy rows need no rewrite), one single-row preferences table
+    and one index. No other schema objects are introduced.
+    """
+
+    fingerprint = _core_data_fingerprint(connection)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            ALTER TABLE notes ADD COLUMN importance TEXT NOT NULL DEFAULT 'normal'
+                CHECK (importance IN ('primary', 'secondary', 'normal'))
+            """
+        )
+        connection.execute(
+            """
+            CREATE TABLE note_display_preferences (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                color_primary TEXT NOT NULL DEFAULT '#c0392b'
+                    CHECK (color_primary GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+                color_secondary TEXT NOT NULL DEFAULT '#b8860b' CHECK (
+                    color_secondary GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'
+                ),
+                color_normal TEXT NOT NULL DEFAULT '#5a6570'
+                    CHECK (color_normal GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO note_display_preferences (id, updated_at) VALUES (1, ?)",
+            (_utc_now(),),
+        )
+        connection.execute(
+            "CREATE INDEX idx_notes_importance ON notes(importance, updated_at DESC)"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (6, ?)",
+            (_utc_now(),),
+        )
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v6 迁移改变了现有文档、页面或 FTS 数据")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v6")
     except Exception:
         connection.rollback()
         raise

@@ -126,7 +126,7 @@ def test_normal_backup_captures_database_assets_hashes_and_all_metadata(
     assert validation.database_summary.integrity_check == "ok"
     assert validation.database_summary.foreign_key_violations == 0
     assert validation.database_summary.evidence == 1
-    assert result.manifest["schema_version"] == 5
+    assert result.manifest["schema_version"] == 6
     assert result.manifest["statistics"] == {
         "documents": 1,
         "pages": 1,
@@ -283,6 +283,41 @@ def test_schema_and_application_version_incompatibility_are_rejected(
     assert "应用版本不兼容" in version_validation.errors[0]
 
 
+def test_schema_v5_backup_is_rejected_clearly_and_safely(tmp_path: Path) -> None:
+    """v0.3.1 / schema v6 对 v5 正式备份保持同 schema 恢复契约（冻结设计 §10）。
+
+    拒绝必须带明确中文错误、不产生模糊 sqlite 失败，且既不修改备份文件
+    也不触碰当前数据库。
+    """
+    current = _library(tmp_path / "current")
+    current_db_bytes = current.database_path.read_bytes()
+    good = _library(tmp_path / "source", version="0.3.0").create_backup().backup_path
+    legacy = _copy_backup(good, tmp_path / "legacy-v5")
+    manifest_path = legacy / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["schema_version"] = 5
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    backup_fingerprint = {
+        path.relative_to(legacy).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(legacy.rglob("*"))
+        if path.is_file()
+    }
+
+    validation = validate_backup(legacy, expected_app_version="0.3.1")
+
+    assert not validation.valid
+    assert validation.errors
+    assert "schema v5 不兼容" in validation.errors[0]
+    assert "当前仅支持 v6" in validation.errors[0]
+    after_fingerprint = {
+        path.relative_to(legacy).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in sorted(legacy.rglob("*"))
+        if path.is_file()
+    }
+    assert after_fingerprint == backup_fingerprint
+    assert current.database_path.read_bytes() == current_db_bytes
+
+
 def test_patch_upgrade_accepts_older_same_minor_backup_but_rejects_future_patch(
     tmp_path: Path,
 ) -> None:
@@ -304,7 +339,7 @@ def test_patch_upgrade_can_restore_older_same_minor_backup(tmp_path: Path) -> No
 
     result = target.restore_backup(backup, service_is_running=lambda: False)
 
-    assert result.database_summary.schema_version == 5
+    assert result.database_summary.schema_version == 6
     assert (target.raw_dir / "manual.pdf").read_bytes() == b"v0.1.1"
     assert result.pre_restore_backup is not None
 

@@ -168,6 +168,27 @@ class NoteType(StrEnum):
         }[self]
 
 
+class NoteImportance(StrEnum):
+    """The three semantic importance levels frozen for v0.3.1.
+
+    These are business semantics persisted in the database — never colors.
+    """
+
+    PRIMARY = "primary"
+    SECONDARY = "secondary"
+    NORMAL = "normal"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese level label shown on badges."""
+
+        return {
+            self.PRIMARY: "重点",
+            self.SECONDARY: "次重点",
+            self.NORMAL: "一般",
+        }[self]
+
+
 class NoteSourceStatus(StrEnum):
     """Freshness of a note's text or image anchor, recomputed on every read."""
 
@@ -502,6 +523,7 @@ class Note:
     region_y0: int | None = None
     region_x1: int | None = None
     region_y1: int | None = None
+    importance: str = "normal"
 
 
 @dataclass(frozen=True, slots=True)
@@ -557,6 +579,20 @@ class NoteListItem:
     document_title: str | None
     page_number: int | None
     source_status: NoteSourceStatus | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class NoteDisplayPreferences:
+    """User-configurable badge background colors (presentation only).
+
+    Colors are canonical lowercase ``#rrggbb``; they never carry business
+    semantics. Foreground text color is derived by the UI, not stored.
+    """
+
+    color_primary: str = "#c0392b"
+    color_secondary: str = "#b8860b"
+    color_normal: str = "#5a6570"
+    updated_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
