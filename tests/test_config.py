@@ -19,9 +19,9 @@ from src.config import (
 def test_current_application_version_is_v024() -> None:
     settings = Settings(_env_file=None)
 
-    assert settings.app_title == "工程知识库 v0.2.4"
-    assert settings.app_version == "0.2.4"
-    assert __version__ == "0.2.4"
+    assert settings.app_title == "工程知识库 v0.3.0"
+    assert settings.app_version == "0.3.0"
+    assert __version__ == "0.3.0"
 
 
 def test_official_configuration_accepts_only_loopback_8501() -> None:
