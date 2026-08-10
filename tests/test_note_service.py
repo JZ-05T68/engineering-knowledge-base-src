@@ -447,6 +447,28 @@ def test_image_region_requires_existing_page(env: dict) -> None:
         env["service"].create_image_region_note(999, 0, 0, 100, 100, "孤儿")
 
 
+def test_image_region_truncated_png_rejected(env: dict) -> None:
+    """文件头完整但像素数据截断的 PNG 不得通过创建校验。
+
+    PIL 解码是惰性的：只读 size 会接受截断文件；锚点固化前必须证明像素
+    数据可完整解码。
+    """
+    env["png"].write_bytes(env["png"].read_bytes()[:100])
+    with pytest.raises(PageImageUnreadableError):
+        env["service"].create_image_region_note(1, 0, 0, 100, 100, "截断图")
+
+
+def test_image_region_truncated_png_status_and_rebind_rejected(env: dict) -> None:
+    """已绑定笔记的 PNG 被截断后：状态为 UNREADABLE，重绑被拒绝且原锚点不变。"""
+    service: NoteService = env["service"]
+    note = service.create_image_region_note(1, 10, 20, 300, 400, "区域").note
+    env["png"].write_bytes(env["png"].read_bytes()[:100])
+    assert service.get_note(note.id).source_status is NoteSourceStatus.UNREADABLE
+    with pytest.raises(PageImageUnreadableError):
+        service.rebind_image_region(note.id, 10, 20, 300, 400)
+    assert service.get_note(note.id).note == note
+
+
 def test_image_region_delete_keeps_png_and_page(env: dict) -> None:
     service: NoteService = env["service"]
     note = service.create_image_region_note(1, 10, 20, 300, 400, "区域").note

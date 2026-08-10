@@ -695,6 +695,10 @@ class NoteService:
         try:
             data = image_path.read_bytes()
             with Image.open(BytesIO(data)) as image:
+                # PIL 解码是惰性的：仅访问 size 只读文件头，像素数据损坏的
+                # 图像仍会得到合法尺寸。强制 load() 证明像素数据可完整解码，
+                # 否则创建/重绑会把损坏图像固化为 VALID 锚点。
+                image.load()
                 width, height = image.size
         except (OSError, ValueError) as exc:
             raise PageImageUnreadableError(f"页面图像无法读取：{image_path}") from exc
