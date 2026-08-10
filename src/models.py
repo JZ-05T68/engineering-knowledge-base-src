@@ -761,3 +761,7 @@ class AggregationResult:
     evidence_count: int
     limit: int
     offset: int
+    document_count: int = 0
+    primary_count: int = 0
+    secondary_count: int = 0
+    normal_count: int = 0

@@ -295,7 +295,11 @@ class AggregationService:
             count_row = connection.execute(
                 "SELECT COUNT(*), "
                 "COALESCE(SUM(source_kind = 'note'), 0), "
-                "COALESCE(SUM(source_kind = 'evidence'), 0) "
+                "COALESCE(SUM(source_kind = 'evidence'), 0), "
+                "COUNT(DISTINCT document_id), "
+                "COALESCE(SUM(importance = 'primary'), 0), "
+                "COALESCE(SUM(importance = 'secondary'), 0), "
+                "COALESCE(SUM(importance = 'normal'), 0) "
                 f"FROM ({union_sql})",
                 parameters,
             ).fetchone()
@@ -310,6 +314,10 @@ class AggregationService:
             evidence_count=int(count_row[2]),
             limit=limit,
             offset=offset,
+            document_count=int(count_row[3]),
+            primary_count=int(count_row[4]),
+            secondary_count=int(count_row[5]),
+            normal_count=int(count_row[6]),
         )
 
     def _attach_associations(self, connection, rows: list) -> list[AggregationItem]:
