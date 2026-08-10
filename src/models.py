@@ -713,3 +713,51 @@ class QuarantineReconciliation:
         """Whether any operation needs manual inspection."""
 
         return any(operation.status == "attention" for operation in self.operations)
+
+
+class AggregationSourceKind(StrEnum):
+    """Which underlying entity one aggregation entry comes from."""
+
+    NOTE = "note"
+    EVIDENCE = "evidence"
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationItem:
+    """One traceable knowledge entry in a cross-document aggregation view.
+
+    The unified shape exists for browsing and stable sorting only; it never
+    pretends notes and evidence are the same thing. ``note_type`` and
+    ``importance`` are ``None`` for evidence entries (evidence carries no
+    importance and none is fabricated), while ``user_note``/``basket_id``
+    are only meaningful for evidence. ``tags``/``projects`` hold the
+    effective association names (page-direct plus document-inherited), the
+    same semantics the page search layer already uses.
+    """
+
+    source_kind: AggregationSourceKind
+    source_id: int
+    document_id: int
+    document_title: str
+    page_id: int | None
+    page_number: int | None
+    note_type: NoteType | None
+    importance: NoteImportance | None
+    content: str
+    user_note: str
+    basket_id: int | None
+    tags: tuple[str, ...]
+    projects: tuple[str, ...]
+    sort_timestamp: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class AggregationResult:
+    """One page of aggregation items plus totals for the active filters."""
+
+    items: tuple[AggregationItem, ...]
+    total_count: int
+    note_count: int
+    evidence_count: int
+    limit: int
+    offset: int
