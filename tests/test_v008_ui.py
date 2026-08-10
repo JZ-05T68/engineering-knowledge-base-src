@@ -104,13 +104,15 @@ def empty_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         ("pages/5_标签管理.py", "创建第一个标签"),
         ("pages/6_项目管理.py", "创建第一个本地项目"),
         ("pages/9_证据篮.py", "证据篮为空"),
-        ("pages/10_系统维护.py", "还没有 v0.2.2 完整备份"),
+        # 维护页空备份提示包含当前应用版本号，从 settings 派生而非硬编码
+        ("pages/10_系统维护.py", None),
     ],
 )
 def test_major_pages_have_actionable_empty_states(
-    empty_runtime: Settings, page: str, expected: str
+    empty_runtime: Settings, page: str, expected: str | None
 ) -> None:
-    del empty_runtime
+    if expected is None:
+        expected = f"还没有 v{empty_runtime.app_version} 完整备份"
     app = AppTest.from_file(page).run(timeout=10)
 
     messages = [element.value for element in (*app.info, *app.success, *app.warning)]
