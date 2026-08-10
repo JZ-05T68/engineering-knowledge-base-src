@@ -16,7 +16,14 @@ import streamlit as st
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 
-from src.models import NoteSourceStatus, NoteType, NoteView
+from src.models import (
+    Note,
+    NoteDisplayPreferences,
+    NoteImportance,
+    NoteSourceStatus,
+    NoteType,
+    NoteView,
+)
 from src.note_geometry import (
     display_to_original,
     make_component_key,
@@ -34,6 +41,7 @@ from src.note_service import (
     PageImageMissingError,
     PageImageUnreadableError,
     TextSourceUnavailableError,
+    badge_foreground,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -50,6 +58,12 @@ _REBIND_CONFIRM_TEXT = (
     "确认重新绑定原文选区：当前原文锚点和用户摘录将替换为新选区，"
     "个人笔记内容会保留。"
 )
+_IMPORTANCE_LEVELS = list(NoteImportance)
+_IMPORTANCE_BADGE_BACKGROUNDS = {
+    NoteImportance.PRIMARY: "color_primary",
+    NoteImportance.SECONDARY: "color_secondary",
+    NoteImportance.NORMAL: "color_normal",
+}
 
 
 def note_create_key(scope: str, owner_id: int) -> str:
@@ -74,6 +88,72 @@ def _delete_confirm_key(note_id: int) -> str:
     return f"note_delete_confirm_{note_id}"
 
 
+def _importance_of(note: Note) -> NoteImportance | None:
+    """Strict semantic mapping; unknown DB values surface as an error, never as normal."""
+
+    try:
+        return NoteImportance(note.importance)
+    except ValueError:
+        LOGGER.error("笔记 %s 的重要程度数据异常：%r", note.id, note.importance)
+        return None
+
+
+def _importance_index(level: NoteImportance | None) -> int:
+    return _IMPORTANCE_LEVELS.index(level) if level is not None else 2
+
+
+def _render_importance_badge(note: Note, preferences: NoteDisplayPreferences) -> None:
+    """Render the semantic badge; text label is always present.
+
+    Color is presentation only: background comes from display preferences,
+    foreground from the shared ``badge_foreground`` helper. Color anomalies
+    degrade to a plain-text badge; unknown importance is an explicit error,
+    never silently rendered as 一般.
+    """
+
+    level = _importance_of(note)
+    if level is None:
+        st.error(f"笔记 #{note.id} 的重要程度数据异常：{note.importance!r}")
+        return
+    background = getattr(preferences, _IMPORTANCE_BADGE_BACKGROUNDS[level])
+    try:
+        foreground = badge_foreground(background)
+    except Exception:
+        LOGGER.exception("徽章配色计算失败：%s", background)
+        st.markdown(f"**{level.label}**")
+        return
+    st.markdown(
+        f"<span style='background:{background};color:{foreground};"
+        "padding:0.1rem 0.45rem;border-radius:0.35rem;font-weight:600'>"
+        f"{level.label}</span>",
+        unsafe_allow_html=True,
+    )
+
+
+def _load_display_preferences(note_service: NoteService) -> NoteDisplayPreferences:
+    """Read badge preferences once per render; failures degrade, never crash."""
+
+    try:
+        return note_service.get_display_preferences()
+    except Exception:
+        LOGGER.exception("读取笔记显示偏好失败")
+        st.warning("配色偏好暂时读取失败，本次按默认配色显示。")
+        return NoteDisplayPreferences()
+
+
+def _render_importance_selector(note: Note, key: str) -> NoteImportance:
+    """Edit-form level selector initialized from the stored value."""
+
+    current = _importance_of(note)
+    return st.selectbox(
+        "重要程度",
+        options=_IMPORTANCE_LEVELS,
+        index=_importance_index(current),
+        format_func=lambda item: item.label,
+        key=key,
+    )
+
+
 def render_structured_notes_tab(
     note_service: NoteService, *, document_id: int, page_id: int, display_width: int
 ) -> None:
@@ -83,12 +163,15 @@ def render_structured_notes_tab(
     if flash:
         st.success(flash)
     _apply_pending_key_clears()
-    _render_document_section(note_service, document_id)
+    preferences = _load_display_preferences(note_service)
+    _render_document_section(note_service, document_id, preferences)
     st.divider()
-    _render_page_section(note_service, document_id, page_id, display_width)
+    _render_page_section(note_service, document_id, page_id, display_width, preferences)
 
 
-def _render_document_section(note_service: NoteService, document_id: int) -> None:
+def _render_document_section(
+    note_service: NoteService, document_id: int, preferences: NoteDisplayPreferences
+) -> None:
     with st.expander("文档级笔记", expanded=False):
         try:
             views = note_service.list_document_notes(document_id)
@@ -100,7 +183,10 @@ def _render_document_section(note_service: NoteService, document_id: int) -> Non
         for view in views:
             _render_editable_note(
                 view,
-                save=lambda note_id, text: note_service.update_document_note(note_id, text),
+                preferences,
+                save=lambda note_id, text, imp: note_service.update_document_note(
+                    note_id, text, importance=imp
+                ),
                 delete=note_service.delete_note,
                 delete_label="我确认删除这条文档级笔记",
                 delete_flash="文档级笔记已删除。",
@@ -109,13 +195,19 @@ def _render_document_section(note_service: NoteService, document_id: int) -> Non
             scope="document",
             owner_id=document_id,
             title="新建文档级笔记",
-            create=lambda text: note_service.create_document_note(document_id, text),
+            create=lambda text, level: note_service.create_document_note(
+                document_id, text, importance=level
+            ),
             flash="文档级笔记已保存。",
         )
 
 
 def _render_page_section(
-    note_service: NoteService, document_id: int, page_id: int, display_width: int
+    note_service: NoteService,
+    document_id: int,
+    page_id: int,
+    display_width: int,
+    preferences: NoteDisplayPreferences,
 ) -> None:
     st.subheader("本页笔记")
     image_cache: dict = {}
@@ -136,20 +228,25 @@ def _render_page_section(
     for view in page_views:
         _render_editable_note(
             view,
-            save=lambda note_id, text: note_service.update_page_note(note_id, text),
+            preferences,
+            save=lambda note_id, text, imp: note_service.update_page_note(
+                note_id, text, importance=imp
+            ),
             delete=note_service.delete_note,
             delete_label="我确认删除这条页面级笔记",
             delete_flash="页面级笔记已删除。",
         )
     for view in text_views:
-        _render_text_selection_note(note_service, view)
+        _render_text_selection_note(note_service, view, preferences)
     for view in region_views:
-        _render_image_region_note(note_service, view, document_id, display_width)
+        _render_image_region_note(note_service, view, document_id, display_width, preferences)
     _render_create_form(
         scope="page",
         owner_id=page_id,
         title="新建页面级笔记",
-        create=lambda text: note_service.create_page_note(page_id, text),
+        create=lambda text, level: note_service.create_page_note(
+            page_id, text, importance=level
+        ),
         flash="页面级笔记已保存。",
     )
     _render_text_selection_create(note_service, page_id)
@@ -164,25 +261,39 @@ def _render_create_form(*, scope: str, owner_id: int, title: str, create, flash:
         key=key,
         placeholder="记录你的判断、说明和想法。",
     )
+    level = st.selectbox(
+        "重要程度",
+        options=_IMPORTANCE_LEVELS,
+        index=2,
+        format_func=lambda item: item.label,
+        key=f"{key}_imp",
+    )
     if st.button(f"保存{title.removeprefix('新建')}", key=f"{key}_save"):
         if not text.strip():
             st.warning("个人笔记不能为空")
             return
         try:
-            create(text)
+            create(text, level.value)
         except Exception as exc:
             _show_save_error(exc)  # 输入保留在 widget 中
         else:
-            _queue_key_clear(key)
+            _queue_key_clear(key, f"{key}_imp")
             st.session_state[_FLASH_KEY] = flash
             st.rerun()
 
 
 def _render_editable_note(
-    view: NoteView, *, save, delete, delete_label: str, delete_flash: str
+    view: NoteView,
+    preferences: NoteDisplayPreferences,
+    *,
+    save,
+    delete,
+    delete_label: str,
+    delete_flash: str,
 ) -> None:
     note = view.note
     with st.container(border=True):
+        _render_importance_badge(note, preferences)
         st.caption(
             f"{note.note_type.label} #{note.id} · "
             f"创建于 {_format_time(note.created_at)} · 更新于 {_format_time(note.updated_at)}"
@@ -195,7 +306,10 @@ def _render_editable_note(
                 key=_edit_input_key(note.id),
                 label_visibility="collapsed",
             )
-            if draft != note.personal_note:
+            current_level = _importance_of(note)
+            selected_level = _render_importance_selector(note, f"note_edit_imp_{note.id}")
+            dirty = draft != note.personal_note or selected_level != current_level
+            if dirty:
                 st.warning("● 有未保存修改")
             save_column, cancel_column = st.columns(2)
             if save_column.button("保存修改", key=f"note_edit_save_{note.id}"):
@@ -203,15 +317,28 @@ def _render_editable_note(
                     st.warning("个人笔记不能为空")
                     return
                 try:
-                    save(note.id, draft)
+                    # 等级未变 → None = preserve（冻结契约）；变了 → 显式语义值
+                    save(
+                        note.id,
+                        draft,
+                        selected_level.value if selected_level != current_level else None,
+                    )
                 except Exception as exc:
                     _show_save_error(exc)  # 输入保留
                 else:
-                    _queue_key_clear(_edit_mode_key(note.id), _edit_input_key(note.id))
+                    _queue_key_clear(
+                        _edit_mode_key(note.id),
+                        _edit_input_key(note.id),
+                        f"note_edit_imp_{note.id}",
+                    )
                     st.session_state[_FLASH_KEY] = "笔记已保存。"
                     st.rerun()
             if cancel_column.button("取消编辑", key=f"note_edit_cancel_{note.id}"):
-                _queue_key_clear(_edit_mode_key(note.id), _edit_input_key(note.id))
+                _queue_key_clear(
+                    _edit_mode_key(note.id),
+                    _edit_input_key(note.id),
+                    f"note_edit_imp_{note.id}",
+                )
                 st.rerun()
         else:
             st.markdown(note.personal_note)
@@ -235,15 +362,18 @@ def _render_delete_area(note_id: int, delete, confirm_label: str, delete_flash: 
                 _queue_key_clear(
                     _edit_mode_key(note_id),
                     _edit_input_key(note_id),
+                    f"note_edit_imp_{note_id}",
                     _delete_confirm_key(note_id),
                     f"note_text_edit_mode_{note_id}",
                     f"note_text_edit_excerpt_{note_id}",
                     f"note_text_edit_personal_{note_id}",
+                    f"note_text_edit_imp_{note_id}",
                     f"note_text_rebind_input_{note_id}",
                     f"note_text_rebind_preview_{note_id}",
                     f"note_text_rebind_confirm_{note_id}",
                     f"note_image_edit_mode_{note_id}",
                     f"note_image_edit_personal_{note_id}",
+                    f"note_image_edit_imp_{note_id}",
                     f"note_image_rebind_active_{note_id}",
                     f"note_image_rebind_region_{note_id}",
                     f"note_image_rebind_confirm_{note_id}",
@@ -291,6 +421,13 @@ def _render_text_selection_create(note_service: NoteService, page_id: int) -> No
             key=f"note_text_create_personal_{page_id}",
             placeholder="记录你的判断、说明和想法。",
         )
+        level = st.selectbox(
+            "重要程度",
+            options=_IMPORTANCE_LEVELS,
+            index=2,
+            format_func=lambda item: item.label,
+            key=f"note_text_create_imp_{page_id}",
+        )
         if st.button("保存文字选区笔记", key=f"note_text_create_save_{page_id}"):
             if not excerpt.strip():
                 st.warning("原文选段不能为空")
@@ -304,6 +441,7 @@ def _render_text_selection_create(note_service: NoteService, page_id: int) -> No
                     excerpt,
                     personal_note,
                     user_excerpt=user_excerpt if user_excerpt.strip() else None,
+                    importance=level.value,
                 )
             except ExcerptNotFoundError:
                 st.warning("没有在当前文字来源中找到这段原文，请检查空格、换行和标点。")
@@ -321,14 +459,18 @@ def _render_text_selection_create(note_service: NoteService, page_id: int) -> No
                     f"note_text_create_excerpt_{page_id}",
                     f"note_text_create_user_{page_id}",
                     f"note_text_create_personal_{page_id}",
+                    f"note_text_create_imp_{page_id}",
                 )
                 st.session_state[_FLASH_KEY] = "文字选区笔记已保存。"
                 st.rerun()
 
 
-def _render_text_selection_note(note_service: NoteService, view: NoteView) -> None:
+def _render_text_selection_note(
+    note_service: NoteService, view: NoteView, preferences: NoteDisplayPreferences
+) -> None:
     note = view.note
     with st.container(border=True):
+        _render_importance_badge(note, preferences)
         st.caption(
             f"文字选区笔记 #{note.id} · {_source_kind_label(note.source_kind)} · "
             f"创建于 {_format_time(note.created_at)} · 更新于 {_format_time(note.updated_at)}"
@@ -384,7 +526,14 @@ def _render_text_selection_edit(note_service: NoteService, view: NoteView) -> No
         height=120,
         key=f"note_text_edit_personal_{note.id}",
     )
-    if excerpt_draft != (note.user_excerpt or "") or personal_draft != note.personal_note:
+    current_level = _importance_of(note)
+    selected_level = _render_importance_selector(note, f"note_text_edit_imp_{note.id}")
+    dirty = (
+        excerpt_draft != (note.user_excerpt or "")
+        or personal_draft != note.personal_note
+        or selected_level != current_level
+    )
+    if dirty:
         st.warning("● 有未保存修改")
     save_column, cancel_column = st.columns(2)
     if save_column.button("保存修改", key=f"note_text_edit_save_{note.id}"):
@@ -399,6 +548,9 @@ def _render_text_selection_edit(note_service: NoteService, view: NoteView) -> No
                 note.id,
                 user_excerpt=excerpt_draft,
                 personal_note=personal_draft,
+                importance=(
+                    selected_level.value if selected_level != current_level else None
+                ),
             )
         except Exception as exc:
             _show_save_error(exc)  # 输入保留
@@ -407,6 +559,7 @@ def _render_text_selection_edit(note_service: NoteService, view: NoteView) -> No
                 f"note_text_edit_mode_{note.id}",
                 f"note_text_edit_excerpt_{note.id}",
                 f"note_text_edit_personal_{note.id}",
+                f"note_text_edit_imp_{note.id}",
             )
             st.session_state[_FLASH_KEY] = "笔记已保存。"
             st.rerun()
@@ -415,6 +568,7 @@ def _render_text_selection_edit(note_service: NoteService, view: NoteView) -> No
             f"note_text_edit_mode_{note.id}",
             f"note_text_edit_excerpt_{note.id}",
             f"note_text_edit_personal_{note.id}",
+            f"note_text_edit_imp_{note.id}",
         )
         st.rerun()
 
@@ -606,6 +760,13 @@ def _render_image_region_create(
             key=f"note_image_create_personal_{page_id}",
             placeholder="记录你对这个区域的判断、说明和想法。",
         )
+        level = st.selectbox(
+            "重要程度",
+            options=_IMPORTANCE_LEVELS,
+            index=2,
+            format_func=lambda item: item.label,
+            key=f"note_image_create_imp_{page_id}",
+        )
         if st.button("保存图片区域笔记", key=f"note_image_create_save_{page_id}"):
             if not region:
                 st.warning("请先在页面图像上拖拽选择一个区域。")
@@ -621,6 +782,7 @@ def _render_image_region_create(
                     region["x1"],
                     region["y1"],
                     personal,
+                    importance=level.value,
                 )
             except PageImageMissingError:
                 st.warning("当前页面图像不存在，无法创建图片区域笔记。")
@@ -637,6 +799,7 @@ def _render_image_region_create(
                 _queue_key_clear(
                     region_key,
                     f"note_image_create_personal_{page_id}",
+                    f"note_image_create_imp_{page_id}",
                     f"note_image_manual_x0_{page_id}",
                     f"note_image_manual_y0_{page_id}",
                     f"note_image_manual_x1_{page_id}",
@@ -647,10 +810,15 @@ def _render_image_region_create(
 
 
 def _render_image_region_note(
-    note_service: NoteService, view: NoteView, document_id: int, display_width: int
+    note_service: NoteService,
+    view: NoteView,
+    document_id: int,
+    display_width: int,
+    preferences: NoteDisplayPreferences,
 ) -> None:
     note = view.note
     with st.container(border=True):
+        _render_importance_badge(note, preferences)
         st.caption(
             f"图片区域笔记 #{note.id} · "
             f"创建于 {_format_time(note.created_at)} · 更新于 {_format_time(note.updated_at)}"
@@ -717,7 +885,10 @@ def _render_image_region_edit(note_service: NoteService, view: NoteView) -> None
         height=120,
         key=f"note_image_edit_personal_{note.id}",
     )
-    if draft != note.personal_note:
+    current_level = _importance_of(note)
+    selected_level = _render_importance_selector(note, f"note_image_edit_imp_{note.id}")
+    dirty = draft != note.personal_note or selected_level != current_level
+    if dirty:
         st.warning("● 有未保存修改")
     save_column, cancel_column = st.columns(2)
     if save_column.button("保存修改", key=f"note_image_edit_save_{note.id}"):
@@ -725,13 +896,20 @@ def _render_image_region_edit(note_service: NoteService, view: NoteView) -> None
             st.warning("个人笔记不能为空")
             return
         try:
-            note_service.update_image_region_note(note.id, draft)
+            note_service.update_image_region_note(
+                note.id,
+                draft,
+                importance=(
+                    selected_level.value if selected_level != current_level else None
+                ),
+            )
         except Exception as exc:
             _show_save_error(exc)  # 输入保留
         else:
             _queue_key_clear(
                 f"note_image_edit_mode_{note.id}",
                 f"note_image_edit_personal_{note.id}",
+                f"note_image_edit_imp_{note.id}",
             )
             st.session_state[_FLASH_KEY] = "笔记已保存。"
             st.rerun()
@@ -739,6 +917,7 @@ def _render_image_region_edit(note_service: NoteService, view: NoteView) -> None
         _queue_key_clear(
             f"note_image_edit_mode_{note.id}",
             f"note_image_edit_personal_{note.id}",
+            f"note_image_edit_imp_{note.id}",
         )
         st.rerun()
 
