@@ -1,16 +1,21 @@
 """Staged, verifiable deletion of one imported document and its own files.
 
-The deletion never deletes anything in place. Recorded files are first moved
-into a per-operation quarantine directory inside the data directory with
-same-volume atomic renames; only after the single-transaction database delete
-(including per-table residue checks and ``PRAGMA foreign_key_check``) has
-committed is the quarantine removed permanently. Any failure before the
-commit rolls the database back and moves every quarantined file back to its
-original location, verifying presence and size. Files not recorded as
-belonging to the document are never touched, and projects/tags are shared
-entities that always survive. Follows the established project discipline:
-connections go through ``Database._connection()``, all user-facing errors
-are explicit Chinese messages, and no exception is ever swallowed silently.
+The deletion never deletes anything in place. Recorded files are first
+moved into a per-operation quarantine directory
+(``.deletion-quarantine/op-<uuid>/``) with same-volume atomic renames —
+but only after an atomically written ``manifest.json`` (operation id,
+document id, and every planned file with its original path, quarantine
+path, size and SHA-256) is reliably on disk, so an interrupted operation
+can always be settled later by :mod:`src.deletion_recovery`. Only after
+the single-transaction database delete (including per-table residue checks
+and ``PRAGMA foreign_key_check``) has committed is the quarantine removed
+permanently. Any failure before the commit rolls the database back and
+moves every quarantined file back to its original location, verifying
+presence and size. Files not recorded as belonging to the document are
+never touched, and projects/tags are shared entities that always survive.
+Follows the established project discipline: connections go through
+``Database._connection()``, all user-facing errors are explicit Chinese
+messages, and no exception is ever swallowed silently.
 """
 
 from __future__ import annotations
@@ -20,8 +25,16 @@ import os
 import shutil
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from src.database import Database, DatabaseError
+from src.deletion_recovery import (
+    MANIFEST_NAME,
+    MANIFEST_VERSION,
+    QUARANTINE_DIR_NAME,
+    sha256_file,
+    write_json_atomic,
+)
 from src.models import (
     DocumentDeletionFile,
     DocumentDeletionPreview,
@@ -29,8 +42,6 @@ from src.models import (
 )
 
 LOGGER = logging.getLogger(__name__)
-
-_QUARANTINE_DIR_NAME = ".deletion-quarantine"
 
 
 class DocumentDeletionError(DatabaseError):
@@ -48,13 +59,15 @@ class DocumentDeletionService:
         pages_dir: Path,
         markdown_dir: Path,
         data_dir: Path,
+        app_version: str = "",
     ) -> None:
         self._database = database
         self._raw_dir = Path(raw_dir)
         self._pages_dir = Path(pages_dir)
         self._markdown_dir = Path(markdown_dir)
         self._data_dir = Path(data_dir)
-        self._quarantine_root = self._data_dir / _QUARANTINE_DIR_NAME
+        self._app_version = app_version
+        self._quarantine_root = self._data_dir / QUARANTINE_DIR_NAME
 
     # ------------------------------------------------------------- preview
     def preview_document_deletion(self, document_id: int) -> DocumentDeletionPreview:
@@ -154,11 +167,15 @@ class DocumentDeletionService:
         """Delete one document in verifiable stages, never faking success.
 
         Stage 1 re-validates the document and every recorded path; any
-        anomaly aborts before anything is touched. Stage 2-3 move recorded
-        files into a fresh quarantine directory with atomic same-volume
-        renames. Stage 4 runs the single cascading ``DELETE`` plus per-table
-        residue checks in one transaction, rolling back on any surprise.
-        Stage 5-6 permanently remove the quarantine only after the commit.
+        anomaly aborts before anything is touched. Stage 2 writes the
+        per-operation quarantine manifest (every planned file with its
+        SHA-256) atomically — before the first file moves, so a crash at
+        any later point is recoverable by :mod:`src.deletion_recovery`.
+        Stage 3 moves recorded files into the operation directory with
+        atomic same-volume renames. Stage 4 runs the single cascading
+        ``DELETE`` plus per-table residue checks in one transaction,
+        rolling back on any surprise. Stage 5-6 permanently remove the
+        quarantine only after the commit.
         """
 
         preview = self.preview_document_deletion(document_id)
@@ -168,25 +185,59 @@ class DocumentDeletionService:
                 + "；".join(preview.path_anomalies)
             )
 
-        quarantine_dir = (
-            self._quarantine_root
-            / f"{document_id}-{datetime.now().strftime('%Y%m%d-%H%M%S-%f')}"
-        )
-        quarantine_dir.mkdir(parents=True, exist_ok=False)
+        operation_id = uuid4().hex
+        quarantine_dir = self._quarantine_root / f"op-{operation_id}"
+        files_dir = quarantine_dir / "files"
+        files_dir.mkdir(parents=True, exist_ok=False)
+
+        movable = [entry for entry in preview.files if entry.exists]
+        manifest_files = []
+        for index, entry in enumerate(movable):
+            manifest_files.append(
+                {
+                    "original_path": str(entry.path),
+                    "quarantine_path": str(files_dir / f"{index:04d}-{entry.path.name}"),
+                    "size_bytes": entry.size_bytes,
+                    "sha256": sha256_file(entry.path),
+                }
+            )
+        manifest_path = quarantine_dir / MANIFEST_NAME
+        manifest = {
+            "version": MANIFEST_VERSION,
+            "operation_id": operation_id,
+            "document_id": document_id,
+            "document_title": preview.document_title,
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "app_version": self._app_version,
+            # Diagnostic only; recovery decisions never read this field.
+            "phase": "prepared",
+            "files": manifest_files,
+        }
+        try:
+            write_json_atomic(manifest_path, manifest)
+        except OSError as exc:
+            try:
+                shutil.rmtree(quarantine_dir)
+            except OSError:
+                LOGGER.warning("中止后隔离目录未能移除，已保留：%s", quarantine_dir)
+            raise DocumentDeletionError(
+                f"写入删除操作 manifest 失败，已中止删除，未改动任何数据：{exc}"
+            ) from exc
 
         moved: list[tuple[Path, Path, int | None]] = []
-        movable = [entry for entry in preview.files if entry.exists]
         try:
-            for index, entry in enumerate(movable):
-                destination = quarantine_dir / f"{index:04d}-{entry.path.name}"
-                os.replace(entry.path, destination)
-                moved.append((entry.path, destination, entry.size_bytes))
+            for entry in manifest_files:
+                original = Path(entry["original_path"])
+                destination = Path(entry["quarantine_path"])
+                os.replace(original, destination)
+                moved.append((original, destination, entry["size_bytes"]))
         except OSError as exc:
             self._abort_with_restore(
                 moved,
                 quarantine_dir,
-                f"移动文件到隔离目录失败，已中止删除：{entry.path}（{exc}）",
+                f"移动文件到隔离目录失败，已中止删除：{entry['original_path']}（{exc}）",
             )
+        self._update_manifest_phase(manifest_path, manifest, "quarantined")
 
         try:
             self._delete_document_records(document_id)
@@ -196,6 +247,7 @@ class DocumentDeletionService:
                 quarantine_dir,
                 f"删除文档数据库记录失败，已回滚数据库：{exc}",
             )
+        self._update_manifest_phase(manifest_path, manifest, "db_committed")
 
         cleanup_warnings: list[str] = []
         try:
@@ -231,6 +283,22 @@ class DocumentDeletionService:
             deleted=True,
             cleanup_warnings=tuple(cleanup_warnings),
         )
+
+    def _update_manifest_phase(
+        self, manifest_path: Path, manifest: dict, phase: str
+    ) -> None:
+        """Best-effort diagnostic phase update; never fails the deletion.
+
+        The phase field is diagnostic-only — crash recovery decides purely
+        from the database and the filesystem — so a failed update is logged
+        and otherwise ignored. The atomic rewrite guarantees the manifest
+        on disk is always either the old or the new complete JSON.
+        """
+
+        try:
+            write_json_atomic(manifest_path, {**manifest, "phase": phase})
+        except OSError as exc:
+            LOGGER.warning("更新删除操作 manifest 阶段标记失败：%s（%s）", manifest_path, exc)
 
     # ------------------------------------------------------- database stage
     def _delete_document_records(self, document_id: int) -> None:
@@ -449,7 +517,7 @@ class DocumentDeletionService:
                 + f"。这些文件保留在隔离目录：{quarantine_dir}"
             )
         try:
-            quarantine_dir.rmdir()
+            shutil.rmtree(quarantine_dir)
         except OSError:
             LOGGER.warning("中止后隔离目录未能移除，已保留：%s", quarantine_dir)
         raise DocumentDeletionError(f"{reason}。数据库未改动，文件已全部恢复原位。")

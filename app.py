@@ -10,6 +10,7 @@ from src.runtime import (
     application_database,
     application_evidence_basket_service,
     application_settings,
+    application_startup_reconciliation,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ st.caption("本地、单用户的页面级工程知识管理系统")
 try:
     settings = application_settings()
     database = application_database()
+    quarantine_reconciliation = application_startup_reconciliation()
     basket_items = application_evidence_basket_service().list_items()
     stats = database.dashboard_stats()
     recent_documents = database.list_documents(sort_by="imported_desc")[:5]
@@ -30,6 +32,12 @@ except Exception as exc:
     LOGGER.exception("应用初始化失败")
     st.error(f"应用初始化失败：{exc}")
     st.stop()
+
+if quarantine_reconciliation is not None and quarantine_reconciliation.has_attention:
+    st.warning(
+        "检测到需要人工处理的删除操作残留：系统未自动删除或覆盖这些文件，"
+        "请前往“系统维护”页查看详情。"
+    )
 
 columns = st.columns(6)
 for column, label, value in zip(

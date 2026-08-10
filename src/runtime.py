@@ -14,10 +14,12 @@ from src.batch_service import PageBatchService
 from src.classification_metadata import ClassificationMetadataService
 from src.config import Settings, get_settings
 from src.database import Database
+from src.deletion_recovery import reconcile_quarantine
 from src.diagnostic_service import DiagnosticService
 from src.document_deletion_service import DocumentDeletionService
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
+from src.models import QuarantineReconciliation
 from src.pdf_service import PdfService
 from src.rapidocr_engine import RapidOcrEngine
 
@@ -128,6 +130,57 @@ def application_document_deletion_service() -> DocumentDeletionService:
         pages_dir=settings.pages_dir,
         markdown_dir=settings.markdown_dir,
         data_dir=settings.data_dir,
+        app_version=settings.app_version,
+    )
+
+
+@lru_cache(maxsize=1)
+def application_startup_reconciliation() -> QuarantineReconciliation | None:
+    """Settle unfinished deletion quarantines once per process, fail closed.
+
+    Interrupted deletions whose files can be provably restored or destroyed
+    are settled automatically; anything ambiguous is preserved untouched and
+    reported. An unexpected failure of the reconciliation itself is logged
+    as critical and never blocks application startup.
+    """
+
+    settings = application_settings()
+    try:
+        report = reconcile_quarantine(
+            database=application_database(),
+            data_dir=settings.data_dir,
+            raw_dir=settings.raw_dir,
+            pages_dir=settings.pages_dir,
+            markdown_dir=settings.markdown_dir,
+        )
+    except Exception:
+        logging.getLogger(__name__).critical(
+            "删除隔离区启动对账失败，已跳过（未改动任何数据）", exc_info=True
+        )
+        return None
+    for operation in report.operations:
+        log = logging.getLogger(__name__).info
+        if operation.status == "attention":
+            log = logging.getLogger(__name__).warning
+        log(
+            "删除隔离区对账：operation=%s status=%s %s",
+            operation.operation_id,
+            operation.status,
+            operation.detail,
+        )
+    return report
+
+
+def run_quarantine_reconciliation() -> QuarantineReconciliation:
+    """Run a fresh quarantine reconciliation pass (system maintenance page)."""
+
+    settings = application_settings()
+    return reconcile_quarantine(
+        database=application_database(),
+        data_dir=settings.data_dir,
+        raw_dir=settings.raw_dir,
+        pages_dir=settings.pages_dir,
+        markdown_dir=settings.markdown_dir,
     )
 
 

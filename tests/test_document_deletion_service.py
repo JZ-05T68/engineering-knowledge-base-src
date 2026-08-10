@@ -383,8 +383,13 @@ def test_file_move_failure_aborts_without_touching_anything(
     page_ids = [page.id for page in env["pages"]]
     before = _residue_counts(database, document.id, page_ids)
 
+    real_replace = os.replace
+
     def crashing_replace(src, dst):
-        raise OSError("模拟移动失败")
+        # Manifest writes use os.replace too; only data-file moves fail here.
+        if Path(dst).parent.name == "files":
+            raise OSError("模拟移动失败")
+        real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", crashing_replace)
     with pytest.raises(DocumentDeletionError, match="移动文件到隔离目录失败"):
@@ -505,7 +510,7 @@ def test_restore_failure_is_reported_honestly(
     assert database.get_document(document.id) is not None
     quarantine_entries = list(_quarantine_root(env["data_dir"]).rglob("*"))
     quarantine_files = [path for path in quarantine_entries if path.is_file()]
-    assert len(quarantine_files) == 5  # 1 PDF + 2 PNG + 2 Markdown 留在隔离目录
+    assert len(quarantine_files) == 6  # 1 PDF + 2 PNG + 2 Markdown + manifest.json
     assert not Path(document.source_path).exists()
     assert any(record.levelname == "CRITICAL" for record in caplog.records)
 
@@ -532,7 +537,7 @@ def test_quarantine_cleanup_failure_reports_warning_without_failing(
     quarantine_files = [
         path for path in _quarantine_root(env["data_dir"]).rglob("*") if path.is_file()
     ]
-    assert len(quarantine_files) == 5
+    assert len(quarantine_files) == 6  # 5 个登记文件 + manifest.json
 
 
 # --- E. path safety ---------------------------------------------------------------

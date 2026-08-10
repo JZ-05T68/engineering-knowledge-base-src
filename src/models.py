@@ -682,3 +682,34 @@ class DocumentDeletionResult:
     preview: DocumentDeletionPreview
     deleted: bool
     cleanup_warnings: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantineOperationReport:
+    """Outcome of reconciling one unfinished deletion quarantine operation.
+
+    ``status`` is one of ``restored`` (the deletion never committed and the
+    files were moved back), ``completed`` (the deletion had committed and
+    the quarantine was destroyed), or ``attention`` (fail-closed: nothing
+    was deleted or overwritten and a human must inspect the directory).
+    ``document_id`` is ``None`` when the manifest could not be read.
+    """
+
+    operation_id: str
+    quarantine_path: Path
+    document_id: int | None
+    status: str
+    detail: str
+
+
+@dataclass(frozen=True, slots=True)
+class QuarantineReconciliation:
+    """Aggregate result of one deletion-quarantine reconciliation pass."""
+
+    operations: tuple[QuarantineOperationReport, ...] = ()
+
+    @property
+    def has_attention(self) -> bool:
+        """Whether any operation needs manual inspection."""
+
+        return any(operation.status == "attention" for operation in self.operations)

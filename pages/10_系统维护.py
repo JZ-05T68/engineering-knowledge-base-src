@@ -26,6 +26,7 @@ from src.runtime import (
     application_backup_service,
     application_diagnostic_service,
     application_settings,
+    run_quarantine_reconciliation,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -201,6 +202,36 @@ if isinstance(snapshot, DiagnosticSnapshot):
     )
 else:
     st.info("尚未运行诊断。点击上方按钮检查数据库、文件、路径、磁盘、监听地址和最近备份。")
+
+st.divider()
+st.header("删除隔离区")
+st.caption(
+    "检查是否存在中断的删除操作。可证明安全的会自动恢复或完成清理；"
+    "状态不明的一律保留现场，系统不会自动删除或覆盖这些文件。"
+)
+try:
+    quarantine_reconciliation = run_quarantine_reconciliation()
+except Exception as exc:
+    LOGGER.exception("删除隔离区检查失败")
+    st.error(f"删除隔离区检查失败：{exc}")
+else:
+    if not quarantine_reconciliation.operations:
+        st.success("没有未完成的删除操作。")
+    else:
+        for operation in quarantine_reconciliation.operations:
+            document_label = (
+                f"文档 {operation.document_id}"
+                if operation.document_id is not None
+                else "文档未知"
+            )
+            message = (
+                f"操作 {operation.operation_id}（{document_label}）：{operation.detail} "
+                f"位置：{operation.quarantine_path}"
+            )
+            if operation.status == "attention":
+                st.warning(f"需要人工处理 —— {message}")
+            else:
+                st.info(f"已自动处理 —— {message}")
 
 with st.expander("备份格式说明"):
     st.code(
