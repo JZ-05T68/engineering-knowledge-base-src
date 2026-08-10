@@ -12,13 +12,19 @@ import logging
 
 import streamlit as st
 
-from src.models import NoteListItem, NoteType, NoteView
+from src.models import NoteImportance, NoteListItem, NoteType, NoteView
 from src.note_service import (
     NoteNotFoundError,
     NoteService,
     NoteValidationError,
 )
-from src.note_ui import _render_region_overlay, _render_region_status, _render_source_status
+from src.note_ui import (
+    _load_display_preferences,
+    _render_importance_badge,
+    _render_region_overlay,
+    _render_region_status,
+    _render_source_status,
+)
 
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +34,12 @@ _PAGE_KEY = "note_list_page"
 _SIZE_KEY = "note_list_page_size"
 _FILTER_SIG_KEY = "note_list_filter_signature"
 _PAGE_SIZES = (20, 50, 100)
+_IMPORTANCE_LEVELS = list(NoteImportance)
+_PREF_COLOR_KEYS = {
+    NoteImportance.PRIMARY: "note_list_pref_color_primary",
+    NoteImportance.SECONDARY: "note_list_pref_color_secondary",
+    NoteImportance.NORMAL: "note_list_pref_color_normal",
+}
 
 _TYPE_DELETE_LABELS = {
     NoteType.DOCUMENT: "我确认删除这条文档级笔记",
@@ -44,6 +56,7 @@ def render_notes_list_page(note_service: NoteService) -> None:
     if flash:
         st.success(flash)
     _apply_pending_key_clears()
+    preferences = _load_display_preferences(note_service)
 
     try:
         document_options = note_service.list_note_document_options()
@@ -52,7 +65,7 @@ def render_notes_list_page(note_service: NoteService) -> None:
         st.error(f"读取笔记失败：{exc}")
         return
 
-    filter_columns = st.columns([2, 1, 1])
+    filter_columns = st.columns([2, 1, 1, 1])
     selected_document = filter_columns[0].selectbox(
         "文档筛选",
         options=[0, *(document_id for document_id, _ in document_options)],
@@ -69,20 +82,33 @@ def render_notes_list_page(note_service: NoteService) -> None:
         format_func=lambda value: value if isinstance(value, str) else value.label,
         key="note_list_filter_type",
     )
-    page_size = filter_columns[2].selectbox(
+    selected_importance = filter_columns[2].selectbox(
+        "等级筛选",
+        options=["全部等级", *_IMPORTANCE_LEVELS],
+        format_func=lambda value: value if isinstance(value, str) else value.label,
+        key="note_list_filter_importance",
+    )
+    page_size = filter_columns[3].selectbox(
         "每页条数", options=list(_PAGE_SIZES), key=_SIZE_KEY
     )
 
-    signature = (selected_document, str(selected_type), page_size)
+    signature = (
+        selected_document, str(selected_type), str(selected_importance), page_size
+    )
     if st.session_state.get(_FILTER_SIG_KEY) != signature:
         st.session_state[_FILTER_SIG_KEY] = signature
         st.session_state[_PAGE_KEY] = 1
 
     document_id = selected_document or None
     note_type = selected_type if isinstance(selected_type, NoteType) else None
+    importance = (
+        selected_importance
+        if isinstance(selected_importance, NoteImportance)
+        else None
+    )
     try:
         total = note_service.count_notes(
-            document_id=document_id, note_type=note_type
+            document_id=document_id, note_type=note_type, importance=importance
         )
     except Exception as exc:
         LOGGER.exception("统计笔记失败")
@@ -90,10 +116,11 @@ def render_notes_list_page(note_service: NoteService) -> None:
         return
 
     if total == 0:
-        if document_id is None and note_type is None:
+        if document_id is None and note_type is None and importance is None:
             st.info("还没有结构化笔记。请先在阅读页创建。")
         else:
             st.info("当前筛选条件下没有结构化笔记。")
+        _render_display_settings(note_service, preferences)
         return
 
     max_page = max(1, (total + page_size - 1) // page_size)
@@ -108,6 +135,7 @@ def render_notes_list_page(note_service: NoteService) -> None:
         items = note_service.list_note_summaries(
             document_id=document_id,
             note_type=note_type,
+            importance=importance,
             limit=page_size,
             offset=(current_page - 1) * page_size,
         )
@@ -133,14 +161,65 @@ def render_notes_list_page(note_service: NoteService) -> None:
 
     image_cache: dict = {}
     for item in items:
-        _render_note_card(note_service, item, image_cache)
+        _render_note_card(note_service, item, image_cache, preferences)
+
+    _render_display_settings(note_service, preferences)
+
+
+def _render_display_settings(note_service: NoteService, preferences) -> None:
+    """The single editable color entry (frozen): three badge backgrounds."""
+
+    with st.expander("显示设置", expanded=False):
+        st.caption("三级笔记徽章的背景色；文字颜色会自动适配，笔记内容不受影响。")
+        color_columns = st.columns(3)
+        picked = {
+            NoteImportance.PRIMARY: color_columns[0].color_picker(
+                "重点背景色",
+                value=preferences.color_primary,
+                key=_PREF_COLOR_KEYS[NoteImportance.PRIMARY],
+            ),
+            NoteImportance.SECONDARY: color_columns[1].color_picker(
+                "次重点背景色",
+                value=preferences.color_secondary,
+                key=_PREF_COLOR_KEYS[NoteImportance.SECONDARY],
+            ),
+            NoteImportance.NORMAL: color_columns[2].color_picker(
+                "一般背景色",
+                value=preferences.color_normal,
+                key=_PREF_COLOR_KEYS[NoteImportance.NORMAL],
+            ),
+        }
+        if st.button("保存配色", key="note_list_pref_save"):
+            try:
+                # 一次 service 调用完成三级更新（Phase 2 原子契约）
+                note_service.update_display_preferences(
+                    picked[NoteImportance.PRIMARY],
+                    picked[NoteImportance.SECONDARY],
+                    picked[NoteImportance.NORMAL],
+                )
+            except Exception as exc:
+                _show_save_error(exc)  # 输入保留在控件中，绝不假成功
+            else:
+                _queue_key_clear(*_PREF_COLOR_KEYS.values())
+                st.session_state[_FLASH_KEY] = "配色已保存。"
+                st.rerun()
+        if st.button("恢复默认配色", key="note_list_pref_reset"):
+            try:
+                note_service.reset_display_preferences()
+            except Exception as exc:
+                _show_save_error(exc)
+            else:
+                _queue_key_clear(*_PREF_COLOR_KEYS.values())
+                st.session_state[_FLASH_KEY] = "配色已恢复默认。"
+                st.rerun()
 
 
 def _render_note_card(
-    note_service: NoteService, item: NoteListItem, image_cache: dict
+    note_service: NoteService, item: NoteListItem, image_cache: dict, preferences
 ) -> None:
     note = item.note
     with st.container(border=True):
+        _render_importance_badge(note, preferences)
         location = (
             "来源文档不存在"
             if item.document_title is None
