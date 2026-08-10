@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sqlite3
 from datetime import UTC, datetime
 from io import BytesIO
@@ -24,6 +25,8 @@ from src.database import Database, DatabaseError
 from src.models import (
     ImageSourcePreview,
     Note,
+    NoteDisplayPreferences,
+    NoteImportance,
     NoteListItem,
     NoteSourceStatus,
     NoteType,
@@ -47,8 +50,30 @@ NOTE_COLUMNS = (
     "selection_start", "selection_end", "user_excerpt",
     "region_image_sha256", "region_image_width", "region_image_height",
     "region_x0", "region_y0", "region_x1", "region_y1",
-    "created_at", "updated_at",
+    "created_at", "updated_at", "importance",
 )
+
+_IMPORTANCE_VALUES = frozenset(item.value for item in NoteImportance)
+_COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}\Z")
+_FOREGROUND_DARK = "#1a1a1a"
+_FOREGROUND_LIGHT = "#ffffff"
+_FOREGROUND_LUMA_THRESHOLD = 128
+
+
+def badge_foreground(background: str) -> str:
+    """Pick a readable foreground for one canonical ``#rrggbb`` background.
+
+    Deterministic YIQ luma judgment (no Streamlit, no framework): bright
+    backgrounds get the dark foreground, dark backgrounds the light one.
+    """
+
+    if not _COLOR_PATTERN.fullmatch(background):
+        raise NoteValidationError(f"颜色必须是 #rrggbb 格式：{background!r}")
+    red = int(background[1:3], 16)
+    green = int(background[3:5], 16)
+    blue = int(background[5:7], 16)
+    luma = (red * 299 + green * 587 + blue * 114) // 1000
+    return _FOREGROUND_DARK if luma >= _FOREGROUND_LUMA_THRESHOLD else _FOREGROUND_LIGHT
 
 
 class NoteError(DatabaseError):
@@ -151,6 +176,7 @@ class NoteService:
         document_id: int | None = None,
         page_id: int | None = None,
         note_type: NoteType | str | None = None,
+        importance: NoteImportance | str | None = None,
         limit: int = LIST_LIMIT_DEFAULT,
         offset: int = 0,
     ) -> list[NoteView]:
@@ -158,11 +184,11 @@ class NoteService:
 
         A ``document_id`` filter covers both the document's own notes and the
         notes anchored to its pages (via an explicit JOIN on pages, never a
-        redundant column). No full-text search, importance or tag filters.
+        redundant column). No full-text search or tag filters.
         """
 
         self._validate_pagination(limit, offset)
-        where, parameters = self._list_filters(document_id, page_id, note_type)
+        where, parameters = self._list_filters(document_id, page_id, note_type, importance)
         sql = (
             f"SELECT {', '.join(f'notes.{c}' for c in NOTE_COLUMNS)} FROM notes "
             f"LEFT JOIN pages ON notes.page_id = pages.id {where} "
@@ -211,10 +237,11 @@ class NoteService:
         document_id: int | None = None,
         page_id: int | None = None,
         note_type: NoteType | str | None = None,
+        importance: NoteImportance | str | None = None,
     ) -> int:
         """Count notes with exactly the same filter semantics as list_notes."""
 
-        where, parameters = self._list_filters(document_id, page_id, note_type)
+        where, parameters = self._list_filters(document_id, page_id, note_type, importance)
         sql = (
             "SELECT COUNT(*) FROM notes "
             "LEFT JOIN pages ON notes.page_id = pages.id "
@@ -229,6 +256,7 @@ class NoteService:
         document_id: int | None = None,
         page_id: int | None = None,
         note_type: NoteType | str | None = None,
+        importance: NoteImportance | str | None = None,
         limit: int = LIST_LIMIT_DEFAULT,
         offset: int = 0,
     ) -> list[NoteListItem]:
@@ -241,7 +269,7 @@ class NoteService:
         """
 
         self._validate_pagination(limit, offset)
-        where, parameters = self._list_filters(document_id, page_id, note_type)
+        where, parameters = self._list_filters(document_id, page_id, note_type, importance)
         sql = (
             f"SELECT {', '.join(f'notes.{c}' for c in NOTE_COLUMNS)}, "
             "documents.title AS document_title, "
@@ -278,6 +306,7 @@ class NoteService:
         document_id: int | None,
         page_id: int | None,
         note_type: NoteType | str | None,
+        importance: NoteImportance | str | None = None,
     ) -> tuple[str, tuple[object, ...]]:
         conditions: list[str] = []
         parameters: list[object] = []
@@ -294,6 +323,15 @@ class NoteService:
                 raise NoteValidationError(f"未知笔记类型：{note_type}") from exc
             conditions.append("notes.note_type = ?")
             parameters.append(resolved.value)
+        if importance is not None:
+            try:
+                resolved_level = NoteImportance(importance)
+            except ValueError as exc:
+                raise NoteValidationError(
+                    "重要程度必须是 重点 / 次重点 / 一般 之一"
+                ) from exc
+            conditions.append("notes.importance = ?")
+            parameters.append(resolved_level.value)
         where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
         return where, tuple(parameters)
 
@@ -340,35 +378,41 @@ class NoteService:
 
     # ---------------------------------------------------------------- creates
 
-    def create_document_note(self, document_id: int, personal_note: str) -> NoteView:
+    def create_document_note(
+        self, document_id: int, personal_note: str, importance: str = "normal"
+    ) -> NoteView:
         """Attach a document-level note; multiples per document are allowed."""
 
         if self._database.get_document(document_id) is None:
             raise NoteDocumentNotFoundError(f"文档不存在：{document_id}")
         note = self._validate_personal_note(personal_note)
+        level = self._validate_importance(importance)
         timestamp = _utc_now()
         note_id = self._insert_note(
             (
                 NoteType.DOCUMENT.value, document_id, None, note,
                 None, None, None, None, None, None,
                 None, None, None, None, None, None, None,
-                timestamp, timestamp,
+                timestamp, timestamp, level,
             )
         )
         return self.get_note(note_id)
 
-    def create_page_note(self, page_id: int, personal_note: str) -> NoteView:
+    def create_page_note(
+        self, page_id: int, personal_note: str, importance: str = "normal"
+    ) -> NoteView:
         """Attach a page-level note; multiples per page are allowed."""
 
         self._require_page(page_id)
         note = self._validate_personal_note(personal_note)
+        level = self._validate_importance(importance)
         timestamp = _utc_now()
         note_id = self._insert_note(
             (
                 NoteType.PAGE.value, None, page_id, note,
                 None, None, None, None, None, None,
                 None, None, None, None, None, None, None,
-                timestamp, timestamp,
+                timestamp, timestamp, level,
             )
         )
         return self.get_note(note_id)
@@ -379,6 +423,7 @@ class NoteService:
         source_excerpt: str,
         personal_note: str,
         user_excerpt: str | None = None,
+        importance: str = "normal",
     ) -> NoteView:
         """Anchor a note to a unique exact-match excerpt of the page source text.
 
@@ -389,6 +434,7 @@ class NoteService:
 
         page = self._require_page(page_id)
         note = self._validate_personal_note(personal_note)
+        level = self._validate_importance(importance)
         excerpt = self._validate_excerpt("原文选区", source_excerpt)
         resolved_excerpt = (
             self._validate_excerpt("用户摘录", user_excerpt)
@@ -404,7 +450,7 @@ class NoteService:
                 source_kind, _sha256(source_text), excerpt, start, end,
                 resolved_excerpt if resolved_excerpt is not None else excerpt,
                 None, None, None, None, None, None, None,
-                timestamp, timestamp,
+                timestamp, timestamp, level,
             )
         )
         return self.get_note(note_id)
@@ -417,6 +463,7 @@ class NoteService:
         x1: object,
         y1: object,
         personal_note: str,
+        importance: str = "normal",
     ) -> NoteView:
         """Anchor a note to a rectangle of the stored page PNG.
 
@@ -426,6 +473,7 @@ class NoteService:
 
         page = self._require_page(page_id)
         note = self._validate_personal_note(personal_note)
+        level = self._validate_importance(importance)
         image = self._read_page_image(page.image_path)
         rect = self._normalize_region(x0, y0, x1, y1, image)
         timestamp = _utc_now()
@@ -435,27 +483,33 @@ class NoteService:
                 None, None, None, None, None, None,
                 image.sha256, image.width, image.height,
                 rect["x0"], rect["y0"], rect["x1"], rect["y1"],
-                timestamp, timestamp,
+                timestamp, timestamp, level,
             )
         )
         return self.get_note(note_id)
 
     # ---------------------------------------------------------------- updates
 
-    def update_document_note(self, note_id: int, personal_note: str) -> NoteView:
-        """Update only the text of a document-level note."""
+    def update_document_note(
+        self, note_id: int, personal_note: str, importance: str | None = None
+    ) -> NoteView:
+        """Update a document-level note; ``importance=None`` preserves the level."""
 
-        return self._update_personal(note_id, NoteType.DOCUMENT, personal_note)
+        return self._update_personal(note_id, NoteType.DOCUMENT, personal_note, importance)
 
-    def update_page_note(self, note_id: int, personal_note: str) -> NoteView:
-        """Update only the text of a page-level note."""
+    def update_page_note(
+        self, note_id: int, personal_note: str, importance: str | None = None
+    ) -> NoteView:
+        """Update a page-level note; ``importance=None`` preserves the level."""
 
-        return self._update_personal(note_id, NoteType.PAGE, personal_note)
+        return self._update_personal(note_id, NoteType.PAGE, personal_note, importance)
 
-    def update_image_region_note(self, note_id: int, personal_note: str) -> NoteView:
-        """Update only the text of an image-region note."""
+    def update_image_region_note(
+        self, note_id: int, personal_note: str, importance: str | None = None
+    ) -> NoteView:
+        """Update an image-region note; ``importance=None`` preserves the level."""
 
-        return self._update_personal(note_id, NoteType.IMAGE_REGION, personal_note)
+        return self._update_personal(note_id, NoteType.IMAGE_REGION, personal_note, importance)
 
     def update_text_selection_content(
         self,
@@ -463,15 +517,17 @@ class NoteService:
         *,
         user_excerpt: str | None = None,
         personal_note: str | None = None,
+        importance: str | None = None,
     ) -> NoteView:
         """Update the user excerpt and/or personal note of a selection note.
 
         The original anchor (source kind, hash, snapshot and offsets) is never
-        touched by this operation.
+        touched by this operation. ``importance=None`` preserves the stored
+        level; it is never written implicitly.
         """
 
         self._require_typed_note(note_id, NoteType.TEXT_SELECTION)
-        if user_excerpt is None and personal_note is None:
+        if user_excerpt is None and personal_note is None and importance is None:
             raise NoteValidationError("没有需要修改的内容")
         assignments: list[str] = []
         parameters: list[object] = []
@@ -481,6 +537,9 @@ class NoteService:
         if personal_note is not None:
             assignments.append("personal_note = ?")
             parameters.append(self._validate_personal_note(personal_note))
+        if importance is not None:
+            assignments.append("importance = ?")
+            parameters.append(self._validate_importance(importance))
         assignments.append("updated_at = ?")
         parameters.append(_utc_now())
         self._apply_update(note_id, assignments, parameters)
@@ -627,13 +686,21 @@ class NoteService:
         return note
 
     def _update_personal(
-        self, note_id: int, expected: NoteType, personal_note: str
+        self,
+        note_id: int,
+        expected: NoteType,
+        personal_note: str,
+        importance: str | None = None,
     ) -> NoteView:
         self._require_typed_note(note_id, expected)
         note = self._validate_personal_note(personal_note)
-        self._apply_update(
-            note_id, ["personal_note = ?", "updated_at = ?"], (note, _utc_now())
-        )
+        assignments = ["personal_note = ?", "updated_at = ?"]
+        parameters: list[object] = [note, _utc_now()]
+        if importance is not None:
+            # 显式修改才进入 assignments；None = 保留库中已有等级（P0 契约）
+            assignments.append("importance = ?")
+            parameters.append(self._validate_importance(importance))
+        self._apply_update(note_id, assignments, parameters)
         return self.get_note(note_id)
 
     def _insert_note(self, values: tuple) -> int:
@@ -643,7 +710,7 @@ class NoteService:
             "selection_start", "selection_end", "user_excerpt",
             "region_image_sha256", "region_image_width", "region_image_height",
             "region_x0", "region_y0", "region_x1", "region_y1",
-            "created_at", "updated_at",
+            "created_at", "updated_at", "importance",
         )
         placeholders = ", ".join("?" for _ in columns)
         try:
@@ -725,6 +792,78 @@ class NoteService:
             raise NoteValidationError(f"个人笔记不能超过 {MAX_NOTE_TEXT} 字符")
         return normalized
 
+    def _validate_importance(self, value: str) -> str:
+        """Return one frozen semantic level or reject before any SQL write."""
+
+        if not isinstance(value, str) or value not in _IMPORTANCE_VALUES:
+            raise NoteValidationError(
+                "重要程度必须是 重点 / 次重点 / 一般 之一"
+            )
+        return value
+
+    # ------------------------------------------------------ display preferences
+
+    def get_display_preferences(self) -> NoteDisplayPreferences:
+        """Read the single preferences row; fall back to built-in defaults.
+
+        A missing row is runtime resilience only — this read never repairs the
+        database implicitly.
+        """
+
+        with self._database._connection() as connection:
+            row = connection.execute(
+                "SELECT color_primary, color_secondary, color_normal, updated_at"
+                " FROM note_display_preferences WHERE id = 1"
+            ).fetchone()
+        if row is None:
+            LOGGER.warning("笔记显示偏好行缺失，本次读取回退内置默认值（未修改数据库）")
+            return NoteDisplayPreferences()
+        return NoteDisplayPreferences(
+            color_primary=str(row["color_primary"]),
+            color_secondary=str(row["color_secondary"]),
+            color_normal=str(row["color_normal"]),
+            updated_at=datetime.fromisoformat(row["updated_at"]),
+        )
+
+    def update_display_preferences(
+        self, color_primary: str, color_secondary: str, color_normal: str
+    ) -> NoteDisplayPreferences:
+        """Atomically replace all three badge backgrounds after validation.
+
+        Every color is validated and canonicalized to lowercase ``#rrggbb``
+        before the single UPDATE; any invalid value leaves all three fields
+        unchanged.
+        """
+
+        normalized = (
+            _normalize_color(color_primary),
+            _normalize_color(color_secondary),
+            _normalize_color(color_normal),
+        )
+        timestamp = _utc_now()
+        try:
+            with self._database._connection() as connection:
+                cursor = connection.execute(
+                    "UPDATE note_display_preferences SET color_primary = ?,"
+                    " color_secondary = ?, color_normal = ?, updated_at = ?"
+                    " WHERE id = 1",
+                    (*normalized, timestamp),
+                )
+        except sqlite3.Error as exc:
+            LOGGER.exception("更新笔记显示偏好失败")
+            raise NoteWriteError("保存显示偏好失败，请重试") from exc
+        if cursor.rowcount != 1:
+            raise NoteWriteError("保存显示偏好未生效，请重试")
+        return self.get_display_preferences()
+
+    def reset_display_preferences(self) -> NoteDisplayPreferences:
+        """Restore the three frozen default backgrounds in one transaction."""
+
+        defaults = NoteDisplayPreferences()
+        return self.update_display_preferences(
+            defaults.color_primary, defaults.color_secondary, defaults.color_normal
+        )
+
     def _validate_excerpt(self, label: str, value: str) -> str:
         if not isinstance(value, str):
             raise NoteValidationError(f"{label}必须是文字")
@@ -795,6 +934,18 @@ class _PageImageInfo:
         self.sha256 = sha256
 
 
+def _normalize_color(value: str) -> str:
+    """Validate one ``#RRGGBB`` color and return canonical lowercase form.
+
+    Strict contract: six hex digits only — no trimming, no shorthand, no
+    names, no CSS expressions.
+    """
+
+    if not isinstance(value, str) or not _COLOR_PATTERN.fullmatch(value):
+        raise NoteValidationError(f"颜色必须是六位十六进制 #RRGGBB 格式：{value!r}")
+    return value.lower()
+
+
 def _note_from_row(row: sqlite3.Row) -> Note:
     return Note(
         id=int(row["id"]),
@@ -817,6 +968,7 @@ def _note_from_row(row: sqlite3.Row) -> Note:
         region_y1=_optional_int(row["region_y1"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        importance=str(row["importance"]),
     )
 
 
@@ -851,4 +1003,5 @@ __all__ = [
     "PageImageMissingError",
     "PageImageUnreadableError",
     "TextSourceUnavailableError",
+    "badge_foreground",
 ]
