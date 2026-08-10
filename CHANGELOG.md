@@ -36,6 +36,8 @@
 ### Tests
 
 - 自动化测试 761 项全部通过（含真实 RapidOCR 离线识别与全部 AppTest）；Ruff 全量通过。
+- §18 人工测试门禁 12 项全部 PASS（逐项证据与可复跑脚本见
+  `docs/v0.3.0-manual-test-results.md` 与 `runtime/v030-manual-gate/`）。
 - 框选组件兼容性实验（12 项门禁）此前已 PASS，结果见
   `experiments/streamlit_image_coordinates_compat/results.md`。
 - 不接入 LangChain、LangGraph、真实 AI、账号或云同步。
