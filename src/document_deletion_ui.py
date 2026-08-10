@@ -17,7 +17,7 @@ import logging
 import streamlit as st
 
 from src.document_deletion_service import DocumentDeletionService
-from src.models import Document
+from src.models import Document, DocumentAggregationImpact
 
 LOGGER = logging.getLogger(__name__)
 
@@ -31,6 +31,28 @@ def _format_file_size(size_bytes: int) -> str:
             return f"{size:.1f} {unit}" if unit != "B" else f"{int(size)} B"
         size /= 1024
     return f"{size:.1f} GB"
+
+
+def _render_aggregation_impact(impact: DocumentAggregationImpact) -> None:
+    """Transparency block: which aggregation views this deletion changes.
+
+    Display only — the existing confirmation chain (checkbox + exact title +
+    evidence confirmation) already covers the risk, so no extra checkbox is
+    added here.
+    """
+
+    st.markdown("**知识聚合影响**")
+    if not impact.projects and not impact.tags:
+        st.caption("此文档当前未出现在任何项目或标签知识聚合视图中。")
+        return
+    if impact.projects:
+        lines = "\n".join(f"- {project.name}" for project in impact.projects)
+        st.caption(f"项目聚合：{len(impact.projects)} 个")
+        st.markdown(lines)
+    if impact.tags:
+        lines = "\n".join(f"- {tag.name}" for tag in impact.tags)
+        st.caption(f"标签聚合：{len(impact.tags)} 个")
+        st.markdown(lines)
 
 
 def render_document_deletion_section(
@@ -70,6 +92,7 @@ def render_document_deletion_section(
         f"Markdown {deletion_preview.markdown_file_count} 个，"
         f"共 {_format_file_size(deletion_preview.total_size_bytes)}"
     )
+    _render_aggregation_impact(deletion_preview.aggregation_impact)
     if deletion_preview.missing_files:
         st.warning(
             "以下登记文件在磁盘上缺失，删除时将跳过：\n"

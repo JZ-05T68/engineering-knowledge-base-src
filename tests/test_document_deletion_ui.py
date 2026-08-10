@@ -368,3 +368,44 @@ def test_path_anomaly_disables_execute(tmp_path: Path, monkeypatch) -> None:
     app.checkbox(key=f"doc_delete_confirm_{document.id}").check().run()
     app.text_input(key=f"doc_delete_title_{document.id}").input(document.title).run()
     assert _button(app, f"doc_delete_execute_{document.id}").disabled
+
+
+# --- aggregation impact display -----------------------------------------------------
+
+
+def test_aggregation_impact_names_displayed(tmp_path: Path, monkeypatch) -> None:
+    app, _, _, document, _, _ = _build_app(tmp_path, monkeypatch)
+    _select_document(app, document.id)
+
+    markdown = [item.value for item in app.markdown]
+    captions = _captions(app)
+    assert any("知识聚合影响" in value for value in markdown)
+    assert any("项目聚合：1 个" in value for value in captions)
+    assert any("标签聚合：1 个" in value for value in captions)
+    assert any("- 项目甲" in value for value in markdown)
+    assert any("- 标签甲" in value for value in markdown)
+
+
+def test_zero_aggregation_impact_text(tmp_path: Path, monkeypatch) -> None:
+    app, _, _, _, other, _ = _build_app(tmp_path, monkeypatch)
+    _select_document(app, other.id)
+
+    assert any(
+        "未出现在任何项目或标签知识聚合视图中" in value
+        for value in _captions(app)
+    )
+
+
+def test_aggregation_impact_adds_no_extra_confirmation(tmp_path: Path, monkeypatch) -> None:
+    app, _, _, document, _, _ = _build_app(tmp_path, monkeypatch)
+    _select_document(app, document.id)
+
+    deletion_checkboxes = [
+        checkbox
+        for checkbox in app.checkbox
+        if checkbox.key and checkbox.key.startswith("doc_delete_")
+    ]
+    # 只有普通确认；证据为 0 时无证据确认；聚合影响永远不新增确认层。
+    assert [checkbox.key for checkbox in deletion_checkboxes] == [
+        f"doc_delete_confirm_{document.id}"
+    ]

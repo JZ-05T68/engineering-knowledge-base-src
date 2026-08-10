@@ -32,9 +32,11 @@ from datetime import datetime
 
 from src.database import Database, DatabaseError
 from src.models import (
+    AggregationAxisImpact,
     AggregationItem,
     AggregationResult,
     AggregationSourceKind,
+    DocumentAggregationImpact,
     NoteImportance,
     NoteType,
 )
@@ -111,6 +113,41 @@ _AXIS_TABLES = {
     "project": ("project_documents", "project_pages", "project_id"),
     "tag": ("document_tags", "page_tags", "tag_id"),
 }
+
+# One query per axis answering: does deleting this document really change
+# the axis's aggregation view? An axis is affected when the document has at
+# least one note or evidence entry reaching it — via a document-level
+# association (covers all of the document's knowledge through the effective
+# inheritance the search layer ships) or via a page-level association
+# (covers only the knowledge anchored on that page). Bare associations
+# without knowledge entries are deliberately not impacts.
+_IMPACT_SQL = """
+    SELECT axis.id, axis.name FROM {table} AS axis
+    WHERE EXISTS (
+        SELECT 1 FROM {document_link} AS dl
+        WHERE dl.{axis_column} = axis.id AND dl.document_id = :doc
+          AND (
+              EXISTS (
+                  SELECT 1 FROM notes AS dn
+                  LEFT JOIN pages AS dp ON dn.page_id = dp.id
+                  WHERE dn.document_id = :doc OR dp.document_id = :doc
+              )
+              OR EXISTS (
+                  SELECT 1 FROM evidence_items AS de WHERE de.document_id = :doc
+              )
+          )
+    )
+    OR EXISTS (
+        SELECT 1 FROM {page_link} AS pl
+        JOIN pages AS lp ON lp.id = pl.page_id
+        WHERE pl.{axis_column} = axis.id AND lp.document_id = :doc
+          AND (
+              EXISTS (SELECT 1 FROM notes AS ln WHERE ln.page_id = lp.id)
+              OR EXISTS (SELECT 1 FROM evidence_items AS le WHERE le.page_id = lp.id)
+          )
+    )
+    ORDER BY axis.name COLLATE NOCASE, axis.id
+"""
 
 
 class AggregationService:
@@ -194,6 +231,42 @@ class AggregationService:
         )
 
     # ------------------------------------------------------------- engine
+    def get_document_aggregation_impacts(
+        self, document_id: int
+    ) -> DocumentAggregationImpact:
+        """Which project/tag aggregation views really contain this document.
+
+        Read-only; computed live on every call (no caching) so deletion
+        previews always show the current truth. Raises
+        :class:`AggregationError` when the document does not exist.
+        """
+
+        with self._database._connection() as connection:
+            exists = connection.execute(
+                "SELECT COUNT(*) FROM documents WHERE id = ?", (document_id,)
+            ).fetchone()[0]
+            if not exists:
+                raise AggregationError(f"找不到文档：{document_id}")
+            projects = self._impact_query(connection, "project", document_id)
+            tags = self._impact_query(connection, "tag", document_id)
+        return DocumentAggregationImpact(projects=projects, tags=tags)
+
+    @staticmethod
+    def _impact_query(
+        connection, axis: str, document_id: int
+    ) -> tuple[AggregationAxisImpact, ...]:
+        document_link, page_link, axis_column = _AXIS_TABLES[axis]
+        sql = _IMPACT_SQL.format(
+            table="projects" if axis == "project" else "tags",
+            document_link=document_link,
+            page_link=page_link,
+            axis_column=axis_column,
+        )
+        rows = connection.execute(sql, {"doc": document_id}).fetchall()
+        return tuple(
+            AggregationAxisImpact(id=int(row[0]), name=str(row[1])) for row in rows
+        )
+
     def _require_axis(self, table: str, axis_id: int, label: str) -> None:
         if isinstance(axis_id, bool) or not isinstance(axis_id, int) or axis_id <= 0:
             raise AggregationError(f"{label} id 必须是正整数：{axis_id!r}")

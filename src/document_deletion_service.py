@@ -27,6 +27,7 @@ from datetime import datetime
 from pathlib import Path
 from uuid import uuid4
 
+from src.aggregation_service import AggregationService
 from src.database import Database, DatabaseError
 from src.deletion_recovery import (
     MANIFEST_NAME,
@@ -144,6 +145,9 @@ class DocumentDeletionService:
                 page.markdown_path for page in pages if page.markdown_path is not None
             ],
         )
+        aggregation_impact = AggregationService(
+            self._database
+        ).get_document_aggregation_impacts(document_id)
         return DocumentDeletionPreview(
             document_id=document.id,
             document_title=document.title,
@@ -160,6 +164,7 @@ class DocumentDeletionService:
             total_size_bytes=total_size,
             missing_files=missing_files,
             path_anomalies=path_anomalies,
+            aggregation_impact=aggregation_impact,
         )
 
     # ------------------------------------------------------------ deletion

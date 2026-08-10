@@ -610,6 +610,28 @@ class DocumentDeletionFile:
 
 
 @dataclass(frozen=True, slots=True)
+class AggregationAxisImpact:
+    """One organization axis whose aggregation view contains a document's knowledge."""
+
+    id: int
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class DocumentAggregationImpact:
+    """Which project/tag aggregation views actually contain a document's knowledge.
+
+    An axis is listed only when deleting the document would really change its
+    aggregation view — that is, the document has at least one note or
+    evidence entry that reaches the axis under the effective association
+    semantics. A bare association with no knowledge entries is not an impact.
+    """
+
+    projects: tuple[AggregationAxisImpact, ...] = ()
+    tags: tuple[AggregationAxisImpact, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class DocumentDeletionPreview:
     """Read-only impact summary of deleting one imported document.
 
@@ -635,6 +657,7 @@ class DocumentDeletionPreview:
     total_size_bytes: int
     missing_files: tuple[Path, ...]
     path_anomalies: tuple[str, ...]
+    aggregation_impact: DocumentAggregationImpact = DocumentAggregationImpact()
 
     @property
     def note_count(self) -> int:
