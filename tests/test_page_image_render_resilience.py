@@ -16,6 +16,7 @@ from streamlit.testing.v1 import AppTest
 import src.note_ui as note_ui
 import src.runtime as runtime
 from src.database import Database
+from src.document_deletion_service import DocumentDeletionService
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.note_service import NoteService
@@ -65,6 +66,17 @@ def _build_reader(tmp_path: Path, monkeypatch):
         runtime,
         "application_evidence_basket_service",
         lambda: EvidenceBasketService(database),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "application_document_deletion_service",
+        lambda: DocumentDeletionService(
+            database=database,
+            raw_dir=tmp_path / "raw",
+            pages_dir=tmp_path / "pages",
+            markdown_dir=tmp_path / "markdown",
+            data_dir=tmp_path,
+        ),
     )
     app = AppTest.from_file(READER).run(timeout=25)
     return app, database, document_id, note_id, image_path
