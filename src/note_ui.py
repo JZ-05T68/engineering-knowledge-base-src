@@ -421,6 +421,8 @@ def _render_text_selection_edit(note_service: NoteService, view: NoteView) -> No
 
 def _render_rebind_area(note_service: NoteService, view: NoteView) -> None:
     note = view.note
+    preview_key = f"note_text_rebind_preview_{note.id}"
+    confirm_key = f"note_text_rebind_confirm_{note.id}"
     with st.expander("重新绑定原文选区", expanded=False):
         draft = st.text_area(
             "新的原文选段",
@@ -435,21 +437,32 @@ def _render_rebind_area(note_service: NoteService, view: NoteView) -> None:
             try:
                 preview = note_service.preview_text_selection_rebind(note.id, draft)
             except ExcerptNotFoundError:
+                _discard_rebind_preview(preview_key, confirm_key)
                 st.warning("没有在当前文字来源中找到这段原文，请检查空格、换行和标点。")
             except DuplicateExcerptError:
+                _discard_rebind_preview(preview_key, confirm_key)
                 st.warning(
                     "这段原文在当前文字来源中出现多次，无法确定唯一位置。"
                     "请扩大选区后重试。"
                 )
             except TextSourceUnavailableError:
+                _discard_rebind_preview(preview_key, confirm_key)
                 st.warning("当前页面没有可用文字来源，请使用图片区域笔记。")
             except Exception as exc:
+                _discard_rebind_preview(preview_key, confirm_key)
                 _show_save_error(exc)
             else:
-                st.session_state[f"note_text_rebind_preview_{note.id}"] = preview
+                # Bind the preview to the exact input it was generated from;
+                # execution must match what the user last confirmed.
+                st.session_state[preview_key] = {"input": draft, "preview": preview}
                 st.rerun()
-        preview = st.session_state.get(f"note_text_rebind_preview_{note.id}")
-        if preview:
+        bundle = st.session_state.get(preview_key)
+        if bundle is not None and bundle.get("input") != draft:
+            _discard_rebind_preview(preview_key, confirm_key)
+            bundle = None
+            st.warning("新的原文选段已修改，请先重新预览再确认。")
+        if bundle:
+            preview = bundle["preview"]
             st.info(
                 f"旧{_source_kind_label(preview['old_source_kind'])}："
                 f"{preview['old_snapshot']}\n\n"
@@ -458,26 +471,31 @@ def _render_rebind_area(note_service: NoteService, view: NoteView) -> None:
                 f"新位置：{preview['selection_start']} – {preview['selection_end']}\n\n"
                 "确认后用户摘录将重置为新原文，个人笔记保留。"
             )
-            confirmed = st.checkbox(
-                _REBIND_CONFIRM_TEXT, key=f"note_text_rebind_confirm_{note.id}"
-            )
+            confirmed = st.checkbox(_REBIND_CONFIRM_TEXT, key=confirm_key)
             if st.button(
                 "确认重新绑定",
                 key=f"note_text_rebind_apply_{note.id}",
                 disabled=not confirmed,
             ):
                 try:
-                    note_service.rebind_text_selection(note.id, draft)
+                    note_service.rebind_text_selection(note.id, bundle["input"])
                 except Exception as exc:
                     _show_save_error(exc)  # 预览与输入保留
                 else:
                     _queue_key_clear(
                         f"note_text_rebind_input_{note.id}",
-                        f"note_text_rebind_preview_{note.id}",
-                        f"note_text_rebind_confirm_{note.id}",
+                        preview_key,
+                        confirm_key,
                     )
                     st.session_state[_FLASH_KEY] = "已重新绑定原文选区。"
                     st.rerun()
+
+
+def _discard_rebind_preview(preview_key: str, confirm_key: str) -> None:
+    """Drop any stored preview and its confirmation before the widgets render."""
+
+    st.session_state.pop(preview_key, None)
+    st.session_state.pop(confirm_key, None)
 
 
 # ------------------------------------------------------------- image region

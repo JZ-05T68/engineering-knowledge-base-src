@@ -371,9 +371,81 @@ def test_rebind_failure_keeps_original(tmp_path: Path, monkeypatch) -> None:
     assert note_service.get_note(note_id).note == before
 
 
+def test_rebind_execute_matches_last_confirmed_preview(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """预览 A 后改输入为 B：陈旧预览必须作废，禁止按 A 的确认执行 B。"""
+    app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    note_id = _seed_selection(note_service, page.id)
+    app.run(timeout=25)
+
+    app.text_area(key=f"note_text_rebind_input_{note_id}").input("回路").run()
+    _button(app, f"note_text_rebind_preview_btn_{note_id}").click().run()
+    assert any("回路" in info.value for info in app.info)
+
+    # 修改输入后不重新预览：预览与确认区必须消失
+    app.text_area(key=f"note_text_rebind_input_{note_id}").input("压力").run()
+    assert any("重新预览" in value for value in _warnings(app))
+    assert not any("回路" in info.value for info in app.info)
+    assert not [
+        button
+        for button in app.button
+        if button.key == f"note_text_rebind_apply_{note_id}"
+    ]
+
+    # 重新预览当前输入后执行，落库内容必须与最后确认的预览一致
+    _button(app, f"note_text_rebind_preview_btn_{note_id}").click().run()
+    assert any("压力" in info.value for info in app.info)
+    app.checkbox(key=f"note_text_rebind_confirm_{note_id}").check().run()
+    _button(app, f"note_text_rebind_apply_{note_id}").click().run()
+    rebound = note_service.get_note(note_id).note
+    assert rebound.source_excerpt_snapshot == "压力"
+    assert rebound.user_excerpt == "压力"
+    assert rebound.personal_note == "个人判断"
+
+
+def test_rebind_draft_change_clears_confirmation(tmp_path: Path, monkeypatch) -> None:
+    """已勾选的确认 checkbox 在输入变化后必须一并作废。"""
+    app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    note_id = _seed_selection(note_service, page.id)
+    app.run(timeout=25)
+
+    app.text_area(key=f"note_text_rebind_input_{note_id}").input("回路").run()
+    _button(app, f"note_text_rebind_preview_btn_{note_id}").click().run()
+    app.checkbox(key=f"note_text_rebind_confirm_{note_id}").check().run()
+    assert not _button(app, f"note_text_rebind_apply_{note_id}").disabled
+
+    app.text_area(key=f"note_text_rebind_input_{note_id}").input("压力").run()
+    _button(app, f"note_text_rebind_preview_btn_{note_id}").click().run()
+    assert app.checkbox(key=f"note_text_rebind_confirm_{note_id}").value is False
+    assert _button(app, f"note_text_rebind_apply_{note_id}").disabled
+
+
+def test_rebind_failed_preview_discards_previous_preview(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """预览失败不得保留上一次成功的预览与确认入口。"""
+    app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    note_id = _seed_selection(note_service, page.id)
+    app.run(timeout=25)
+
+    app.text_area(key=f"note_text_rebind_input_{note_id}").input("回路").run()
+    _button(app, f"note_text_rebind_preview_btn_{note_id}").click().run()
+    assert any("回路" in info.value for info in app.info)
+
+    app.text_area(key=f"note_text_rebind_input_{note_id}").input("没有这段").run()
+    _button(app, f"note_text_rebind_preview_btn_{note_id}").click().run()
+    assert any("没有在当前文字来源中找到" in value for value in _warnings(app))
+    assert not any("回路" in info.value for info in app.info)
+    assert f"note_text_rebind_confirm_{note_id}" not in {
+        element.key for element in app.checkbox
+    }
+
+
 # --- H. deletion ---------------------------------------------------------------------
-
-
 def test_delete_selection_note(tmp_path: Path, monkeypatch) -> None:
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
