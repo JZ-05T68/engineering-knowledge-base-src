@@ -406,6 +406,29 @@ S2 实施前先完成调用点审计（含 tests，如 `tests/test_database.py` 
 4. 性能门槛在 S3 设计细化时量化（预期数据规模下单次聚合查询应在
    交互可接受范围内；如需索引，作为独立决策记录）。
 
+### 17.1 S3 纳入规则（R1 补充冻结）
+
+1. **关联继承沿用搜索层既有 effective 语义，不是新增语义**。页面级搜索
+   过滤早已把页面视为命中某 tag/project 当且仅当"页面直接关联 OR 所属
+   document 直接关联"（`src/database.py` 搜索过滤与 facet 的
+   `effective_tags`/`effective_projects` 先例）。聚合沿用同一规则：
+   - document 级 note：仅由 `project_documents`/`document_tags` 直接
+     关联命中；
+   - page/text_selection/image_region note 与 evidence item：页面直接
+     关联或其所属 document 直接关联均命中（与页面搜索一致）。
+2. **evidence 无 importance**：importance 过滤为非 all 时 evidence 不
+   出现；不伪造等级、不默认 normal。note_type 过滤同理只作用于 notes。
+3. 统一条目模型只为浏览与排序；note 与 evidence 的差异保留
+   （`note_type`/`importance` 对 evidence 为 None，`user_note`/
+   `basket_id` 对 note 为空）。
+4. 去重：同一 `(source_kind, source_id)` 在结果中只出现一次；轴匹配用
+   EXISTS/IN 而非 JOIN 展开，从 SQL 层面消除多路径重复。
+5. 排序：importance 优先（primary→secondary→normal，evidence 居末），
+   再按时间倒序，再以 document/page/条目 identity 稳定收尾；
+   不依赖数据库未定义顺序。
+6. 聚合只读：不写任何表、不建新表、不复制 document_title 到任何
+   持久化位置；删除 document 后结果自然消失（§18）。
+
 ## 18. Aggregation × deletion consistency model（冻结）
 
 1. 聚合是纯动态查询 → 文档删除后其笔记/证据行已不存在 →
