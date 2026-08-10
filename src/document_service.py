@@ -13,10 +13,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO
 from uuid import uuid4
 
-from src.document_deletion_service import (
-    DocumentDeletionError,
-    DocumentDeletionService,
-)
 from src.models import Document, ImportRecord, ImportStatus, Page, PageStatus
 from src.ocr_engine import OcrEngine, OcrExecutionError, require_ocr_engine
 from src.ocr_policy import is_page_eligible_for_ocr
@@ -663,32 +659,6 @@ class DocumentService:
             return image_path.is_file() and image_path.stat().st_size > 0
         except OSError:
             return False
-
-    def delete_document(self, document_id: int, *, confirmed: bool = False) -> None:
-        """Delete one document after explicit confirmation via the staged service.
-
-        Deprecated entry point kept for existing tests: the browser page now
-        calls :class:`DocumentDeletionService` directly. The staged service
-        quarantines recorded files before the database transaction and
-        restores them on any failure, so unrecorded leftover files next to
-        the document's own files are always preserved.
-        """
-
-        if not confirmed:
-            raise DocumentImportError("删除文档需要明确二次确认。")
-        deletion_service = DocumentDeletionService(
-            database=self.database,
-            raw_dir=self.raw_dir,
-            pages_dir=self.pages_dir,
-            markdown_dir=self.markdown_dir,
-            data_dir=self.raw_dir.parent,
-        )
-        try:
-            result = deletion_service.delete_document(document_id)
-        except DocumentDeletionError as exc:
-            raise DocumentImportError(str(exc)) from exc
-        for warning in result.cleanup_warnings:
-            LOGGER.warning("文档删除清理警告：%s", warning)
 
     def _create_import_record(
         self, filename: str, title: str, sha256: str

@@ -284,6 +284,16 @@ def test_preview_reports_missing_file(tmp_path: Path) -> None:
 # --- B. normal deletion --------------------------------------------------------
 
 
+def test_no_bare_database_delete_document_api() -> None:
+    """Business-level deletion must go through DocumentDeletionService.
+
+    The bare cascading ``Database.delete_document`` API was removed so no
+    production code can bypass quarantine, residue checks and confirmation.
+    """
+
+    assert not hasattr(Database, "delete_document")
+
+
 def test_delete_single_page_document(tmp_path: Path) -> None:
     database, service, data_dir, raw_dir, pages_dir, markdown_dir = _make_service(tmp_path)
     document, pages = _create_document(

@@ -262,7 +262,9 @@ def test_missing_files_and_document_cascade_are_explicit(tmp_path: Path) -> None
         page_id=page_ids[0],
         evidence_text="液压泵",
     )
-    database.delete_document(document_id)
+    with sqlite3.connect(database.database_path) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("DELETE FROM documents WHERE id = ?", (document_id,))
     assert service.list_items() == []
 
 

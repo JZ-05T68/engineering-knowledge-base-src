@@ -311,14 +311,6 @@ class Database:
             error_message=document.import_error,
         )
 
-    def delete_document(self, document_id: int) -> None:
-        """Delete document metadata and cascading associations in one transaction."""
-
-        with self._connection() as connection:
-            cursor = connection.execute("DELETE FROM documents WHERE id = ?", (document_id,))
-            if cursor.rowcount == 0:
-                raise RecordNotFoundError(f"文档不存在：{document_id}")
-
     def create_page(
         self,
         *,

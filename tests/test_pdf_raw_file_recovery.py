@@ -24,6 +24,7 @@ import src.document_service as document_service_module
 from src.backup_service import BackupService, validate_backup
 from src.database import Database
 from src.diagnostic_service import DiagnosticService, DiagnosticStatus
+from src.document_deletion_service import DocumentDeletionService
 from src.document_service import TEMP_RAW_INFIX, DocumentImportError, DocumentService
 from src.migrations import SCHEMA_VERSION
 from src.models import ImportStatus
@@ -407,7 +408,13 @@ def test_raw_temp_files_are_not_treated_as_formal_assets(tmp_path: Path) -> None
     pdf_check = next(check for check in snapshot.checks if check.key == "pdf_files")
     assert pdf_check.status is DiagnosticStatus.NORMAL
 
-    service.delete_document(result.document.id, confirmed=True)
+    DocumentDeletionService(
+        database=database,
+        raw_dir=data_dir / "raw",
+        pages_dir=data_dir / "pages",
+        markdown_dir=data_dir / "markdown",
+        data_dir=data_dir,
+    ).delete_document(result.document.id)
     assert not formal.exists()
     # The leftover temp is not the document's file: delete leaves it alone.
     assert temp.is_file()

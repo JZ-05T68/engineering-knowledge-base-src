@@ -304,10 +304,10 @@ class DocumentDeletionService:
     def _delete_document_records(self, document_id: int) -> None:
         """Run the cascading delete and verify zero residue in one transaction.
 
-        Mirrors :meth:`Database.delete_document` (one ``DELETE`` relying on
-        the verified schema v5 cascades and the FTS cleanup trigger), then
-        checks every affected table inside the same connection so any
-        surprise rolls the whole transaction back before commit.
+        Executes one ``DELETE`` relying on the verified schema cascades and
+        the FTS cleanup trigger, then checks every affected table inside the
+        same connection so any surprise rolls the whole transaction back
+        before commit.
         """
 
         with self._database._connection() as connection:
