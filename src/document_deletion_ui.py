@@ -142,8 +142,9 @@ def render_document_deletion_section(
         else:
             st.session_state["doc_delete_reset_pending"] = True
             st.session_state["doc_delete_flash"] = (
-                f"已永久删除导入文档“{document.title}”及其 "
-                f"{deletion_result.preview.page_count} 个页面与全部派生数据。",
+                f"文档“{document.title}”及其 "
+                f"{deletion_result.preview.page_count} 个页面与全部派生数据"
+                "已从当前知识库删除。历史备份中可能仍保留旧版本。",
                 deletion_result.cleanup_warnings,
             )
             st.query_params.clear()

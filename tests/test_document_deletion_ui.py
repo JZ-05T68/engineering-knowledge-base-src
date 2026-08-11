@@ -204,7 +204,10 @@ def test_successful_deletion_updates_page_and_cleans_state(
     _button(app, f"doc_delete_execute_{document.id}").click().run()
 
     assert not app.exception
-    assert any("已永久删除导入文档“甲文档”" in success.value for success in app.success)
+    assert any(
+        "已从当前知识库删除" in success.value and "甲文档" in success.value
+        for success in app.success
+    )
     assert database.get_document(document.id) is None
     # The document list refreshes: the deleted document is gone, the other one
     # stays, and the selection identity falls back to a surviving document id.
@@ -246,7 +249,7 @@ def test_deleting_last_document_falls_back_to_empty_state(
     _button(app, f"doc_delete_execute_{document.id}").click().run()
 
     assert not app.exception
-    assert any("已永久删除" in success.value for success in app.success)
+    assert any("已从当前知识库删除" in success.value for success in app.success)
     assert database.get_document(document.id) is None
     assert any("还没有已导入的文档" in info.value for info in app.info)
     assert len(app.query_params) == 0
@@ -270,7 +273,7 @@ def test_failed_deletion_shows_error_without_fake_success(
         "删除失败" in error.value and "模拟删除失败" in error.value
         for error in app.error
     )
-    assert not any("已永久删除" in success.value for success in app.success)
+    assert not any("已从当前知识库删除" in success.value for success in app.success)
     assert database.get_document(document.id) is not None
 
 
@@ -286,7 +289,7 @@ def test_cleanup_warnings_are_displayed(tmp_path: Path, monkeypatch) -> None:
     _button(app, f"doc_delete_execute_{document.id}").click().run()
 
     assert not app.exception
-    assert any("已永久删除" in success.value for success in app.success)
+    assert any("已从当前知识库删除" in success.value for success in app.success)
     assert any("隔离目录未能清理" in warning.value for warning in app.warning)
     assert database.get_document(document.id) is None
     quarantine_files = [

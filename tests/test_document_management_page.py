@@ -202,7 +202,9 @@ def test_full_confirmation_chain_deletes_document(tmp_path: Path, monkeypatch) -
     next(b for b in app.button if b.key == execute_key).click().run()
 
     assert not app.exception
-    assert any("已永久删除导入文档“甲文档”" in s.value for s in app.success)
+    assert any(
+        "已从当前知识库删除" in s.value and "甲文档" in s.value for s in app.success
+    )
     assert database.get_document(document.id) is None
     assert database.get_document(other.id) is not None
 
