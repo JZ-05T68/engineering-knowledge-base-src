@@ -362,7 +362,7 @@ def test_deleted_document_disappears_without_stale_items(
         pages_dir=pages_dir,
         markdown_dir=markdown_dir,
         data_dir=data_dir,
-    ).delete_document(context["alpha"].id)
+    ).delete_document(context["alpha"].id, expected_title=context["alpha"].title)
     app.run(timeout=30)
 
     assert not app.exception

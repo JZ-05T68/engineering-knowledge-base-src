@@ -8,7 +8,6 @@ from pathlib import Path
 
 import streamlit as st
 
-from src.document_deletion_ui import render_document_deletion_section
 from src.evidence_basket_service import (
     DuplicateEvidenceError,
     EvidenceBasketError,
@@ -18,7 +17,6 @@ from src.note_service import NoteService
 from src.note_ui import render_structured_notes_tab
 from src.runtime import (
     application_database,
-    application_document_deletion_service,
     application_document_service,
     application_evidence_basket_service,
 )
@@ -59,7 +57,6 @@ def decode_markdown(file_bytes: bytes) -> str:
 try:
     database = application_database()
     document_service = application_document_service()
-    deletion_service = application_document_deletion_service()
     basket_service = application_evidence_basket_service()
     search_service = SearchService(database)
     note_service = NoteService(database)
@@ -96,22 +93,6 @@ def _open_search_result(
 basket_flash = st.session_state.pop("basket_flash", "")
 if basket_flash:
     st.success(basket_flash)
-
-deletion_flash = st.session_state.pop("doc_delete_flash", None)
-if deletion_flash:
-    flash_message, flash_warnings = deletion_flash
-    st.success(flash_message)
-    for flash_warning in flash_warnings:
-        st.warning(flash_warning)
-
-# Widget keys may only be removed before their widgets are instantiated in a
-# run, so a successful deletion defers the cleanup of its confirmation inputs
-# to the top of the next run via this flag.
-if st.session_state.pop("doc_delete_reset_pending", False):
-    for stale_key in [
-        key for key in st.session_state if key.startswith("doc_delete_")
-    ]:
-        del st.session_state[stale_key]
 
 pending_reader_params = st.session_state.pop("pending_reader_query_params", None)
 if isinstance(pending_reader_params, dict):
@@ -353,11 +334,9 @@ with st.expander("文档标签与所属项目"):
             st.success("文档分类已保存。")
 
 with st.expander("文档管理"):
-    st.caption("针对当前文档的管理操作。以下操作会影响整份文档，请谨慎执行。")
-    render_document_deletion_section(
-        deletion_service=deletion_service,
-        document=document,
-    )
+    st.caption("文档删除及生命周期管理已迁移至「文档管理」页面。")
+    if st.button("前往「文档管理」", key=f"goto_document_management_{document.id}"):
+        st.switch_page("pages/13_文档管理.py")
 
 document_pages = sorted(
     database.list_pages(document.id),

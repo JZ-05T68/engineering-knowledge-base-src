@@ -455,7 +455,7 @@ def test_deleted_document_disappears_from_aggregation(tmp_path: Path) -> None:
         markdown_dir=env["markdown_dir"],
         data_dir=env["data_dir"],
     )
-    deletion_service.delete_document(env["alpha"].id)
+    deletion_service.delete_document(env["alpha"].id, expected_title=env["alpha"].title)
 
     after = service.aggregate_library()
     assert all(item.document_id != env["alpha"].id for item in after.items)

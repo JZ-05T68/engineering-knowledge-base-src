@@ -155,7 +155,7 @@ def test_manifest_written_before_first_move(
         real_replace(src, dst)
 
     monkeypatch.setattr(os, "replace", observing_replace)
-    result = service.delete_document(document.id)
+    result = service.delete_document(document.id, expected_title=document.title)
 
     assert result.deleted is True
     manifest = observed["manifest"]
@@ -521,7 +521,7 @@ def test_aborted_in_process_deletion_leaves_no_operation(tmp_path: Path) -> None
     DocumentDeletionService._delete_document_records = failing_delete
     try:
         with pytest.raises(DocumentDeletionError, match="已全部恢复原位"):
-            service.delete_document(document.id)
+            service.delete_document(document.id, expected_title=document.title)
     finally:
         DocumentDeletionService._delete_document_records = original
 

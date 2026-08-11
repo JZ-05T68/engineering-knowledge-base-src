@@ -168,22 +168,35 @@ class DocumentDeletionService:
         )
 
     # ------------------------------------------------------------ deletion
-    def delete_document(self, document_id: int) -> DocumentDeletionResult:
+    def delete_document(
+        self, document_id: int, *, expected_title: str
+    ) -> DocumentDeletionResult:
         """Delete one document in verifiable stages, never faking success.
 
-        Stage 1 re-validates the document and every recorded path; any
-        anomaly aborts before anything is touched. Stage 2 writes the
-        per-operation quarantine manifest (every planned file with its
-        SHA-256) atomically — before the first file moves, so a crash at
-        any later point is recoverable by :mod:`src.deletion_recovery`.
-        Stage 3 moves recorded files into the operation directory with
-        atomic same-volume renames. Stage 4 runs the single cascading
-        ``DELETE`` plus per-table residue checks in one transaction,
-        rolling back on any surprise. Stage 5-6 permanently remove the
-        quarantine only after the commit.
+        ``expected_title`` is a mandatory title-confirmation invariant: it
+        must equal the document title re-read at execution time exactly —
+        no stripping, no case folding, no normalization. Any mismatch
+        aborts before a single side effect (no quarantine directory, no
+        file move, no database change). This is defense in depth on top of
+        the UI's own confirmation gating, so no caller can delete by
+        document id alone. Stage 1 then re-validates the document and
+        every recorded path; any anomaly aborts before anything is
+        touched. Stage 2 writes the per-operation quarantine manifest
+        (every planned file with its SHA-256) atomically — before the
+        first file moves, so a crash at any later point is recoverable by
+        :mod:`src.deletion_recovery`. Stage 3 moves recorded files into
+        the operation directory with atomic same-volume renames. Stage 4
+        runs the single cascading ``DELETE`` plus per-table residue checks
+        in one transaction, rolling back on any surprise. Stage 5-6
+        permanently remove the quarantine only after the commit.
         """
 
         preview = self.preview_document_deletion(document_id)
+        if expected_title != preview.document_title:
+            raise DocumentDeletionError(
+                "标题确认不匹配，已中止删除，未改动任何数据："
+                f"文档“{preview.document_title}”（id={document_id}）"
+            )
         if preview.path_anomalies:
             raise DocumentDeletionError(
                 "检测到路径异常，已中止删除，未改动任何数据："

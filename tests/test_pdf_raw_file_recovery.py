@@ -414,7 +414,7 @@ def test_raw_temp_files_are_not_treated_as_formal_assets(tmp_path: Path) -> None
         pages_dir=data_dir / "pages",
         markdown_dir=data_dir / "markdown",
         data_dir=data_dir,
-    ).delete_document(result.document.id)
+    ).delete_document(result.document.id, expected_title=result.document.title)
     assert not formal.exists()
     # The leftover temp is not the document's file: delete leaves it alone.
     assert temp.is_file()

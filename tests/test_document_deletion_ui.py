@@ -1,4 +1,4 @@
-"""UI tests for the document deletion expander on the browser page (AppTest).
+"""UI tests for the shared document deletion section on the management page.
 
 Fixtures use temporary databases and synthetic files only. Production data
 and port 8501 are never touched.
@@ -19,12 +19,11 @@ from src.document_deletion_service import (
     DocumentDeletionError,
     DocumentDeletionService,
 )
-from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.note_service import NoteService
 from src.search_service import SearchService
 
-BROWSE_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("2_*.py")))
+MANAGE_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("13_*.py")))
 
 
 def _create_document(
@@ -84,7 +83,6 @@ def _build_app(tmp_path: Path, monkeypatch, *, document_count: int = 2):
         markdown_dir=markdown_dir,
         data_dir=data_dir,
     )
-    document_service = DocumentService(database, raw_dir, pages_dir, markdown_dir)
 
     document, pages = _create_document(
         database, raw_dir, pages_dir, markdown_dir,
@@ -112,16 +110,10 @@ def _build_app(tmp_path: Path, monkeypatch, *, document_count: int = 2):
         )
 
     monkeypatch.setattr(runtime, "application_database", lambda: database)
-    monkeypatch.setattr(runtime, "application_document_service", lambda: document_service)
     monkeypatch.setattr(
         runtime, "application_document_deletion_service", lambda: deletion_service
     )
-    monkeypatch.setattr(
-        runtime,
-        "application_evidence_basket_service",
-        lambda: EvidenceBasketService(database),
-    )
-    app = AppTest.from_file(BROWSE_PAGE).run(timeout=30)
+    app = AppTest.from_file(MANAGE_PAGE).run(timeout=30)
     return app, database, deletion_service, document, other, data_dir
 
 
@@ -214,13 +206,21 @@ def test_successful_deletion_updates_page_and_cleans_state(
     assert not app.exception
     assert any("已永久删除导入文档“甲文档”" in success.value for success in app.success)
     assert database.get_document(document.id) is None
+    # The document list refreshes: the deleted document is gone, the other one
+    # stays, and the selection identity falls back to a surviving document id.
+    titles = app.dataframe[0].value["标题"].tolist()
+    assert "甲文档" not in titles
+    assert "乙文档" in titles
     selectbox = next(sb for sb in app.selectbox if sb.label == "选择文档")
     option_labels = [str(option) for option in selectbox.options]
     assert not any("甲文档" in label for label in option_labels)
     assert any("乙文档" in label for label in option_labels)
+    assert selectbox.value == other.id
+    assert app.session_state["doc_manage_selected_document_id"] == other.id
     assert f"doc_delete_confirm_{document.id}" not in app.session_state
     assert f"doc_delete_title_{document.id}" not in app.session_state
-    assert app.query_params.get("document") == [str(other.id)]
+    # The confirmation chain now binds to the surviving document.
+    assert app.text_input(key=f"doc_delete_title_{other.id}") is not None
     # Deleted notes no longer appear in the structured-notes list.
     note_service = NoteService(database)
     assert all(
@@ -230,12 +230,10 @@ def test_successful_deletion_updates_page_and_cleans_state(
     # Search no longer returns the deleted document's pages.
     results = SearchService(database).search("阀体")
     assert all(result.document_id != document.id for result in results)
-    # The other document still opens normally in a fresh session. (AppTest
-    # cannot re-serialize the keyless document selectbox after its options
-    # changed mid-session, so a fresh run stands in for the next visit.)
-    fresh = AppTest.from_file(BROWSE_PAGE).run(timeout=30)
+    # A fresh session shows the same refreshed state.
+    fresh = AppTest.from_file(MANAGE_PAGE).run(timeout=30)
     assert not fresh.exception
-    assert any(markdown.value == "### 乙文档" for markdown in fresh.markdown)
+    assert fresh.dataframe[0].value["标题"].tolist() == ["乙文档"]
 
 
 def test_deleting_last_document_falls_back_to_empty_state(
@@ -250,8 +248,9 @@ def test_deleting_last_document_falls_back_to_empty_state(
     assert not app.exception
     assert any("已永久删除" in success.value for success in app.success)
     assert database.get_document(document.id) is None
-    assert any("还没有可浏览的文档" in info.value for info in app.info)
+    assert any("还没有已导入的文档" in info.value for info in app.info)
     assert len(app.query_params) == 0
+    assert "doc_manage_selected_document_id" not in app.session_state
 
 
 def test_failed_deletion_shows_error_without_fake_success(
@@ -259,7 +258,7 @@ def test_failed_deletion_shows_error_without_fake_success(
 ) -> None:
     app, database, deletion_service, document, _, _ = _build_app(tmp_path, monkeypatch)
 
-    def failing_delete(document_id):
+    def failing_delete(document_id, *, expected_title):
         raise DocumentDeletionError("模拟删除失败")
 
     monkeypatch.setattr(deletion_service, "delete_document", failing_delete)
@@ -306,12 +305,14 @@ def test_no_batch_deletion_entry(tmp_path: Path, monkeypatch) -> None:
     assert not app.exception
     button_labels = [button.label for button in app.button]
     assert not any("全部删除" in label for label in button_labels)
-    expander_labels = [expander.label for expander in app.expander]
-    # The single deletion entry lives in the document-management section near
-    # the document summary; no second, drifting implementation exists.
-    assert expander_labels.count("文档管理") == 1
-    assert "删除导入文件" not in expander_labels
-    assert "危险操作：删除文档" not in expander_labels
+    # The single deletion entry is the shared confirmation chain rendered for
+    # the selected document; no second, drifting implementation exists.
+    section_headers = [
+        markdown.value
+        for markdown in app.markdown
+        if "永久删除导入文档及关联数据" in markdown.value
+    ]
+    assert len(section_headers) == 1
 
 
 # --- evidence-basket confirmation ------------------------------------------------

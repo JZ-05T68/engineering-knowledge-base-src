@@ -303,7 +303,7 @@ def test_delete_single_page_document(tmp_path: Path) -> None:
     import_record_id = _add_import_record(database, document)
     pdf_path = Path(document.source_path)
 
-    result = service.delete_document(document.id)
+    result = service.delete_document(document.id, expected_title=document.title)
 
     assert result.deleted is True
     assert result.document_id == document.id
@@ -335,7 +335,7 @@ def test_delete_multi_page_document_cascades_everything(tmp_path: Path) -> None:
     other_fingerprints = {path: _sha256(path) for path in other_files}
     assert set(_residue_counts(database, document.id, page_ids).values()) != {0}
 
-    result = env["service"].delete_document(document.id)
+    result = env["service"].delete_document(document.id, expected_title=document.title)
 
     assert result.deleted is True
     assert result.cleanup_warnings == ()
@@ -373,7 +373,9 @@ def test_delete_with_missing_file_still_succeeds(tmp_path: Path) -> None:
     missing_png = env["pages"][0].image_path
     missing_png.unlink()
 
-    result = env["service"].delete_document(env["document"].id)
+    result = env["service"].delete_document(
+        env["document"].id, expected_title=env["document"].title
+    )
 
     assert result.deleted is True
     assert result.preview.missing_files == (missing_png,)
@@ -403,7 +405,7 @@ def test_file_move_failure_aborts_without_touching_anything(
 
     monkeypatch.setattr(os, "replace", crashing_replace)
     with pytest.raises(DocumentDeletionError, match="移动文件到隔离目录失败"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
 
     assert _residue_counts(database, document.id, page_ids) == before
     assert database.get_document(document.id) is not None
@@ -433,7 +435,7 @@ def test_database_delete_failure_rolls_back_and_restores_files(
         DocumentDeletionService, "_delete_document_records", failing_delete
     )
     with pytest.raises(DocumentDeletionError, match="已全部恢复原位"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
 
     assert database.get_document(document.id) is not None
     assert set(_residue_counts(database, document.id, page_ids).values()) != {0}
@@ -478,7 +480,7 @@ def test_commit_failure_rolls_back_and_restores_files(
 
     monkeypatch.setattr(sqlite3, "connect", connect_with_factory)
     with pytest.raises(DocumentDeletionError, match="已全部恢复原位"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
 
     assert database.get_document(document.id) is not None
     assert set(_residue_counts(database, document.id, page_ids).values()) != {0}
@@ -512,7 +514,7 @@ def test_restore_failure_is_reported_honestly(
     monkeypatch.setattr(os, "replace", flaky_replace)
     with caplog.at_level("CRITICAL"):
         with pytest.raises(DocumentDeletionError, match="未能恢复原位") as exc_info:
-            env["service"].delete_document(document.id)
+            env["service"].delete_document(document.id, expected_title=document.title)
 
     message = str(exc_info.value)
     assert "数据库未改动" in message
@@ -537,7 +539,7 @@ def test_quarantine_cleanup_failure_reports_warning_without_failing(
         raise OSError("模拟清理失败")
 
     monkeypatch.setattr(shutil, "rmtree", failing_rmtree)
-    result = env["service"].delete_document(document.id)
+    result = env["service"].delete_document(document.id, expected_title=document.title)
 
     assert result.deleted is True
     assert len(result.cleanup_warnings) == 1
@@ -572,7 +574,7 @@ def test_dotdot_path_aborts_deletion(tmp_path: Path) -> None:
     preview = env["service"].preview_document_deletion(document.id)
     assert any(".." in anomaly for anomaly in preview.path_anomalies)
     with pytest.raises(DocumentDeletionError, match="路径异常"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
 
     assert outside.read_bytes() == b"secret"
     assert database.get_document(document.id) is not None
@@ -596,7 +598,7 @@ def test_outside_data_dir_path_aborts_deletion(tmp_path: Path) -> None:
     preview = service.preview_document_deletion(document.id)
     assert any("不在其归属目录" in anomaly for anomaly in preview.path_anomalies)
     with pytest.raises(DocumentDeletionError, match="路径异常"):
-        service.delete_document(document.id)
+        service.delete_document(document.id, expected_title=document.title)
 
     assert outside_pdf.read_bytes() == b"outside"
     assert database.get_document(document.id) is not None
@@ -612,7 +614,7 @@ def test_data_root_and_directory_paths_abort_deletion(tmp_path: Path) -> None:
     preview = env["service"].preview_document_deletion(document.id)
     assert any("数据根目录" in anomaly for anomaly in preview.path_anomalies)
     with pytest.raises(DocumentDeletionError, match="路径异常"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
     assert database.get_document(document.id) is not None
 
     # A directory recorded where a file is expected is equally refused.
@@ -622,7 +624,7 @@ def test_data_root_and_directory_paths_abort_deletion(tmp_path: Path) -> None:
     preview = env["service"].preview_document_deletion(document.id)
     assert any("不是普通文件" in anomaly for anomaly in preview.path_anomalies)
     with pytest.raises(DocumentDeletionError, match="路径异常"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
     assert database.get_document(document.id) is not None
 
 
@@ -642,8 +644,147 @@ def test_symlink_escape_aborts_deletion(tmp_path: Path) -> None:
     preview = env["service"].preview_document_deletion(document.id)
     assert preview.path_anomalies
     with pytest.raises(DocumentDeletionError, match="路径异常"):
-        env["service"].delete_document(document.id)
+        env["service"].delete_document(document.id, expected_title=document.title)
 
     assert outside.read_bytes() == b"target"
     assert link.is_symlink()
     assert database.get_document(document.id) is not None
+
+
+# --- F. expected_title confirmation invariant ---------------------------------
+
+
+def _create_titled_document(tmp_path: Path):
+    """One real document with a Latin-cased title for strict-match tests."""
+
+    database, service, data_dir, raw_dir, pages_dir, markdown_dir = _make_service(tmp_path)
+    document, pages = _create_document(
+        database, raw_dir, pages_dir, markdown_dir,
+        title="Spec-A 规格书", sha_letter="e", page_count=1,
+    )
+    return database, service, data_dir, document, pages
+
+
+def test_delete_accepts_exact_expected_title(tmp_path: Path) -> None:
+    database, service, _, document, pages = _create_titled_document(tmp_path)
+
+    result = service.delete_document(document.id, expected_title="Spec-A 规格书")
+
+    assert result.deleted is True
+    assert database.get_document(document.id) is None
+    assert not Path(document.source_path).exists()
+    assert not pages[0].image_path.exists()
+
+
+@pytest.mark.parametrize(
+    "expected_title",
+    [
+        "Spec-B 规格书",
+        "spec-a 规格书",
+        " Spec-A 规格书",
+        "Spec-A 规格书 ",
+        "",
+    ],
+    ids=["错误标题", "仅大小写不同", "前导空格", "尾随空格", "空字符串"],
+)
+def test_delete_rejects_mismatched_expected_title(
+    tmp_path: Path, expected_title: str
+) -> None:
+    database, service, data_dir, document, pages = _create_titled_document(tmp_path)
+    page_ids = [page.id for page in pages]
+    recorded = [Path(document.source_path)]
+    recorded += [page.image_path for page in pages]
+    recorded += [page.markdown_path for page in pages]
+    before = _residue_counts(database, document.id, page_ids)
+
+    with pytest.raises(DocumentDeletionError, match="标题确认不匹配"):
+        service.delete_document(document.id, expected_title=expected_title)
+
+    # The refusal happens before any side effect: database untouched, every
+    # recorded file in place, and no quarantine operation directory created.
+    assert database.get_document(document.id) is not None
+    assert _residue_counts(database, document.id, page_ids) == before
+    for path in recorded:
+        assert path.is_file(), f"文件被误动：{path}"
+    quarantine_root = _quarantine_root(data_dir)
+    assert not quarantine_root.exists() or not any(quarantine_root.iterdir())
+
+
+def test_delete_requires_expected_title_argument(tmp_path: Path) -> None:
+    database, service, _, document, _ = _create_titled_document(tmp_path)
+
+    with pytest.raises(TypeError):
+        service.delete_document(document.id)  # type: ignore[call-arg]
+
+    assert database.get_document(document.id) is not None
+
+
+def test_double_delete_is_refused_without_side_effects(tmp_path: Path) -> None:
+    env = _build_full_library(tmp_path)
+    database = env["database"]
+    service = env["service"]
+    document = env["document"]
+    other_files = [Path(env["other"].source_path)]
+    other_files += [page.image_path for page in env["other_pages"]]
+    other_files += [page.markdown_path for page in env["other_pages"]]
+    other_fingerprints = {path: _sha256(path) for path in other_files}
+
+    result = service.delete_document(document.id, expected_title=document.title)
+    assert result.deleted is True
+    import_records_after_first = _count(database, "SELECT COUNT(*) FROM import_records")
+
+    with pytest.raises(DocumentDeletionError, match="找不到文档"):
+        service.delete_document(document.id, expected_title=document.title)
+
+    # The repeated call stops at the missing-document check: no new quarantine
+    # operation, import records unchanged, other documents' bytes untouched.
+    assert not any(_quarantine_root(env["data_dir"]).iterdir())
+    assert (
+        _count(database, "SELECT COUNT(*) FROM import_records")
+        == import_records_after_first
+    )
+    assert database.get_document(env["other"].id) is not None
+    for path, fingerprint in other_fingerprints.items():
+        assert path.is_file()
+        assert _sha256(path) == fingerprint
+
+
+def test_delete_uses_execution_time_state(tmp_path: Path) -> None:
+    """A stale preview never drives deletion: state is re-read at execution."""
+
+    env = _build_full_library(tmp_path)
+    database = env["database"]
+    service = env["service"]
+    document = env["document"]
+    stale_preview = service.preview_document_deletion(document.id)
+    assert stale_preview.page_count == 2
+    assert stale_preview.page_note_count == 1
+
+    # The underlying state changes after the preview: one more note and one
+    # more page (with real files) appear before the deletion executes.
+    NoteService(database).create_page_note(env["pages"][0].id, "预览后新增笔记")
+    new_image_path = env["pages_dir"] / str(document.id) / "page_0003.png"
+    Image.new("RGB", (800, 1200), "white").save(new_image_path)
+    new_markdown_path = env["markdown_dir"] / str(document.id) / "page_0003.md"
+    new_markdown_path.write_text("# 预览后新增页面", encoding="utf-8")
+    new_page = database.create_page(
+        document_id=document.id,
+        page_number=3,
+        image_path=new_image_path,
+        extracted_text="第 3 页 预览后新增 阀体",
+        markdown_content="# 预览后新增页面",
+        markdown_path=new_markdown_path,
+    )
+
+    result = service.delete_document(document.id, expected_title=document.title)
+
+    # The result reflects the execution-time state, not the stale preview.
+    assert result.deleted is True
+    assert result.preview.page_count == 3
+    assert result.preview.page_note_count == 2
+    page_ids = [page.id for page in env["pages"]] + [new_page.id]
+    assert set(_residue_counts(database, document.id, page_ids).values()) == {0}
+    assert not new_image_path.exists()
+    assert not new_markdown_path.exists()
+    assert _foreign_key_violations(database) == []
+    assert not any(_quarantine_root(env["data_dir"]).iterdir())

@@ -271,7 +271,7 @@ def test_preview_impact_readable_despite_path_anomaly(tmp_path: Path) -> None:
     assert preview.path_anomalies
     assert [item.name for item in preview.aggregation_impact.projects] == ["主项目"]
     with pytest.raises(DocumentDeletionError, match="路径异常"):
-        deletion.delete_document(document.id)
+        deletion.delete_document(document.id, expected_title=document.title)
 
 
 def test_deletion_removes_impact_and_preserves_axes(tmp_path: Path) -> None:
@@ -285,7 +285,7 @@ def test_deletion_removes_impact_and_preserves_axes(tmp_path: Path) -> None:
     database.set_document_tags(document.id, [tag.id])
     assert service.get_document_aggregation_impacts(document.id).projects
 
-    deletion.delete_document(document.id)
+    deletion.delete_document(document.id, expected_title=document.title)
 
     with pytest.raises(AggregationError, match="找不到文档"):
         service.get_document_aggregation_impacts(document.id)
@@ -310,7 +310,7 @@ def test_other_document_aggregation_survives_deletion(tmp_path: Path) -> None:
     database.set_document_projects(document.id, [project.id])
     database.set_document_projects(other.id, [project.id])
 
-    deletion.delete_document(document.id)
+    deletion.delete_document(document.id, expected_title=document.title)
 
     result = service.aggregate_by_project(project.id)
     assert result.total_count == 1
@@ -335,7 +335,7 @@ def test_failed_deletion_keeps_aggregation_unchanged(
         DocumentDeletionService, "_delete_document_records", failing_delete
     )
     with pytest.raises(DocumentDeletionError):
-        deletion.delete_document(document.id)
+        deletion.delete_document(document.id, expected_title=document.title)
 
     after = service.aggregate_by_project(project.id)
     assert after.total_count == before
@@ -362,7 +362,7 @@ def test_reimport_after_delete_can_aggregate_again(tmp_path: Path) -> None:
     database.set_document_projects(first.document.id, [project.id])
     assert service.aggregate_by_project(project.id).total_count == 1
 
-    deletion.delete_document(first.document.id)
+    deletion.delete_document(first.document.id, expected_title=first.document.title)
     assert service.aggregate_by_project(project.id).total_count == 0
 
     second = documents.import_pdf(content, source.name, title="重导样例")

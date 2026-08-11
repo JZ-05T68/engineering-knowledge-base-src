@@ -70,8 +70,9 @@ def render_document_deletion_section(
         st.error(f"无法生成删除预览：{exc}")
         return
     st.warning(
-        f"此操作不可撤销：将永久删除导入文档“{document.title}”及其全部页面、"
-        "笔记、证据和派生数据。项目、标签与证据篮本身保留。"
+        f"此操作不可撤销：将删除当前知识库中的文档“{document.title}”及其全部页面、"
+        "笔记、证据和派生工作文件。项目、标签与证据篮本身保留；"
+        "历史备份中可能仍保留旧版本，不受本次删除影响。"
     )
     preview_metrics = st.columns(4)
     preview_metrics[0].metric("页面", deletion_preview.page_count)
@@ -132,7 +133,9 @@ def render_document_deletion_section(
         key=f"doc_delete_execute_{document.id}",
     ):
         try:
-            deletion_result = deletion_service.delete_document(document.id)
+            deletion_result = deletion_service.delete_document(
+                document.id, expected_title=delete_title
+            )
         except Exception as exc:
             LOGGER.exception("删除导入文档失败：document_id=%s", document.id)
             st.error(f"删除失败：{exc}")
