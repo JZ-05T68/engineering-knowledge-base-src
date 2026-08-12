@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import streamlit as st
@@ -255,3 +256,106 @@ def test_basket_page_prompt_package_is_confirmed_only(
     assert "第 2 页证据原文。" not in package  # 未确认证据绝不混入
     assert "只能根据“知识片段”" in package
     assert any("第 1 页证据原文。" in block.value for block in confirmed_app.code)
+
+
+# --- v0.4.2: prompt freshness guard ----------------------------------------------
+
+
+def _fingerprint(package: str) -> str:
+    return hashlib.sha256(package.encode("utf-8")).hexdigest()
+
+
+def _generate_prompt(app: AppTest, question: str = "设备维护要点？") -> str:
+    app.text_area(key="basket_prompt_question").input(question)
+    _last_button(app, "generate_prompt_package").click().run()
+    return app.session_state["basket_prompt_package"]
+
+
+def _seeded_app(page_path: Path, package: str, question: str) -> AppTest:
+    app = AppTest.from_file(str(page_path))
+    app.session_state["basket_prompt_package"] = package
+    app.session_state["basket_prompt_fingerprint"] = _fingerprint(package)
+    app.session_state["basket_prompt_question"] = question
+    return app
+
+
+def _confirmed_basket_runtime(tmp_path: Path, monkeypatch):
+    database, service, document_id, page_ids = _basket_runtime(tmp_path, monkeypatch)
+    for item in service.list_items():
+        service.set_confirmation(item.id, True)
+    return database, service, document_id, page_ids
+
+
+def test_prompt_stays_visible_when_inputs_unchanged(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, _, _, _ = _confirmed_basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    package = _generate_prompt(app)
+    assert "basket_prompt_fingerprint" in app.session_state
+
+    fresh = _seeded_app(page_path, package, "设备维护要点？").run(timeout=10)
+
+    assert not fresh.exception
+    assert any("第 1 页证据原文。" in block.value for block in fresh.code)
+    assert not any("请重新生成" in info.value for info in fresh.info)
+
+
+def test_question_change_hides_stale_prompt(tmp_path: Path, monkeypatch) -> None:
+    _, _, _, _ = _confirmed_basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    package = _generate_prompt(app)
+
+    changed = _seeded_app(page_path, package, "设备维护要点？").run(timeout=10)
+    changed.text_area(key="basket_prompt_question").input("完全不同的问题")
+    changed = changed.run(timeout=10)
+
+    assert "basket_prompt_package" not in changed.session_state
+    assert any("请重新生成" in info.value for info in changed.info)
+
+
+def test_unconfirm_after_generation_hides_stale_prompt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, service, _, _ = _confirmed_basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    package = _generate_prompt(app)
+
+    service.set_confirmation(service.list_items()[0].id, False)
+    stale = _seeded_app(page_path, package, "设备维护要点？").run(timeout=10)
+
+    assert "basket_prompt_package" not in stale.session_state
+    assert any("请重新生成" in info.value for info in stale.info)
+
+
+def test_clear_basket_removes_generated_prompt(tmp_path: Path, monkeypatch) -> None:
+    _, _, _, _ = _confirmed_basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    _generate_prompt(app)
+
+    app.checkbox(key="confirm_clear_basket").check().run()
+    _button(app, "清空证据篮").click().run()
+
+    assert "basket_prompt_package" not in app.session_state
+    assert any("请重新生成" in info.value for info in app.info)
+
+
+def test_regenerate_after_change_reflects_current_state(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, service, _, _ = _confirmed_basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    package = _generate_prompt(app)
+
+    service.set_confirmation(service.list_items()[0].id, False)
+    stale = _seeded_app(page_path, package, "设备维护要点？").run(timeout=10)
+    assert "basket_prompt_package" not in stale.session_state
+
+    regenerated = _generate_prompt(stale)
+    assert "第 1 页证据原文。" not in regenerated
+    assert "第 2 页证据原文。" in regenerated

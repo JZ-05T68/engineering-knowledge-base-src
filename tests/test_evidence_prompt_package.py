@@ -321,3 +321,141 @@ def test_broken_unconfirmed_item_does_not_block_confirmed_generation(
 
     assert "液压泵需要定期检查压力和温度。" in prompt
     assert EvidenceType.TEXT_SELECTION.label in prompt
+
+
+# --- v0.4.2: prompt freshness fingerprint --------------------------------------
+
+
+def _two_confirmed(service, document_id, page_ids):
+    first = _confirmed_text_selection(
+        service, document_id, page_ids[0], "液压泵需要定期检查压力和温度。"
+    )
+    second = _confirmed_text_selection(
+        service, document_id, page_ids[1], "阀组安装后应执行泄漏测试。"
+    )
+    return first, second
+
+
+def test_fingerprint_stable_when_inputs_unchanged(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    _two_confirmed(service, document_id, page_ids)
+
+    first = service.prompt_package_fingerprint("问题")
+    second = service.prompt_package_fingerprint("问题")
+
+    assert first == second
+
+
+def test_question_change_invalidates_fingerprint(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    _two_confirmed(service, document_id, page_ids)
+
+    assert service.prompt_package_fingerprint(
+        "问题一"
+    ) != service.prompt_package_fingerprint("问题二")
+
+
+def test_confirmed_delete_or_new_confirmation_invalidates(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    first, second = _two_confirmed(service, document_id, page_ids)
+    baseline = service.prompt_package_fingerprint("问题")
+
+    service.remove_item(second.id)
+    after_delete = service.prompt_package_fingerprint("问题")
+    assert after_delete != baseline
+
+    third = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[1],
+        evidence_text="阀组安装后应执行泄漏测试。",
+    )
+    assert service.prompt_package_fingerprint("问题") == after_delete  # 未确认不影响
+    service.set_confirmation(third.id, True)
+    assert service.prompt_package_fingerprint("问题") != after_delete
+    assert first.id != third.id
+
+
+def test_unconfirm_invalidates_and_last_unconfirm_empties(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    first, second = _two_confirmed(service, document_id, page_ids)
+    baseline = service.prompt_package_fingerprint("问题")
+
+    service.set_confirmation(second.id, False)
+    assert service.prompt_package_fingerprint("问题") != baseline
+
+    service.set_confirmation(first.id, False)
+    with pytest.raises(EmptyEvidenceBasketError):
+        service.prompt_package_fingerprint("问题")
+
+
+def test_reorder_confirmed_invalidates(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    first, second = _two_confirmed(service, document_id, page_ids)
+    baseline = service.prompt_package_fingerprint("问题")
+
+    service.reorder([second.id, first.id])
+
+    assert service.prompt_package_fingerprint("问题") != baseline
+
+
+def test_confirmed_note_change_invalidates(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    first, _ = _two_confirmed(service, document_id, page_ids)
+    baseline = service.prompt_package_fingerprint("问题")
+
+    service.update_note(first.id, "新的用户备注")
+
+    assert service.prompt_package_fingerprint("问题") != baseline
+
+
+def test_unconfirmed_only_changes_do_not_invalidate(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    _confirmed_text_selection(
+        service, document_id, page_ids[0], "液压泵需要定期检查压力和温度。"
+    )
+    unconfirmed = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[1],
+        evidence_text="阀组安装后应执行泄漏测试。",
+    )
+    baseline = service.prompt_package_fingerprint("问题")
+
+    service.update_note(unconfirmed.id, "未确认证据的备注变化")
+    assert service.prompt_package_fingerprint("问题") == baseline
+
+    service.remove_item(unconfirmed.id)
+    assert service.prompt_package_fingerprint("问题") == baseline
+
+
+def test_page_text_change_invalidates(tmp_path: Path) -> None:
+    database, service, document_id, page_ids = _library(tmp_path)
+    basket = service.default_basket()
+    item = service.add_page_item(basket.id, document_id, page_ids[0])
+    service.set_confirmation(item.id, True)
+    baseline = service.prompt_package_fingerprint("问题")
+
+    database.update_page(page_ids[0], extracted_text="整页文本已被重新提取。")
+
+    assert service.prompt_package_fingerprint("问题") != baseline
+
+
+def test_stale_confirmed_source_fails_closed_in_fingerprint(tmp_path: Path) -> None:
+    database, service, document_id, page_ids = _library(tmp_path)
+    _confirmed_text_selection(
+        service, document_id, page_ids[0], "液压泵需要定期检查压力和温度。"
+    )
+    database.update_page(page_ids[0], extracted_text="来源文本已变化。")
+
+    with pytest.raises(EvidenceSourceError, match="原始页面文本已发生变化"):
+        service.prompt_package_fingerprint("问题")
+
+
+def test_clear_basket_empties_fingerprint(tmp_path: Path) -> None:
+    _, service, document_id, page_ids = _library(tmp_path)
+    _two_confirmed(service, document_id, page_ids)
+    service.prompt_package_fingerprint("问题")
+
+    service.clear()
+
+    with pytest.raises(EmptyEvidenceBasketError):
+        service.prompt_package_fingerprint("问题")
