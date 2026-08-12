@@ -12,7 +12,7 @@ from src.runtime import application_database
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="知识聚合｜工程知识库 v0.4.1", page_icon="🧩", layout="wide")
+st.set_page_config(page_title="知识聚合｜工程知识库 v0.4.2", page_icon="🧩", layout="wide")
 st.title("知识聚合")
 st.caption("按项目或标签汇总分散在多个资料中的笔记与证据，并保留原始出处。")
 

@@ -10,7 +10,7 @@ from src.runtime import application_database
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="项目管理｜工程知识库 v0.4.1", page_icon="🗂️", layout="wide")
+st.set_page_config(page_title="项目管理｜工程知识库 v0.4.2", page_icon="🗂️", layout="wide")
 st.title("项目管理")
 st.caption("项目用于组织学习与竞赛方向；删除项目不会删除其中的资料。")
 

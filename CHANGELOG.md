@@ -1,5 +1,41 @@
 # Changelog
 
+## v0.4.2 — Prompt Freshness & Stale Output Guard\r
+\r
+发布日期：2026-08-12\r
+\r
+### Changed\r
+\r
+- 引用提示词包新增 freshness 校验：已生成 Prompt 与当前问题及当前 confirmed\r
+  evidence 的实际 Prompt 输入绑定。\r
+- 问题、confirmed evidence 集合、确认状态、有效排序、confirmed 用户备注、\r
+  整页证据当前文本或来源有效性变化后，旧 Prompt 不再作为当前结果显示，\r
+  并提示重新生成。\r
+- 无关字段变化（不进入 Prompt 的标签、项目、复核状态、未确认证据信息）\r
+  不会造成无意义失效。\r
+\r
+### Trust / Safety\r
+\r
+- freshness fingerprint 直接基于当前 `export_prompt_package()` 输出的\r
+  SHA-256，与 Prompt 生成共用同一 source validation 路径；无法证明旧结果\r
+  仍 fresh 时 fail closed。\r
+- stale 结果真正从 session state 清除，不只是隐藏；改回原输入不会复活旧结果。\r
+- confirmed 来源失效继续触发既有 `EvidenceSourceError`，不静默跳过、不自动修复。\r
+- 0 条已确认证据时回到既有空态并禁用生成。\r
+- 本版本无 schema 迁移（保持 schema v7），无新增依赖，无网络请求与 API Key。\r
+\r
+### Known limitations\r
+\r
+- 普通 Markdown 证据包仍为一次生成的静态结果；证据变化后不会自动失效。\r
+  这是既有行为，登记为 future candidate，不属于 v0.4.2 Prompt freshness 范围。\r
+\r
+### Tests\r
+\r
+- 独立代码审计：PASS（BLOCKER 0 / HIGH 0 / MEDIUM 0 / LOW 1，即上述已知限制）。\r
+- 真人 Smoke Test：S-01～S-08 全部 PASS（含 stale 复活与过度失效反向场景）。\r
+- Ruff 全量通过；完整 pytest 收集 1050 项，exit 0。\r
+- `git diff --check` 通过；schema v7；requirements 不变；无网络 / AI API 要求。\r
+\r
 ## v0.4.1 — Evidence-grounded Prompt Package\r
 \r
 发布日期：2026-08-12\r

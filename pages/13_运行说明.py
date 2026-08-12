@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.runtime import application_settings
 
-st.set_page_config(page_title="运行说明｜工程知识库 v0.4.1", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="运行说明｜工程知识库 v0.4.2", page_icon="⚙️", layout="wide")
 st.title("设置与运行说明")
 
 settings = application_settings()
@@ -37,7 +37,7 @@ st.markdown(
 - 服务仅绑定 `127.0.0.1`，不会默认向局域网开放。
 """
 )
-st.info("v0.4.1 不包含账号、登录、云同步、付费 API、向量数据库或联网必需功能。")
+st.info("v0.4.2 不包含账号、登录、云同步、付费 API、向量数据库或联网必需功能。")
 st.caption(
     "从 v0.3.0 升级时系统会先自动备份再迁移数据库（schema v6），旧笔记的重要程度"
     "默认为「一般」。降级路径：使用 v0.3.0 恢复升级前的自动备份；降级后 v0.3.1 "

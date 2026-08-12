@@ -1,9 +1,19 @@
-# Engineering Knowledge Base v0.4.1
+# Engineering Knowledge Base v0.4.2
 
 一个本地优先、单用户的个人工程知识管理系统。它把 PDF 资料转化为可长期整理、检索和复用的页面级知识资产：**文档 → 理解 → 检索 → 复用 → 工程能力**。
 
 正式服务固定监听 `127.0.0.1:8501`，核心功能可离线使用，不需要账号、VPN、云存储、API Key 或付费服务。系统不包含注册、登录、权限、OAuth、JWT 或云同步。
 
+## v0.4.2 Prompt Freshness & Stale Output Guard\r
+\r
+v0.4.2 为引用提示词包增加新鲜度保护：已生成 Prompt 与当前问题和当前已确认\r
+证据的实际输入绑定；问题、证据集合、确认状态、排序、备注、整页当前文本或\r
+来源有效性一旦变化，旧 Prompt 立即失效并被真正清除，改回原输入也不会复活。\r
+不进入 Prompt 的标签、项目、复核状态和未确认证据变化不会造成无意义失效。\r
+校验与生成共用同一 source validation 路径，来源失效继续 fail closed。\r
+数据库保持 schema v7，无迁移、无新增依赖。详见\r
+[v0.4.2 发布说明](docs/v0.4.2-release-notes.md)。\r
+\r
 ## v0.4.1 Evidence-grounded Prompt Package\r
 \r
 v0.4.1 在证据篮中新增“生成引用提示词包”：只有人工确认过的证据才会进入\r
