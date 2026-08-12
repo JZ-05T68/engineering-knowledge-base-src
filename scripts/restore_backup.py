@@ -1,4 +1,4 @@
-"""Offline command-line restore for verified v0.4.0 directory backups."""
+"""Offline command-line restore for verified v0.4.1 directory backups."""
 
 from __future__ import annotations
 
@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the explicit, non-interactive restore command interface."""
 
     parser = argparse.ArgumentParser(
-        description="验证并离线恢复工程知识库 v0.4.0 完整备份"
+        description="验证并离线恢复工程知识库 v0.4.1 完整备份"
     )
     parser.add_argument("--backup", type=Path, required=True, help="包含 manifest.json 的备份目录")
     parser.add_argument(

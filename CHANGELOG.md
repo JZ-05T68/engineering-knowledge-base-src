@@ -1,5 +1,51 @@
 # Changelog
 
+## v0.4.1 — Evidence-grounded Prompt Package\r
+\r
+发布日期：2026-08-12\r
+\r
+### Added\r
+\r
+- 证据篮新增“生成引用提示词包”：以已人工确认的证据为来源，在本地生成\r
+  citation-grounded 提示词包，用户自行复制给外部 AI 工具；EKB 不调用任何 AI 服务。\r
+- 只有 `confirmed` 状态的证据进入 Prompt Package；未确认证据不得混入。\r
+- 三类证据按真实语义输出：文字选区输出选区正文与可信度标识；整页证据输出\r
+  当前整页文本并明确标识为当前文本（无文本页明确说明）；图片区域证据只输出\r
+  文档、页码、图像尺寸与区域坐标，并明确纯文本提示词包不包含图片像素。\r
+- 证据篮页面显示证据总数、已确认与未确认数量；无已确认证据时生成入口禁用并\r
+  显示明确空态。\r
+\r
+### Changed\r
+\r
+- `PromptBuilder` 的默认问题与 grounding policy 抽取为共享定义\r
+  （`DEFAULT_QUESTION` / `GROUNDING_RULES`），供搜索结果提示词与证据提示词包\r
+  共同复用；既有 SearchResult Prompt 输出逐字节保持兼容。\r
+- 应用、页面标题、备份恢复工具与统一发布检查版本更新为 v0.4.1。\r
+\r
+### Trust / Safety\r
+\r
+- 生成前对每条参与生成的已确认证据执行既有 source validation；任一已确认\r
+  来源失效（文本哈希变化、区域图像锚点失效、文档或页面缺失）时整包\r
+  fail closed，不静默跳过、不自动修复。\r
+- 用户备注在 Prompt 中独立标识，不等同于来源事实。\r
+- 图片区域证据不得根据区域坐标、图像尺寸或用户备注猜测图片内容。\r
+- 本版本无 schema 迁移（保持 schema v7），无新增依赖，无网络请求与 API Key。\r
+\r
+### Known limitations\r
+\r
+- 生成后的 Prompt Package 是一次生成的静态结果；后续证据增删或确认状态变化\r
+  不会自动清除旧结果。真人 Smoke Test 判定为 ACCEPTABLE，不阻断本版本；\r
+  “证据变化后自动清除已生成 Prompt”仅登记为 v0.4.2 candidate，不属于\r
+  已承诺范围。\r
+\r
+### Tests\r
+\r
+- 独立代码审计：PASS（BLOCKER 0 / HIGH 0 / MEDIUM 1，即上述已知限制）。\r
+- 真人 Smoke Test：PASS（含 stale Prompt 体验判定 ACCEPTABLE）。\r
+- Ruff 全量通过；完整 pytest 收集 1035 项，exit 0（1034 passed、1 skipped；\r
+  跳过项为 Windows 符号链接策略限制的既有条件跳过）。\r
+- `git diff --check` 通过；schema v7；无新增依赖；无网络 / AI API 要求。\r
+\r
 ## v0.4.0 — Evidence Objects & Source Model
 
 发布日期：2026-08-12
