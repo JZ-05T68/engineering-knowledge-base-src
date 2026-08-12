@@ -377,6 +377,44 @@ class EvidenceBasketService:
             generated_at=generated_at,
         )
 
+    def export_prompt_package(
+        self,
+        question: str,
+        *,
+        basket_id: int | None = None,
+    ) -> str:
+        """Validate every confirmed source, then build a grounded prompt package.
+
+        Only confirmed evidence participates. Any confirmed item whose stored
+        source no longer passes the existing integrity checks aborts the whole
+        generation (fail closed); unconfirmed items are never validated here
+        because they never enter the package.
+        """
+
+        from src.evidence_prompt_builder import (
+            NO_CONFIRMED_EVIDENCE_MESSAGE,
+            EvidencePromptBuilder,
+        )
+
+        basket = self.default_basket() if basket_id is None else self._require_basket(basket_id)
+        confirmed = [
+            item
+            for item in self.list_items(basket.id)
+            if item.confirmation_status is EvidenceConfirmationStatus.CONFIRMED
+        ]
+        if not confirmed:
+            raise EmptyEvidenceBasketError(NO_CONFIRMED_EVIDENCE_MESSAGE)
+        validated = [self._validated_snapshot(item) for item in confirmed]
+        page_texts: dict[int, str] = {}
+        for item in validated:
+            if item.evidence_type is not EvidenceType.PAGE:
+                continue
+            page = self._database.get_page(item.page_id)
+            if page is None:  # pragma: no cover - _validated_snapshot already checked
+                raise EvidenceSourceError(f"页面记录不存在（页面编号 {item.page_id}）。")
+            page_texts[item.id] = _original_source_text(page)
+        return EvidencePromptBuilder().build(question, validated, page_texts=page_texts)
+
     def _require_basket(self, basket_id: int) -> EvidenceBasket:
         basket = self._repository.get_basket(basket_id)
         if basket is None:
