@@ -7,6 +7,7 @@ import logging
 import streamlit as st
 
 from src.evidence_basket_service import EvidenceBasketError
+from src.evidence_prompt_builder import NO_CONFIRMED_EVIDENCE_MESSAGE
 from src.models import EvidenceConfirmationStatus, EvidenceType
 from src.runtime import application_evidence_basket_service
 
@@ -223,6 +224,48 @@ if package:
         mime="text/markdown",
         use_container_width=True,
     )
+
+st.divider()
+st.subheader("生成引用提示词包（供外部 AI 工具）")
+st.caption("本功能只生成本地文本，不连接任何 AI 服务，也不读取 API Key。")
+confirmed_count = sum(
+    item.confirmation_status is EvidenceConfirmationStatus.CONFIRMED for item in items
+)
+st.caption(
+    f"证据篮共 {len(items)} 条：已确认 {confirmed_count} 条，"
+    f"未确认 {len(items) - confirmed_count} 条。"
+    "生成提示词包时只使用已确认资料。"
+)
+if confirmed_count == 0:
+    st.info(NO_CONFIRMED_EVIDENCE_MESSAGE)
+prompt_question = st.text_area(
+    "要交给外部 AI 回答的问题",
+    height=100,
+    key="basket_prompt_question",
+)
+if st.button(
+    "生成引用提示词包",
+    key="generate_prompt_package",
+    type="primary",
+    disabled=confirmed_count == 0,
+    use_container_width=True,
+):
+    try:
+        st.session_state["basket_prompt_package"] = (
+            basket_service.export_prompt_package(
+                prompt_question,
+                basket_id=basket.id,
+            )
+        )
+    except EvidenceBasketError as exc:
+        st.error(f"无法生成引用提示词包：{exc}")
+    except Exception as exc:
+        LOGGER.exception("生成引用提示词包失败")
+        st.error(f"生成引用提示词包失败：{exc}")
+
+prompt_package = st.session_state.get("basket_prompt_package", "")
+if prompt_package:
+    st.code(prompt_package, language="markdown")
 
 with st.expander("清空证据篮"):
     st.warning("清空只删除当前证据篮条目，不删除原 PDF、页面图像、页面记录或用户笔记。")
