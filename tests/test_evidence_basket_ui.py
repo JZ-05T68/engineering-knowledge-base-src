@@ -218,3 +218,40 @@ def test_basket_page_type_badges_region_coords_and_page_body(
         EvidenceType.PAGE,
         EvidenceType.IMAGE_REGION,
     }
+
+
+def test_basket_page_prompt_package_is_confirmed_only(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, service, _, _ = _basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    assert not app.exception
+
+    # 两条证据均未确认：计数明确、空态清楚、生成入口禁用
+    assert any(
+        "已确认 0 条" in caption.value and "未确认 2 条" in caption.value
+        for caption in app.caption
+    )
+    assert any("没有已确认的证据" in info.value for info in app.info)
+    assert _last_button(app, "generate_prompt_package").disabled
+    # 原 Markdown 证据包出口保持不变
+    assert "生成证据包" in {button.label for button in app.button}
+
+    first_item = service.list_items()[0]
+    service.set_confirmation(first_item.id, True)
+    confirmed_app = AppTest.from_file(str(page_path)).run(timeout=10)
+    assert not confirmed_app.exception
+    assert any(
+        "已确认 1 条" in caption.value and "未确认 1 条" in caption.value
+        for caption in confirmed_app.caption
+    )
+    confirmed_app.text_area(key="basket_prompt_question").input("液压系统如何维护？")
+    _last_button(confirmed_app, "generate_prompt_package").click().run()
+
+    package = confirmed_app.session_state["basket_prompt_package"]
+    assert "液压系统如何维护？" in package
+    assert "第 1 页证据原文。" in package
+    assert "第 2 页证据原文。" not in package  # 未确认证据绝不混入
+    assert "只能根据“知识片段”" in package
+    assert any("第 1 页证据原文。" in block.value for block in confirmed_app.code)
