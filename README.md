@@ -4,7 +4,7 @@
 
 正式服务固定监听 `127.0.0.1:8501`，核心功能可离线使用，不需要账号、VPN、云存储、API Key 或付费服务。系统不包含注册、登录、权限、OAuth、JWT 或云同步。
 
-## v0.4.2 Prompt Freshness & Stale Output Guard\r
+## v0.4.2 Prompt Freshness & Stale Output Guard
 \r
 v0.4.2 为引用提示词包增加新鲜度保护：已生成 Prompt 与当前问题和当前已确认\r
 证据的实际输入绑定；问题、证据集合、确认状态、排序、备注、整页当前文本或\r
@@ -14,7 +14,7 @@ v0.4.2 为引用提示词包增加新鲜度保护：已生成 Prompt 与当前�
 数据库保持 schema v7，无迁移、无新增依赖。详见\r
 [v0.4.2 发布说明](docs/v0.4.2-release-notes.md)。\r
 \r
-## v0.4.1 Evidence-grounded Prompt Package\r
+## v0.4.1 Evidence-grounded Prompt Package
 \r
 v0.4.1 在证据篮中新增“生成引用提示词包”：只有人工确认过的证据才会进入\r
 提示词包，生成前逐条执行来源校验，任一来源失效即整包拒绝生成。工作流为：\r
