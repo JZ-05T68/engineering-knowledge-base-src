@@ -23,7 +23,7 @@ from src.evidence_basket_service import EvidenceBasketService
 from src.note_service import NoteService
 from src.search_service import SearchService
 
-MANAGE_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("13_*.py")))
+MANAGE_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("11_*.py")))
 
 
 def _create_document(

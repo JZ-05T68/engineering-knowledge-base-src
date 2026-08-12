@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 class MigrationError(RuntimeError):
@@ -70,6 +70,8 @@ def migrate_database(database_path: Path) -> Path | None:
             _apply_version_five(connection)
         if current_version < 6:
             _apply_version_six(connection)
+        if current_version < 7:
+            _apply_version_seven(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -670,6 +672,153 @@ def _apply_version_six(connection: sqlite3.Connection) -> None:
     except Exception:
         connection.rollback()
         raise
+
+
+def _apply_version_seven(connection: sqlite3.Connection) -> None:
+    """Rebuild evidence_items with typed evidence and manual confirmation state.
+
+    v0.4.0 (slice 1-3): ``evidence_items`` is rebuilt create-copy-drop-rename
+    to carry ``evidence_type`` (page / text_selection / image_region), the
+    image-region anchor columns (same CHECK semantics as the notes table) and
+    the manual confirmation pair (``confirmation_status`` / ``confirmed_at``).
+    Every legacy row is preserved and maps to ``evidence_type='text_selection'``,
+    ``confirmation_status='unconfirmed'``, ``confirmed_at=NULL`` and all-NULL
+    region columns. The core fingerprint does not cover this table, so the row
+    count and id set are verified explicitly inside the same transaction.
+    """
+
+    fingerprint = _core_data_fingerprint(connection)
+    legacy_item_ids = _evidence_item_ids(connection)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE evidence_items_v7 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                basket_id INTEGER NOT NULL
+                    REFERENCES evidence_baskets(id) ON DELETE CASCADE,
+                document_id INTEGER NOT NULL
+                    REFERENCES documents(id) ON DELETE CASCADE,
+                page_id INTEGER NOT NULL
+                    REFERENCES pages(id) ON DELETE CASCADE,
+                document_title TEXT NOT NULL CHECK (length(trim(document_title)) > 0),
+                filename TEXT NOT NULL CHECK (length(trim(filename)) > 0),
+                page_number INTEGER NOT NULL CHECK (page_number > 0),
+                review_status TEXT NOT NULL CHECK (review_status IN (
+                    'pending', 'draft', 'reviewed', 'skipped', 'failed'
+                )),
+                projects_json TEXT NOT NULL DEFAULT '[]',
+                tags_json TEXT NOT NULL DEFAULT '[]',
+                evidence_type TEXT NOT NULL DEFAULT 'text_selection'
+                    CHECK (evidence_type IN ('page', 'text_selection', 'image_region')),
+                evidence_text TEXT NOT NULL DEFAULT '' CHECK (
+                    evidence_type IN ('page', 'image_region')
+                    OR length(trim(evidence_text)) > 0
+                ),
+                text_kind TEXT NOT NULL CHECK (text_kind IN (
+                    'original_material', 'user_excerpt'
+                )),
+                context TEXT NOT NULL DEFAULT '',
+                context_kind TEXT NOT NULL CHECK (context_kind IN (
+                    'system_generated', 'user_provided'
+                )),
+                user_note TEXT NOT NULL DEFAULT '' CHECK (length(user_note) <= 4000),
+                region_image_sha256 TEXT CHECK (region_image_sha256 IS NULL
+                    OR length(region_image_sha256) = 64),
+                region_image_width INTEGER,
+                region_image_height INTEGER,
+                region_x0 INTEGER,
+                region_y0 INTEGER,
+                region_x1 INTEGER,
+                region_y1 INTEGER,
+                source_text_sha256 TEXT NOT NULL CHECK (length(source_text_sha256) = 64),
+                source_locator TEXT NOT NULL CHECK (length(trim(source_locator)) > 0),
+                selection_sha256 TEXT NOT NULL CHECK (length(selection_sha256) = 64),
+                confirmation_status TEXT NOT NULL DEFAULT 'unconfirmed'
+                    CHECK (confirmation_status IN ('unconfirmed', 'confirmed')),
+                confirmed_at TEXT,
+                added_at TEXT NOT NULL,
+                position INTEGER NOT NULL CHECK (position > 0),
+                UNIQUE (basket_id, page_id, selection_sha256),
+                UNIQUE (basket_id, position),
+                CHECK (
+                    confirmation_status = 'confirmed' AND confirmed_at IS NOT NULL
+                    OR confirmation_status = 'unconfirmed' AND confirmed_at IS NULL
+                ),
+                CHECK (
+                    evidence_type = 'image_region'
+                    AND region_image_sha256 IS NOT NULL
+                    AND region_image_width IS NOT NULL AND region_image_width > 0
+                    AND region_image_height IS NOT NULL AND region_image_height > 0
+                    AND region_x0 IS NOT NULL AND region_x0 >= 0
+                    AND region_y0 IS NOT NULL AND region_y0 >= 0
+                    AND region_x1 IS NOT NULL AND region_x1 > region_x0
+                    AND region_y1 IS NOT NULL AND region_y1 > region_y0
+                    AND region_x1 <= region_image_width
+                    AND region_y1 <= region_image_height
+                OR
+                    evidence_type IN ('page', 'text_selection')
+                    AND region_image_sha256 IS NULL
+                    AND region_image_width IS NULL AND region_image_height IS NULL
+                    AND region_x0 IS NULL AND region_y0 IS NULL
+                    AND region_x1 IS NULL AND region_y1 IS NULL
+                )
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO evidence_items_v7(
+                id, basket_id, document_id, page_id, document_title, filename,
+                page_number, review_status, projects_json, tags_json,
+                evidence_type, evidence_text, text_kind, context, context_kind,
+                user_note, region_image_sha256, region_image_width,
+                region_image_height, region_x0, region_y0, region_x1, region_y1,
+                source_text_sha256, source_locator, selection_sha256,
+                confirmation_status, confirmed_at, added_at, position
+            )
+            SELECT
+                id, basket_id, document_id, page_id, document_title, filename,
+                page_number, review_status, projects_json, tags_json,
+                'text_selection', evidence_text, text_kind, context, context_kind,
+                user_note, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                source_text_sha256, source_locator, selection_sha256,
+                'unconfirmed', NULL, added_at, position
+            FROM evidence_items
+            """
+        )
+        connection.execute("DROP TABLE evidence_items")
+        connection.execute("ALTER TABLE evidence_items_v7 RENAME TO evidence_items")
+        connection.execute(
+            "CREATE INDEX idx_evidence_items_page ON evidence_items(page_id)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_evidence_items_document ON evidence_items(document_id)"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (7, ?)",
+            (_utc_now(),),
+        )
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v7 迁移改变了现有文档、页面或 FTS 数据")
+        if _evidence_item_ids(connection) != legacy_item_ids:
+            raise MigrationError("schema v7 迁移未能完整保留原有证据条目")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v7")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _evidence_item_ids(connection: sqlite3.Connection) -> tuple[int, ...]:
+    """Return the ordered evidence item id set; equality implies equal counts."""
+
+    return tuple(
+        int(row[0])
+        for row in connection.execute(
+            "SELECT id FROM evidence_items ORDER BY id"
+        ).fetchall()
+    )
 
 
 def _core_data_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:

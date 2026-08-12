@@ -358,7 +358,7 @@ def test_document_count_query_is_one_aggregate_without_result_n_plus_one(
 
 def test_search_ui_switches_group_view_restores_and_expands(ui_library) -> None:
     _, ids = ui_library
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(search_path))
     app.query_params = {"q": "控制", "limit": "20"}
     app.run(timeout=15)
@@ -398,7 +398,7 @@ def test_real_page_switch_pending_params_are_revalidated_on_target(ui_library) -
         focus_result=1,
     )
     params = reader_query_params(result, state.query, return_state=state)
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     reader = AppTest.from_file(str(reader_path))
     reader.session_state["pending_reader_query_params"] = params
     reader.run(timeout=15)
@@ -407,7 +407,7 @@ def test_real_page_switch_pending_params_are_revalidated_on_target(ui_library) -
     assert reader.query_params["document"] == [str(result.document_id)]
     assert decode_return_state(reader.query_params["search_return"][0]) == state
 
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     search = AppTest.from_file(str(search_path))
     search.session_state["pending_search_query_params"] = search_state_query_params(state)
     search.run(timeout=15)
@@ -419,7 +419,7 @@ def test_real_page_switch_pending_params_are_revalidated_on_target(ui_library) -
 def test_quick_preview_state_image_note_and_evidence_workflow(ui_library) -> None:
     database, ids = ui_library
     page = ids["pages"][0]
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(search_path))
     app.query_params = {"q": "控制", "limit": "20"}
     app.run(timeout=15)
@@ -443,7 +443,7 @@ def test_quick_preview_state_image_note_and_evidence_workflow(ui_library) -> Non
 def test_quick_preview_missing_image_and_markdown_is_safe(ui_library) -> None:
     _, ids = ui_library
     missing_page = ids["pages"][-1]
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(search_path))
     app.query_params = {"q": "控制", "limit": "20", "result_page": "2"}
     app.run(timeout=15)
@@ -461,7 +461,7 @@ def test_reader_global_document_hit_and_adjacent_navigation(ui_library, monkeypa
     monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
     state = SearchPageState("控制", limit=20, view_mode=SearchViewMode.DOCUMENT)
     first_page = ids["pages"][0]
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(reader_path))
     app.query_params = {
         "document": str(ids["first"].id),
@@ -490,7 +490,7 @@ def test_reader_global_document_hit_and_adjacent_navigation(ui_library, monkeypa
 
 def test_reader_last_boundary_single_document_hit_and_absent_page(ui_library) -> None:
     _, ids = ui_library
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     state = SearchPageState(
         "控制",
         filters=SearchFilters(document_ids=(ids["second"].id,)),
@@ -526,7 +526,7 @@ def test_reader_last_boundary_single_document_hit_and_absent_page(ui_library) ->
 
 def test_reader_many_document_hits_uses_bounded_batches(ui_library) -> None:
     _, ids = ui_library
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     state = SearchPageState("控制", limit=20)
     app = AppTest.from_file(str(reader_path))
     app.query_params = {
@@ -557,6 +557,6 @@ def test_schema_v4_database_starts_without_migration(tmp_path: Path) -> None:
         ).fetchall()
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
-    assert first.SCHEMA_VERSION == second.SCHEMA_VERSION == 6
-    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6]
+    assert first.SCHEMA_VERSION == second.SCHEMA_VERSION == 7
+    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
     assert integrity == "ok" and foreign_keys == []

@@ -95,7 +95,7 @@ def _search_app(
     monkeypatch.setattr(
         runtime, "application_page_batch_service", lambda: batch_service
     )
-    app_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    app_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(app_path))
     app.query_params = {"q": "批量关键词", "limit": "50"}
     app.run(timeout=15)
@@ -126,7 +126,7 @@ def _review_app(
     monkeypatch.setattr(
         runtime, "application_page_batch_service", lambda: batch_service
     )
-    app_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
+    app_path = next((Path(__file__).parents[1] / "pages").glob("5_*.py"))
     app = AppTest.from_file(str(app_path)).run(timeout=15)
     return app, database, document_id, page_ids, batch_service
 
@@ -430,7 +430,7 @@ def test_search_and_review_pages_use_one_shared_metadata_entry_per_run(
         lambda: metadata_service,
     )
 
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     search_app = AppTest.from_file(str(search_path))
     search_app.query_params = {"q": "批量关键词", "limit": "50"}
     search_app.run(timeout=15)
@@ -446,7 +446,7 @@ def test_search_and_review_pages_use_one_shared_metadata_entry_per_run(
     monkeypatch.setattr(
         runtime, "application_document_service", lambda: document_service
     )
-    review_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
+    review_path = next((Path(__file__).parents[1] / "pages").glob("5_*.py"))
     review_app = AppTest.from_file(str(review_path)).run(timeout=15)
 
     assert metadata_service.load_calls == 2

@@ -35,12 +35,12 @@ def _consume_review_request() -> None:
     if page_id <= 0:
         return
     st.switch_page(
-        "pages/4_待整理页面.py",
+        "pages/5_待整理页面.py",
         query_params={"page_id": str(page_id)},
     )
 
 
-st.set_page_config(page_title="导入资料｜工程知识库 v0.3.3", page_icon="📥", layout="wide")
+st.set_page_config(page_title="导入资料｜工程知识库 v0.4.0", page_icon="📥", layout="wide")
 _consume_review_request()
 st.title("导入资料")
 st.caption("PDF 原件、逐页 PNG、文本和导入记录都保存在本机。")
@@ -123,6 +123,6 @@ st.markdown(
 - `待处理`：新导入或尚未人工确认，需要继续整理。
 - `草稿待复核`：已有 Markdown，但尚未人工确认完成。
 - `处理失败`：单页处理出错；已完成的其他页面不会丢失。
-- v0.3.3 不接入云端 OCR；本地单页 OCR 完全离线执行，原始页面图片始终保留。
+- v0.4.0 不接入云端 OCR；本地单页 OCR 完全离线执行，原始页面图片始终保留。
 """
 )

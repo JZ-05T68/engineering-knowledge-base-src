@@ -148,6 +148,40 @@ class EvidenceContextKind(StrEnum):
         }[self]
 
 
+class EvidenceType(StrEnum):
+    """The three evidence anchor shapes introduced by schema v7 (v0.4.0)."""
+
+    PAGE = "page"
+    TEXT_SELECTION = "text_selection"
+    IMAGE_REGION = "image_region"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese type label used in evidence lists and exports."""
+
+        return {
+            self.PAGE: "整页证据",
+            self.TEXT_SELECTION: "文字选区证据",
+            self.IMAGE_REGION: "图片区域证据",
+        }[self]
+
+
+class EvidenceConfirmationStatus(StrEnum):
+    """Manual confirmation state of one evidence item (schema v7)."""
+
+    UNCONFIRMED = "unconfirmed"
+    CONFIRMED = "confirmed"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese confirmation label shown beside evidence items."""
+
+        return {
+            self.UNCONFIRMED: "未确认",
+            self.CONFIRMED: "已确认",
+        }[self]
+
+
 class NoteType(StrEnum):
     """The four structured note scopes frozen for v0.3.0."""
 
@@ -454,6 +488,16 @@ class EvidenceItem:
     image_path: Path | None = None
     document_sha256: str = ""
     from_ocr_text: bool = False
+    evidence_type: EvidenceType = EvidenceType.TEXT_SELECTION
+    confirmation_status: EvidenceConfirmationStatus = EvidenceConfirmationStatus.UNCONFIRMED
+    confirmed_at: datetime | None = None
+    region_image_sha256: str | None = None
+    region_image_width: int | None = None
+    region_image_height: int | None = None
+    region_x0: int | None = None
+    region_y0: int | None = None
+    region_x1: int | None = None
+    region_y1: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

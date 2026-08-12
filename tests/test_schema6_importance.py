@@ -225,7 +225,7 @@ def test_v5_to_v6_upgrade_defaults_normal_and_preserves_data(tmp_path: Path) -> 
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert before == after
-    assert version == 6 == SCHEMA_VERSION
+    assert version == SCHEMA_VERSION >= 6
     assert note_count == 4
     assert levels == {"normal"}
 
@@ -283,7 +283,7 @@ def test_remigration_is_noop_and_preference_stays_single(tmp_path: Path) -> None
             "SELECT COUNT(*) FROM note_display_preferences"
         ).fetchone()[0]
         note_count = connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
-    assert versions == [1, 2, 3, 4, 5, 6]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
     assert preference_rows == 1
     assert note_count == 4
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1

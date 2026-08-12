@@ -98,14 +98,14 @@ def empty_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     [
         ("app.py", "导入第一份 PDF"),
         ("pages/1_导入资料.py", "选择第一份 PDF"),
-        ("pages/2_浏览资料.py", "还没有可浏览的文档"),
-        ("pages/3_检索资料.py", "暂无可检索内容"),
-        ("pages/4_待整理页面.py", "还没有文档或待复核页面"),
-        ("pages/5_标签管理.py", "创建第一个标签"),
-        ("pages/6_项目管理.py", "创建第一个本地项目"),
-        ("pages/9_证据篮.py", "证据篮为空"),
+        ("pages/3_浏览资料.py", "还没有可浏览的文档"),
+        ("pages/4_检索资料.py", "暂无可检索内容"),
+        ("pages/5_待整理页面.py", "还没有文档或待复核页面"),
+        ("pages/9_标签管理.py", "创建第一个标签"),
+        ("pages/10_项目管理.py", "创建第一个本地项目"),
+        ("pages/7_证据篮.py", "证据篮为空"),
         # 维护页空备份提示包含当前应用版本号，从 settings 派生而非硬编码
-        ("pages/10_系统维护.py", None),
+        ("pages/12_系统维护.py", None),
     ],
 )
 def test_major_pages_have_actionable_empty_states(
@@ -123,7 +123,7 @@ def test_major_pages_have_actionable_empty_states(
 def test_maintenance_page_creates_verified_backup_and_runs_read_only_diagnostics(
     empty_runtime: Settings,
 ) -> None:
-    app = AppTest.from_file("pages/10_系统维护.py").run(timeout=10)
+    app = AppTest.from_file("pages/12_系统维护.py").run(timeout=10)
 
     _button(app, "创建并验证完整备份").click().run(timeout=20)
     assert list(empty_runtime.backups_dir.glob("*/manifest.json"))

@@ -21,8 +21,8 @@ from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.note_service import NoteService
 
-READER = str(next((Path(__file__).parents[1] / "pages").glob("2_*.py")))
-LIST_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("11_*.py")))
+READER = str(next((Path(__file__).parents[1] / "pages").glob("3_*.py")))
+LIST_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("6_*.py")))
 
 
 def _seed_database(tmp_path: Path) -> tuple[Database, int, int, Path]:

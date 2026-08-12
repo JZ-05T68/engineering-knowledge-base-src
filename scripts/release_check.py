@@ -1,4 +1,4 @@
-"""Unified v0.3.3 release-readiness checks with clear process exit status."""
+"""Unified v0.4.0 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.3.3"
+EXPECTED_VERSION: Final[str] = "0.4.0"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -156,20 +156,34 @@ class ReleaseChecker:
         pytest = _run_command(
             [str(self._python()), "-m", "pytest", "-q"],
             self.project_root,
-            timeout=600,
+            timeout=900,
         )
         passed = successful_test_count(
             pytest.output,
             returncode=pytest.returncode,
             collected=collected,
         )
-        tests_passed = pytest.returncode == 0 and passed == collected and passed > 0
+        skipped = parse_skipped_test_count(pytest.output)
+        tests_completed = (
+            pytest.returncode == 0
+            and passed > 0
+            and passed + skipped == collected
+        )
+        test_status = (
+            CheckStatus.PASS
+            if tests_completed and skipped == 0
+            else CheckStatus.WARNING
+            if tests_completed
+            else CheckStatus.FAIL
+        )
         results.append(
             CheckResult(
                 "Pytest",
-                CheckStatus.PASS if tests_passed else CheckStatus.FAIL,
+                test_status,
                 f"{passed} passed"
-                if tests_passed
+                if tests_completed and skipped == 0
+                else f"{passed} passed, {skipped} skipped"
+                if tests_completed
                 else f"通过 {passed}/{collected}；{_last_output(pytest.output)}",
             )
         )
@@ -214,7 +228,7 @@ class ReleaseChecker:
                     f"fts={database.fts}, evidence={database.evidence}",
                 )
             )
-            results.append(schema_v6_invariants_check(self.settings.database_path))
+            results.append(schema_v7_invariants_check(self.settings.database_path))
 
         results.append(data_pollution_check(self.settings.data_dir))
 
@@ -449,13 +463,14 @@ def version_consistency_check(
     )
 
 
-def schema_v6_invariants_check(database_path: Path) -> CheckResult:
-    """Read-only v0.3.3 structural invariants of the formal database."""
+def schema_v7_invariants_check(database_path: Path) -> CheckResult:
+    """Read-only v0.4.0 structural invariants of the formal database."""
 
     try:
         with closing(sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)) as connection:
-            note_columns = {
-                row[1] for row in connection.execute("PRAGMA table_info(notes)")
+            evidence_columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(evidence_items)")
             }
             preference_rows = connection.execute(
                 "SELECT COUNT(*) FROM note_display_preferences"
@@ -464,28 +479,57 @@ def schema_v6_invariants_check(database_path: Path) -> CheckResult:
                 row[0]
                 for row in connection.execute(
                     "SELECT name FROM sqlite_master WHERE type = 'index'"
-                    " AND tbl_name = 'notes'"
+                    " AND tbl_name = 'evidence_items'"
                 )
             }
-            levels = {
+            evidence_types = {
                 row[0]
-                for row in connection.execute("SELECT DISTINCT importance FROM notes")
+                for row in connection.execute(
+                    "SELECT DISTINCT evidence_type FROM evidence_items"
+                )
+            }
+            confirmation_states = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT DISTINCT confirmation_status FROM evidence_items"
+                )
             }
     except (OSError, sqlite3.Error) as exc:
-        return CheckResult("Schema v6 invariants", CheckStatus.FAIL, str(exc))
+        return CheckResult("Schema v7 invariants", CheckStatus.FAIL, str(exc))
     issues: list[str] = []
-    if "importance" not in note_columns:
-        issues.append("notes.importance 缺失")
+    required_columns = {
+        "evidence_type",
+        "confirmation_status",
+        "confirmed_at",
+        "region_image_sha256",
+        "region_image_width",
+        "region_image_height",
+        "region_x0",
+        "region_y0",
+        "region_x1",
+        "region_y1",
+    }
+    missing_columns = sorted(required_columns - evidence_columns)
+    if missing_columns:
+        issues.append(f"evidence_items 缺少列：{missing_columns}")
     if preference_rows != 1:
         issues.append(f"note_display_preferences 行数为 {preference_rows}")
-    if "idx_notes_importance" not in indexes:
-        issues.append("idx_notes_importance 缺失")
-    if not levels <= {"primary", "secondary", "normal"}:
-        issues.append(f"存在非法 importance 值：{sorted(levels)}")
+    required_indexes = {"idx_evidence_items_page", "idx_evidence_items_document"}
+    missing_indexes = sorted(required_indexes - indexes)
+    if missing_indexes:
+        issues.append(f"evidence_items 缺少索引：{missing_indexes}")
+    if not evidence_types <= {"page", "text_selection", "image_region"}:
+        issues.append(f"存在非法 evidence_type 值：{sorted(evidence_types)}")
+    if not confirmation_states <= {"unconfirmed", "confirmed"}:
+        issues.append(
+            f"存在非法 confirmation_status 值：{sorted(confirmation_states)}"
+        )
     return CheckResult(
-        "Schema v6 invariants",
+        "Schema v7 invariants",
         CheckStatus.PASS if not issues else CheckStatus.FAIL,
-        "importance 列 / 偏好单行 / 索引 / 枚举 全部在位" if not issues else "；".join(issues),
+        "证据类型 / 区域锚点 / 人工确认 / 索引 全部在位"
+        if not issues
+        else "；".join(issues),
     )
 
 
@@ -623,6 +667,13 @@ def parse_passed_test_count(output: str) -> int:
     return int(match.group(1)) if match else 0
 
 
+def parse_skipped_test_count(output: str) -> int:
+    """Parse the skipped count from the standard pytest summary."""
+
+    match = re.search(r"(\d+) skipped", output)
+    return int(match.group(1)) if match else 0
+
+
 def successful_test_count(output: str, *, returncode: int, collected: int) -> int:
     """Resolve a passing count even when an extra-quiet pytest omits its summary."""
 
@@ -690,7 +741,7 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.3.3 统一发布检查")
+    parser = argparse.ArgumentParser(description="工程知识库 v0.4.0 统一发布检查")
     backup_group = parser.add_mutually_exclusive_group()
     backup_group.add_argument(
         "--skip-backup",

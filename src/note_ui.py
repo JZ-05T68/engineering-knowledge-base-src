@@ -16,6 +16,11 @@ import streamlit as st
 from PIL import Image, ImageDraw
 from streamlit_image_coordinates import streamlit_image_coordinates
 
+from src.evidence_basket_service import (
+    DuplicateEvidenceError,
+    EvidenceBasketError,
+    EvidenceBasketService,
+)
 from src.models import (
     Note,
     NoteDisplayPreferences,
@@ -155,9 +160,19 @@ def _render_importance_selector(note: Note, key: str) -> NoteImportance:
 
 
 def render_structured_notes_tab(
-    note_service: NoteService, *, document_id: int, page_id: int, display_width: int
+    note_service: NoteService,
+    *,
+    document_id: int,
+    page_id: int,
+    display_width: int,
+    basket_service: EvidenceBasketService | None = None,
 ) -> None:
-    """Render the whole「结构化笔记」tab: document notes + current-page notes."""
+    """Render the whole「结构化笔记」tab: document notes + current-page notes.
+
+    ``basket_service`` is optional: pages that pass it get a「加入证据篮」
+    action on anchored notes; pages that omit it render notes exactly as
+    before.
+    """
 
     flash = st.session_state.pop(_FLASH_KEY, "")
     if flash:
@@ -166,7 +181,9 @@ def render_structured_notes_tab(
     preferences = _load_display_preferences(note_service)
     _render_document_section(note_service, document_id, preferences)
     st.divider()
-    _render_page_section(note_service, document_id, page_id, display_width, preferences)
+    _render_page_section(
+        note_service, document_id, page_id, display_width, preferences, basket_service
+    )
 
 
 def _render_document_section(
@@ -208,6 +225,7 @@ def _render_page_section(
     page_id: int,
     display_width: int,
     preferences: NoteDisplayPreferences,
+    basket_service: EvidenceBasketService | None,
 ) -> None:
     st.subheader("本页笔记")
     image_cache: dict = {}
@@ -237,9 +255,17 @@ def _render_page_section(
             delete_flash="页面级笔记已删除。",
         )
     for view in text_views:
-        _render_text_selection_note(note_service, view, preferences)
+        _render_text_selection_note(
+            note_service,
+            view,
+            preferences,
+            document_id=document_id,
+            basket_service=basket_service,
+        )
     for view in region_views:
-        _render_image_region_note(note_service, view, document_id, display_width, preferences)
+        _render_image_region_note(
+            note_service, view, document_id, display_width, preferences, basket_service
+        )
     _render_create_form(
         scope="page",
         owner_id=page_id,
@@ -384,6 +410,60 @@ def _render_delete_area(note_id: int, delete, confirm_label: str, delete_flash: 
                 st.rerun()
 
 
+def _render_add_to_basket_button(
+    basket_service: EvidenceBasketService, *, document_id: int, note: Note
+) -> None:
+    """Render the one-click「加入证据篮」action for one anchored note."""
+
+    if st.button("加入证据篮", key=f"note_add_basket_{note.id}"):
+        try:
+            _add_note_to_basket(basket_service, document_id=document_id, note=note)
+        except DuplicateEvidenceError as exc:
+            st.info(str(exc))
+        except EvidenceBasketError as exc:
+            st.error(f"加入证据篮失败：{exc}")
+        except Exception as exc:
+            LOGGER.exception("笔记加入证据篮失败：note_id=%s", note.id)
+            st.error(f"加入证据篮失败：{exc}")
+        else:
+            st.session_state[_FLASH_KEY] = "已加入证据篮，证据锚点与笔记锚点一致。"
+            st.rerun()
+
+
+def _add_note_to_basket(
+    basket_service: EvidenceBasketService, *, document_id: int, note: Note
+) -> None:
+    """Persist the note's existing anchor as evidence in the default basket.
+
+    The anchor is never re-derived here: a text-selection note contributes its
+    stored excerpt (same normalized SHA-256 semantics as the note anchor), an
+    image-region note contributes its stored original-pixel coordinates.
+    """
+
+    if note.note_type is NoteType.TEXT_SELECTION:
+        evidence_text = note.source_excerpt_snapshot or note.user_excerpt or ""
+        basket_service.add_item(
+            document_id=document_id,
+            page_id=note.page_id,
+            evidence_text=evidence_text,
+            user_note=note.personal_note,
+        )
+        return
+    if note.note_type is NoteType.IMAGE_REGION:
+        basket_service.add_region_item(
+            basket_service.default_basket().id,
+            document_id,
+            note.page_id,
+            x0=note.region_x0,
+            y0=note.region_y0,
+            x1=note.region_x1,
+            y1=note.region_y1,
+            user_note=note.personal_note,
+        )
+        return
+    raise EvidenceBasketError(f"笔记类型「{note.note_type.label}」不支持加入证据篮。")
+
+
 # ------------------------------------------------------------- text selection
 
 
@@ -466,7 +546,12 @@ def _render_text_selection_create(note_service: NoteService, page_id: int) -> No
 
 
 def _render_text_selection_note(
-    note_service: NoteService, view: NoteView, preferences: NoteDisplayPreferences
+    note_service: NoteService,
+    view: NoteView,
+    preferences: NoteDisplayPreferences,
+    *,
+    document_id: int,
+    basket_service: EvidenceBasketService | None,
 ) -> None:
     note = view.note
     with st.container(border=True):
@@ -492,6 +577,10 @@ def _render_text_selection_note(
                 st.session_state[f"note_text_edit_mode_{note.id}"] = True
                 st.rerun()
         _render_rebind_area(note_service, view)
+        if basket_service is not None:
+            _render_add_to_basket_button(
+                basket_service, document_id=document_id, note=note
+            )
         _render_delete_area(
             note.id,
             note_service.delete_note,
@@ -815,6 +904,7 @@ def _render_image_region_note(
     document_id: int,
     display_width: int,
     preferences: NoteDisplayPreferences,
+    basket_service: EvidenceBasketService | None,
 ) -> None:
     note = view.note
     with st.container(border=True):
@@ -855,6 +945,10 @@ def _render_image_region_note(
                 st.session_state[f"note_image_edit_mode_{note.id}"] = True
                 st.rerun()
         _render_image_rebind_area(note_service, view, document_id, display_width)
+        if basket_service is not None:
+            _render_add_to_basket_button(
+                basket_service, document_id=document_id, note=note
+            )
         _render_delete_area(
             note.id,
             note_service.delete_note,

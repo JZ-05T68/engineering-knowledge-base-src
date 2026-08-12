@@ -11,11 +11,19 @@ from streamlit.testing.v1 import AppTest
 import src.runtime as runtime
 from src.database import Database
 from src.evidence_basket_service import EvidenceBasketService
-from src.models import PageStatus
+from src.models import EvidenceConfirmationStatus, EvidenceType, PageStatus
 
 
 def _button(app: AppTest, label: str):
     return next(button for button in app.button if button.label == label)
+
+
+def _last_button(app: AppTest, key: str):
+    """Return the latest widget with ``key`` (st.rerun 会在 AppTest 树中留下双份）。"""
+
+    matches = [button for button in app.button if button.key == key]
+    assert matches, f"找不到按钮 {key}"
+    return matches[-1]
 
 
 def _basket_runtime(
@@ -63,7 +71,7 @@ def test_basket_page_reorders_updates_notes_exports_and_returns_to_source(
     _, service, document_id, page_ids = _basket_runtime(tmp_path, monkeypatch)
     switched: list[str] = []
     monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
-    page_path = next((Path(__file__).parents[1] / "pages").glob("9_*.py"))
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
     app = AppTest.from_file(str(page_path)).run(timeout=10)
 
     assert not app.exception
@@ -90,7 +98,7 @@ def test_basket_page_reorders_updates_notes_exports_and_returns_to_source(
     source_app = AppTest.from_file(str(page_path)).run(timeout=10)
     expected_source = service.list_items()[0]
     _button(source_app, "返回原始页").click().run()
-    assert switched[-1] == "pages/2_浏览资料.py"
+    assert switched[-1] == "pages/3_浏览资料.py"
     assert source_app.query_params["document"] == [str(document_id)]
     assert source_app.session_state["pending_reader_query_params"] == {
         "document": str(document_id),
@@ -101,7 +109,7 @@ def test_basket_page_reorders_updates_notes_exports_and_returns_to_source(
 
 def test_basket_page_delete_and_confirmed_clear(tmp_path: Path, monkeypatch) -> None:
     _, service, _, _ = _basket_runtime(tmp_path, monkeypatch)
-    page_path = next((Path(__file__).parents[1] / "pages").glob("9_*.py"))
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
     app = AppTest.from_file(str(page_path)).run(timeout=10)
 
     _button(app, "删除").click().run()
@@ -111,3 +119,102 @@ def test_basket_page_delete_and_confirmed_clear(tmp_path: Path, monkeypatch) -> 
 
     assert service.list_items() == []
     assert any("证据篮为空" in item.value for item in app.info)
+
+
+def test_basket_page_confirmation_toggle(tmp_path: Path, monkeypatch) -> None:
+    _, service, _, _ = _basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    assert not app.exception
+
+    first_item = service.list_items()[0]
+    assert first_item.confirmation_status is EvidenceConfirmationStatus.UNCONFIRMED
+    confirm_button = _last_button(app, f"evidence_confirm_{first_item.id}")
+    assert confirm_button.label == "确认证据"
+    assert any(
+        f"确认状态：{EvidenceConfirmationStatus.UNCONFIRMED.label}" in caption.value
+        for caption in app.caption
+    )
+
+    confirm_button.click().run()
+    confirmed = next(item for item in service.list_items() if item.id == first_item.id)
+    assert confirmed.confirmation_status is EvidenceConfirmationStatus.CONFIRMED
+    assert confirmed.confirmed_at is not None
+    assert any(
+        f"确认状态：{EvidenceConfirmationStatus.CONFIRMED.label}" in caption.value
+        and "确认于" in caption.value
+        for caption in app.caption
+    )
+    cancel_button = _last_button(app, f"evidence_confirm_{first_item.id}")
+    assert cancel_button.label == "取消确认"
+
+    cancel_button.click().run()
+    restored = next(item for item in service.list_items() if item.id == first_item.id)
+    assert restored.confirmation_status is EvidenceConfirmationStatus.UNCONFIRMED
+    assert restored.confirmed_at is None
+    assert (
+        _last_button(app, f"evidence_confirm_{first_item.id}").label == "确认证据"
+    )
+
+
+def _typed_basket_runtime(
+    tmp_path: Path, monkeypatch
+) -> tuple[Database, EvidenceBasketService, int, int]:
+    database = Database(tmp_path / "database" / "knowledge.db")
+    source_path = tmp_path / "raw" / "类型证据.pdf"
+    source_path.parent.mkdir(parents=True)
+    source_path.write_bytes(b"pdf")
+    document = database.create_document(
+        title="类型证据",
+        filename="类型证据.pdf",
+        source_path=source_path,
+        sha256="7" * 64,
+    )
+    image_path = tmp_path / "pages" / "page_0001.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (100, 100), "white").save(image_path)
+    page = database.create_page(
+        document_id=document.id,
+        page_number=1,
+        image_path=image_path,
+        extracted_text="整页与区域证据原文。",
+        status=PageStatus.REVIEWED,
+    )
+    database.update_document_page_count(document.id, 1)
+    service = EvidenceBasketService(database)
+    basket = service.default_basket()
+    service.add_page_item(basket.id, document.id, page.id, user_note="整页备注")
+    service.add_region_item(
+        basket.id, document.id, page.id, x0=10, y0=20, x1=30, y1=40
+    )
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+    monkeypatch.setattr(runtime, "application_evidence_basket_service", lambda: service)
+    return database, service, document.id, page.id
+
+
+def _all_display_text(app: AppTest) -> list[str]:
+    texts = [element.value for element in app.caption]
+    texts.extend(element.value for element in app.markdown)
+    return texts
+
+
+def test_basket_page_type_badges_region_coords_and_page_body(
+    tmp_path: Path, monkeypatch
+) -> None:
+    _, service, _, _ = _typed_basket_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("7_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+    assert not app.exception
+
+    texts = _all_display_text(app)
+    assert any(EvidenceType.PAGE.label in text for text in texts)
+    assert any(EvidenceType.IMAGE_REGION.label in text for text in texts)
+    assert any("区域坐标：(10, 20) - (30, 40)" in text for text in texts)
+    assert any("锚点图像尺寸：100 × 100 像素" in text for text in texts)
+    assert any("整页证据引用整个页面" in text for text in texts)
+    # 整页与图片区域证据都没有选区文本，不应出现证据代码块。
+    assert len(app.code) == 0
+    assert {item.evidence_type for item in service.list_items()} == {
+        EvidenceType.PAGE,
+        EvidenceType.IMAGE_REGION,
+    }

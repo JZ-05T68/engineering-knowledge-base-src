@@ -19,7 +19,7 @@ from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.note_service import NoteNotFoundError, NoteService, NoteWriteError
 
-READER = str(next((Path(__file__).parents[1] / "pages").glob("2_*.py")))
+READER = str(next((Path(__file__).parents[1] / "pages").glob("3_*.py")))
 
 
 def _build_reader(tmp_path: Path, monkeypatch) -> tuple[AppTest, Database, NoteService, int]:

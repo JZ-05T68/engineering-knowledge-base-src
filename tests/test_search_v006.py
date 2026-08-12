@@ -310,7 +310,7 @@ def test_search_ui_fast_find_active_removal_shortcuts_and_url_restore(
     tmp_path: Path, monkeypatch
 ) -> None:
     _, ids = _ui_runtime(tmp_path, monkeypatch)
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(search_path)).run(timeout=10)
 
     assert not app.exception
@@ -364,7 +364,7 @@ def test_search_ui_no_result_explains_scope_and_can_undo(
     tmp_path: Path, monkeypatch
 ) -> None:
     _ui_runtime(tmp_path, monkeypatch)
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(search_path)).run(timeout=10)
     app.text_input(key="search_query_input").input("公共词").run()
     app.button(key="apply_search_filters").click().run()
@@ -397,7 +397,7 @@ def test_reader_ui_edits_evidence_and_restores_complete_search_url(
         result_page=2,
         filters_open=True,
     )
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(reader_path))
     app.query_params = {
         "document": str(ids["first_document"]),
@@ -415,7 +415,7 @@ def test_reader_ui_edits_evidence_and_restores_complete_search_url(
     assert "search_return" in app.query_params
 
     next(button for button in app.button if button.label == "返回检索结果").click().run()
-    assert switched[-1] == "pages/3_检索资料.py"
+    assert switched[-1] == "pages/4_检索资料.py"
     assert app.query_params == {
         key: [value] for key, value in search_state_query_params(return_state).items()
     }
@@ -435,7 +435,7 @@ def test_sort_filter_panel_and_pagination_keep_the_same_url_page(
             extracted_text=f"公共词 extra {page_number}",
         )
     database.update_document_page_count(document.id, 12)
-    search_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    search_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(search_path)).run(timeout=10)
     app.text_input(key="search_query_input").input("公共词").run()
     app.button(key="apply_search_filters").click().run()
@@ -461,6 +461,6 @@ def test_schema_v4_remains_idempotent_without_v006_migration(tmp_path: Path) -> 
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
 
-    assert database.SCHEMA_VERSION == reopened.SCHEMA_VERSION == 6
-    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6]
+    assert database.SCHEMA_VERSION == reopened.SCHEMA_VERSION == 7
+    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7]
     assert integrity == "ok" and foreign_keys == []

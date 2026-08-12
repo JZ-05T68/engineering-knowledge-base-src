@@ -20,8 +20,8 @@ from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 
 PAGES_DIR = Path(__file__).parents[1] / "pages"
-MANAGE_PAGE = str(next(PAGES_DIR.glob("13_*.py")))
-BROWSE_PAGE = str(next(PAGES_DIR.glob("2_*.py")))
+MANAGE_PAGE = str(next(PAGES_DIR.glob("11_*.py")))
+BROWSE_PAGE = str(next(PAGES_DIR.glob("3_*.py")))
 
 
 def _create_document(

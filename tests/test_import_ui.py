@@ -139,7 +139,7 @@ def test_normal_import_offers_review_action_for_first_reviewable_page(
     assert first_reviewable_import_page(result).id == 1
     assert query_params == {}
     assert switched == [
-        ("pages/4_待整理页面.py", {"query_params": {"page_id": "1"}})
+        ("pages/5_待整理页面.py", {"query_params": {"page_id": "1"}})
     ]
     assert len(import_calls) == 1
 
@@ -158,7 +158,7 @@ def test_partially_failed_import_still_offers_review_for_failed_page(
     assert first_reviewable_import_page(result).id == 2
     assert query_params == {}
     assert switched == [
-        ("pages/4_待整理页面.py", {"query_params": {"page_id": "2"}})
+        ("pages/5_待整理页面.py", {"query_params": {"page_id": "2"}})
     ]
     assert len(import_calls) == 1
 

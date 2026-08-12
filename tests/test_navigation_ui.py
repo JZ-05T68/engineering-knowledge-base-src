@@ -163,7 +163,7 @@ def test_reader_page_selection_synchronizes_position_and_ordinary_navigation(
     tmp_path: Path, monkeypatch
 ) -> None:
     _, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(reader_path))
     app.query_params = {"document": str(document_id)}
     app.run(timeout=10)
@@ -212,7 +212,7 @@ def test_reader_query_target_uses_same_sorted_document_navigation(
     tmp_path: Path, monkeypatch
 ) -> None:
     _, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
-    reader_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(reader_path))
     app.query_params = {"document": str(document_id), "page": "4"}
     app.run(timeout=10)
@@ -230,7 +230,7 @@ def test_home_and_browser_show_review_continuation_entry(tmp_path: Path, monkeyp
     project_root = Path(__file__).parents[1]
 
     home = AppTest.from_file(str(project_root / "app.py")).run(timeout=10)
-    browser_path = next((project_root / "pages").glob("2_*.py"))
+    browser_path = next((project_root / "pages").glob("3_*.py"))
     browser = AppTest.from_file(str(browser_path)).run(timeout=10)
 
     assert not home.exception
@@ -250,7 +250,7 @@ def test_browser_warns_when_database_note_has_no_markdown_file(
         tmp_path / "markdown" / "1" / "page_0001.md",
     )
 
-    browser_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    browser_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     browser = AppTest.from_file(str(browser_path)).run(timeout=10)
 
     assert not browser.exception
@@ -313,7 +313,7 @@ def test_browser_disables_markdown_clear_entry_and_keeps_editing_available(
         ),
     )
 
-    browser_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    browser_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     browser = AppTest.from_file(str(browser_path)).run(timeout=10)
 
     assert not browser.exception

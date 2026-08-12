@@ -418,7 +418,7 @@ def _open_source(item: NoteListItem) -> None:
     st.session_state["pending_reader_query_params"] = source_params
     st.query_params.clear()
     st.query_params.update(source_params)
-    st.switch_page("pages/2_浏览资料.py")
+    st.switch_page("pages/3_浏览资料.py")
 
 
 def _format_time(value) -> str:

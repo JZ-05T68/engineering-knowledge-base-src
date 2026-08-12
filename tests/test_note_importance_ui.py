@@ -23,7 +23,7 @@ from src.evidence_basket_service import EvidenceBasketService
 from src.models import NoteImportance
 from src.note_service import NoteService, NoteWriteError
 
-READER = str(next((Path(__file__).parents[1] / "pages").glob("2_*.py")))
+READER = str(next((Path(__file__).parents[1] / "pages").glob("3_*.py")))
 PAGE_TEXT = "液压系统 阀体 回路 压力"
 
 

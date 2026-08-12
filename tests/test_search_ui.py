@@ -77,7 +77,7 @@ def test_search_cards_filter_clear_evidence_basket_and_navigation_state(
     database, _, document_id, page_id = _local_search_runtime(tmp_path, monkeypatch)
     switched: list[str] = []
     monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
-    page_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
+    page_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
     app = AppTest.from_file(str(page_path)).run(timeout=10)
 
     assert not app.exception
@@ -115,7 +115,7 @@ def test_search_cards_filter_clear_evidence_basket_and_navigation_state(
     assert app.session_state["knowledge_results"]
 
     _button(app, "打开页面").click().run()
-    assert switched[-1] == "pages/2_浏览资料.py"
+    assert switched[-1] == "pages/3_浏览资料.py"
     assert app.query_params["document"] == [str(document_id)]
     assert app.query_params["page"] == ["2"]
     assert app.query_params["search_query"] == ["液压泵"]
@@ -128,7 +128,7 @@ def test_reader_uses_exact_query_target_and_returns_to_search(
     _, _, document_id, _ = _local_search_runtime(tmp_path, monkeypatch)
     switched: list[str] = []
     monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
-    page_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    page_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(page_path))
     app.query_params = {
         "document": str(document_id),
@@ -145,7 +145,7 @@ def test_reader_uses_exact_query_target_and_returns_to_search(
     assert "加入证据篮" in {button.label for button in app.button}
     _button(app, "返回检索结果").click().run()
 
-    assert switched[-1] == "pages/3_检索资料.py"
+    assert switched[-1] == "pages/4_检索资料.py"
     assert app.query_params == {}
 
 
@@ -153,7 +153,7 @@ def test_reader_adds_user_selected_evidence_persistently(
     tmp_path: Path, monkeypatch
 ) -> None:
     database, _, document_id, page_id = _local_search_runtime(tmp_path, monkeypatch)
-    page_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    page_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(page_path))
     app.query_params = {"document": str(document_id), "page": "2"}
     app.run(timeout=10)
@@ -172,7 +172,7 @@ def test_reader_rejects_missing_page_instead_of_falling_back(
     tmp_path: Path, monkeypatch
 ) -> None:
     _, _, document_id, _ = _local_search_runtime(tmp_path, monkeypatch)
-    page_path = next((Path(__file__).parents[1] / "pages").glob("2_*.py"))
+    page_path = next((Path(__file__).parents[1] / "pages").glob("3_*.py"))
     app = AppTest.from_file(str(page_path))
     app.query_params = {"document": str(document_id), "page": "999"}
     app.run(timeout=10)

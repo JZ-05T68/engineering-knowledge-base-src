@@ -19,7 +19,7 @@ from src.database import Database
 from src.models import NoteImportance, NoteType
 from src.note_service import NoteService, NoteWriteError
 
-LIST_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("11_*.py")))
+LIST_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("6_*.py")))
 
 
 def _build_app(tmp_path: Path, monkeypatch, *, extra_normal: int = 0):

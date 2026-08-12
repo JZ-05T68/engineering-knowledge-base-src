@@ -1,4 +1,4 @@
-"""Streamlit dashboard for Engineering Knowledge Base v0.3.3."""
+"""Streamlit dashboard for Engineering Knowledge Base v0.4.0."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from src.runtime import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="工程知识库 v0.3.3", page_icon="📚", layout="wide")
-st.title("工程知识库 v0.3.3")
+st.set_page_config(page_title="工程知识库 v0.4.0", page_icon="📚", layout="wide")
+st.title("工程知识库 v0.4.0")
 st.caption("本地、单用户的页面级工程知识管理系统")
 
 try:
@@ -76,12 +76,12 @@ if main_actions[0].button(
 ):
     st.query_params.clear()
     st.query_params["page_id"] = str(next_review_page.id)
-    st.switch_page("pages/4_待整理页面.py")
+    st.switch_page("pages/5_待整理页面.py")
 if main_actions[1].button(
     f"查看证据篮（{len(basket_items)}）",
     use_container_width=True,
 ):
-    st.switch_page("pages/9_证据篮.py")
+    st.switch_page("pages/7_证据篮.py")
 if next_review_page is None:
     st.caption("当前没有待处理、草稿待复核或处理失败的页面。")
 
@@ -96,7 +96,7 @@ with left:
                 use_container_width=True,
             ):
                 st.query_params["document"] = str(document.id)
-                st.switch_page("pages/2_浏览资料.py")
+                st.switch_page("pages/3_浏览资料.py")
     else:
         st.info("还没有导入文档。请先导入第一份 PDF。")
 
@@ -113,7 +113,7 @@ with right:
                 st.query_params.update(
                     {"document": str(document.id), "page": str(page.page_number)}
                 )
-                st.switch_page("pages/2_浏览资料.py")
+                st.switch_page("pages/3_浏览资料.py")
     else:
         st.info("还没有编辑过页面笔记。导入后可从待复核页面开始整理。")
 

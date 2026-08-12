@@ -18,7 +18,7 @@ from src.database import Database
 from src.models import NoteType
 from src.note_service import NoteNotFoundError, NoteService, NoteWriteError
 
-LIST_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("11_*.py")))
+LIST_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("6_*.py")))
 
 
 def _build_app(tmp_path: Path, monkeypatch, *, page_notes: int = 0):
@@ -160,7 +160,7 @@ def test_return_to_source_handoff(tmp_path: Path, monkeypatch) -> None:
         if item.note.note_type is NoteType.PAGE
     )
     _button(app, f"note_list_source_{note_id}").click().run()
-    assert switched == ["pages/2_浏览资料.py"]
+    assert switched == ["pages/3_浏览资料.py"]
     params = app.session_state["pending_reader_query_params"]
     assert params == {"document": str(doc1.id), "page": "1", "from_search": "0"}
 

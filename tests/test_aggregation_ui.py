@@ -23,7 +23,7 @@ from src.evidence_basket_service import EvidenceBasketService
 from src.models import NoteImportance, NoteType
 from src.note_service import NoteService
 
-AGGREGATION_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("12_*.py")))
+AGGREGATION_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("8_*.py")))
 
 
 def _create_document(
@@ -296,7 +296,7 @@ def test_open_source_navigation_params(tmp_path: Path, monkeypatch) -> None:
 
     app.button(key="agg_open_note_2").click().run()  # 甲页面笔记（第 1 页）
 
-    assert switched == ["pages/2_浏览资料.py"]
+    assert switched == ["pages/3_浏览资料.py"]
     assert app.query_params.get("document") == [str(context["alpha"].id)]
     assert app.query_params.get("page") == ["1"]
     assert app.query_params.get("from_search") == ["0"]
@@ -329,7 +329,7 @@ def test_evidence_navigation_buttons(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(st, "switch_page", lambda page: switched.append(str(page)))
 
     app.button(key=f"agg_basket_{evidence_item.source_id}").click().run()
-    assert switched == ["pages/9_证据篮.py"]
+    assert switched == ["pages/7_证据篮.py"]
 
     params = build_source_params(evidence_item)
     assert params["document"] == str(context["alpha"].id)

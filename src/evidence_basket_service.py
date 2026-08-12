@@ -11,18 +11,24 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 from typing import Protocol
+
+from PIL import Image
 
 from src.models import (
     Document,
     EvidenceBasket,
+    EvidenceConfirmationStatus,
     EvidenceContextKind,
     EvidenceItem,
     EvidenceTextKind,
+    EvidenceType,
     Page,
     PageStatus,
 )
+from src.note_geometry import normalize_original_rect
 from src.text_utils import build_context_excerpt
 
 DEFAULT_BASKET_NAME = "默认证据篮"
@@ -161,6 +167,136 @@ class EvidenceBasketService:
                 raise DuplicateEvidenceError("同一证据选区已在证据篮中，无需重复加入。") from exc
             raise EvidenceBasketError(f"无法保存证据：{exc}") from exc
 
+    def add_page_item(
+        self,
+        basket_id: int,
+        document_id: int,
+        page_id: int,
+        user_note: str = "",
+    ) -> EvidenceItem:
+        """Validate a source and store one whole-page evidence item.
+
+        ``source_text_sha256`` freezes the page's current original text hash as
+        audit information only: whole-page reference semantics do not change
+        when the page text is edited, so ``validated_item`` for page evidence
+        checks document/page/file existence, not the text hash.
+        ``selection_sha256`` is the SHA-256 of the empty byte string, so the
+        existing UNIQUE(basket_id, page_id, selection_sha256) constraint
+        allows at most one whole-page item per page per basket.
+        """
+
+        basket = self._require_basket(basket_id)
+        document, page = self._validated_source(document_id, page_id)
+        note = _clean_bounded(user_note, "用户备注", MAX_NOTE_CHARS)
+        projects, tags = self._page_classification(page)
+        source_text = _original_source_text(page)
+        context = (
+            build_context_excerpt(source_text, (), max_chars=360) if source_text else ""
+        )
+        try:
+            return self._repository.insert_item(
+                basket_id=basket.id,
+                document=document,
+                page=page,
+                projects=projects,
+                tags=tags,
+                evidence_text="",
+                text_kind=EvidenceTextKind.ORIGINAL,
+                context=context,
+                context_kind=EvidenceContextKind.SYSTEM_GENERATED,
+                user_note=note,
+                source_text_sha256=_sha256(source_text),
+                selection_sha256=_sha256(""),
+                evidence_type=EvidenceType.PAGE,
+            )
+        except sqlite3.IntegrityError as exc:
+            if "unique" in str(exc).casefold():
+                raise DuplicateEvidenceError(
+                    "该页面的整页证据已在证据篮中，无需重复加入。"
+                ) from exc
+            raise EvidenceBasketError(f"无法保存证据：{exc}") from exc
+
+    def add_region_item(
+        self,
+        basket_id: int,
+        document_id: int,
+        page_id: int,
+        *,
+        x0: object,
+        y0: object,
+        x1: object,
+        y1: object,
+        user_note: str = "",
+    ) -> EvidenceItem:
+        """Validate a source and store one image-region evidence item.
+
+        Width, height and SHA-256 are always measured from the real page PNG
+        (fully decoded, never trusted from the caller); coordinates are
+        normalized with the same rules as structured region notes.
+        ``selection_sha256`` hashes the normalized ``x0,y0,x1,y1`` tuple, so
+        the same region on the same page can only be added once per basket.
+        ``source_text_sha256`` records the page text hash at capture time as
+        audit information; the durable anchor is the image hash.
+        """
+
+        basket = self._require_basket(basket_id)
+        document, page = self._validated_source(document_id, page_id)
+        note = _clean_bounded(user_note, "用户备注", MAX_NOTE_CHARS)
+        width, height, image_sha256 = _read_page_image_info(page.image_path)
+        try:
+            rect = normalize_original_rect(x0, y0, x1, y1, width, height)
+        except ValueError as exc:
+            raise EvidenceBasketError(f"图片区域无效：{exc}") from exc
+        projects, tags = self._page_classification(page)
+        source_text = _original_source_text(page)
+        context = (
+            build_context_excerpt(source_text, (), max_chars=360) if source_text else ""
+        )
+        selection_sha256 = _sha256(
+            f"{rect['x0']},{rect['y0']},{rect['x1']},{rect['y1']}"
+        )
+        try:
+            return self._repository.insert_item(
+                basket_id=basket.id,
+                document=document,
+                page=page,
+                projects=projects,
+                tags=tags,
+                evidence_text="",
+                text_kind=EvidenceTextKind.ORIGINAL,
+                context=context,
+                context_kind=EvidenceContextKind.SYSTEM_GENERATED,
+                user_note=note,
+                source_text_sha256=_sha256(source_text),
+                selection_sha256=selection_sha256,
+                evidence_type=EvidenceType.IMAGE_REGION,
+                region_image_sha256=image_sha256,
+                region_image_width=width,
+                region_image_height=height,
+                region_x0=rect["x0"],
+                region_y0=rect["y0"],
+                region_x1=rect["x1"],
+                region_y1=rect["y1"],
+            )
+        except sqlite3.IntegrityError as exc:
+            if "unique" in str(exc).casefold():
+                raise DuplicateEvidenceError(
+                    "相同坐标的图片区域证据已在证据篮中，无需重复加入。"
+                ) from exc
+            raise EvidenceBasketError(f"无法保存证据：{exc}") from exc
+
+    def set_confirmation(self, item_id: int, confirmed: bool) -> EvidenceItem:
+        """Set the manual confirmation state of one evidence item.
+
+        Repeating the call with the state the item already has is an error
+        (``EvidenceBasketError``), never a silent no-op: callers must observe
+        that no transition happened.
+        """
+
+        if not isinstance(confirmed, bool):
+            raise EvidenceBasketError("确认状态必须是布尔值。")
+        return self._repository.set_confirmation(item_id, confirmed)
+
     def remove_item(self, item_id: int, *, basket_id: int | None = None) -> None:
         """Remove one item and compact the remaining stable positions."""
 
@@ -253,18 +389,23 @@ class EvidenceBasketService:
             raise EvidenceSourceError(
                 f"证据 {item.id} 的页码已与来源记录不一致，已停止继续处理。"
             )
-        source_hash = _sha256(_original_source_text(page))
-        if source_hash != item.source_text_sha256:
-            raise EvidenceSourceError(
-                f"证据 {item.id} 的原始页面文本已发生变化，请重新核对并加入。"
-            )
+        if item.evidence_type is EvidenceType.TEXT_SELECTION:
+            source_hash = _sha256(_original_source_text(page))
+            if source_hash != item.source_text_sha256:
+                raise EvidenceSourceError(
+                    f"证据 {item.id} 的原始页面文本已发生变化，请重新核对并加入。"
+                )
+        elif item.evidence_type is EvidenceType.IMAGE_REGION:
+            self._validate_region_anchor(item, page)
+        # 整页证据：引用语义不随页面文本变化，仅依赖文档/页面/文件存在（上方已校验）。
         tags = tuple(tag.name for tag in self._database.get_page_tags(page.id))
         projects = tuple(
             project.name for project in self._database.get_page_projects(page.id)
         )
         normalized_ocr = _match_text(page.ocr_text)
         from_ocr = (
-            item.text_kind is EvidenceTextKind.ORIGINAL
+            item.evidence_type is EvidenceType.TEXT_SELECTION
+            and item.text_kind is EvidenceTextKind.ORIGINAL
             and bool(normalized_ocr)
             and _match_text(item.evidence_text) in normalized_ocr
         )
@@ -280,6 +421,33 @@ class EvidenceBasketService:
             document_sha256=document.sha256,
             from_ocr_text=from_ocr,
         )
+
+    def _validate_region_anchor(self, item: EvidenceItem, page: Page) -> None:
+        width, height, image_sha256 = _read_page_image_info(page.image_path)
+        if image_sha256 != item.region_image_sha256:
+            raise EvidenceSourceError(
+                f"证据 {item.id} 的页面图像已发生变化，区域锚点失效，请重新核对并加入。"
+            )
+        coordinates = (
+            item.region_x0,
+            item.region_y0,
+            item.region_x1,
+            item.region_y1,
+        )
+        if any(value is None for value in coordinates) or not (
+            0 <= item.region_x0 < item.region_x1 <= width
+            and 0 <= item.region_y0 < item.region_y1 <= height
+        ):
+            raise EvidenceSourceError(
+                f"证据 {item.id} 的区域坐标已超出当前页面图像范围。"
+            )
+
+    def _page_classification(self, page: Page) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        tags = tuple(tag.name for tag in self._database.get_page_tags(page.id))
+        projects = tuple(
+            project.name for project in self._database.get_page_projects(page.id)
+        )
+        return projects, tags
 
     def _validated_source(self, document_id: int, page_id: int) -> tuple[Document, Page]:
         document = self._database.get_document(document_id)
@@ -399,6 +567,14 @@ class _EvidenceRepository:
         user_note: str,
         source_text_sha256: str,
         selection_sha256: str,
+        evidence_type: EvidenceType = EvidenceType.TEXT_SELECTION,
+        region_image_sha256: str | None = None,
+        region_image_width: int | None = None,
+        region_image_height: int | None = None,
+        region_x0: int | None = None,
+        region_y0: int | None = None,
+        region_x1: int | None = None,
+        region_y1: int | None = None,
     ) -> EvidenceItem:
         now = _utc_now()
         locator = (
@@ -418,10 +594,15 @@ class _EvidenceRepository:
                 INSERT INTO evidence_items(
                     basket_id, document_id, page_id, document_title, filename,
                     page_number, review_status, projects_json, tags_json,
-                    evidence_text, text_kind, context, context_kind, user_note,
+                    evidence_type, evidence_text, text_kind, context, context_kind,
+                    user_note, region_image_sha256, region_image_width,
+                    region_image_height, region_x0, region_y0, region_x1, region_y1,
                     source_text_sha256, source_locator, selection_sha256,
                     added_at, position
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?
+                )
                 """,
                 (
                     basket_id,
@@ -433,11 +614,19 @@ class _EvidenceRepository:
                     page.status.value,
                     json.dumps(projects, ensure_ascii=False),
                     json.dumps(tags, ensure_ascii=False),
+                    evidence_type.value,
                     evidence_text,
                     text_kind.value,
                     context,
                     context_kind.value,
                     user_note,
+                    region_image_sha256,
+                    region_image_width,
+                    region_image_height,
+                    region_x0,
+                    region_y0,
+                    region_x1,
+                    region_y1,
                     source_text_sha256,
                     locator,
                     selection_sha256,
@@ -451,6 +640,38 @@ class _EvidenceRepository:
             )
             row = connection.execute(
                 "SELECT * FROM evidence_items WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+        return _item_from_row(row)
+
+    def set_confirmation(self, item_id: int, confirmed: bool) -> EvidenceItem:
+        """Flip one item's confirmation state in a single guarded UPDATE."""
+
+        target = (
+            EvidenceConfirmationStatus.CONFIRMED
+            if confirmed
+            else EvidenceConfirmationStatus.UNCONFIRMED
+        )
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM evidence_items WHERE id = ?", (item_id,)
+            ).fetchone()
+            if row is None:
+                raise EvidenceBasketError(f"证据条目 {item_id} 不存在。")
+            current = EvidenceConfirmationStatus(str(row["confirmation_status"]))
+            if current is target:
+                raise EvidenceBasketError(
+                    f"证据条目 {item_id} 已是{target.label}状态，无需重复操作。"
+                )
+            confirmed_at = _utc_now() if confirmed else None
+            cursor = connection.execute(
+                "UPDATE evidence_items SET confirmation_status = ?, confirmed_at = ? "
+                "WHERE id = ?",
+                (target.value, confirmed_at, item_id),
+            )
+            if cursor.rowcount != 1:
+                raise EvidenceBasketError(f"证据条目 {item_id} 的确认状态更新未生效。")
+            row = connection.execute(
+                "SELECT * FROM evidence_items WHERE id = ?", (item_id,)
             ).fetchone()
         return _item_from_row(row)
 
@@ -576,6 +797,7 @@ def _item_from_row(row: sqlite3.Row) -> EvidenceItem:
         tags = tuple(str(value) for value in json.loads(str(row["tags_json"])))
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise EvidenceSourceError(f"证据 {row['id']} 的分类元数据损坏。") from exc
+    confirmed_at = row["confirmed_at"]
     return EvidenceItem(
         id=int(row["id"]),
         basket_id=int(row["basket_id"]),
@@ -596,7 +818,45 @@ def _item_from_row(row: sqlite3.Row) -> EvidenceItem:
         source_locator=str(row["source_locator"]),
         added_at=datetime.fromisoformat(str(row["added_at"])),
         position=int(row["position"]),
+        evidence_type=EvidenceType(str(row["evidence_type"])),
+        confirmation_status=EvidenceConfirmationStatus(str(row["confirmation_status"])),
+        confirmed_at=(
+            datetime.fromisoformat(str(confirmed_at)) if confirmed_at else None
+        ),
+        region_image_sha256=(
+            str(row["region_image_sha256"]) if row["region_image_sha256"] else None
+        ),
+        region_image_width=_optional_int(row["region_image_width"]),
+        region_image_height=_optional_int(row["region_image_height"]),
+        region_x0=_optional_int(row["region_x0"]),
+        region_y0=_optional_int(row["region_y0"]),
+        region_x1=_optional_int(row["region_x1"]),
+        region_y1=_optional_int(row["region_y1"]),
     )
+
+
+def _optional_int(value: object) -> int | None:
+    return int(value) if value is not None else None
+
+
+def _read_page_image_info(image_path: Path) -> tuple[int, int, str]:
+    """Fully decode one page PNG and return ``(width, height, sha256)``.
+
+    Same semantics as structured region notes: PIL decoding is lazy, so
+    ``load()`` is forced to prove the pixel data is intact before its hash is
+    stored or trusted as an anchor.
+    """
+
+    if not image_path.is_file():
+        raise EvidenceSourceError(f"页面图像缺失：{image_path}")
+    try:
+        data = image_path.read_bytes()
+        with Image.open(BytesIO(data)) as image:
+            image.load()
+            width, height = image.size
+    except (OSError, ValueError) as exc:
+        raise EvidenceSourceError(f"页面图像无法读取：{image_path}") from exc
+    return width, height, hashlib.sha256(data).hexdigest()
 
 
 def _clean_basket_name(value: str) -> str:

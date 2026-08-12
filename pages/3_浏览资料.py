@@ -38,7 +38,7 @@ from src.search_state import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="浏览资料｜工程知识库 v0.3.3", page_icon="📖", layout="wide")
+st.set_page_config(page_title="浏览资料｜工程知识库 v0.4.0", page_icon="📖", layout="wide")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -274,7 +274,7 @@ if from_search and search_return_state is not None:
         else:
             # Preserve the v0.0.5 behavior for old reader URLs.
             st.query_params.clear()
-        st.switch_page("pages/3_检索资料.py")
+        st.switch_page("pages/4_检索资料.py")
         st.stop()
 
 document_tags = database.get_document_tags(document.id)
@@ -301,7 +301,7 @@ if st.button(
 ):
     st.query_params.clear()
     st.query_params["page_id"] = str(next_document_review_page.id)
-    st.switch_page("pages/4_待整理页面.py")
+    st.switch_page("pages/5_待整理页面.py")
 if next_document_review_page is None:
     st.caption("这份文档当前没有待处理、草稿待复核或处理失败的页面。")
 
@@ -336,7 +336,7 @@ with st.expander("文档标签与所属项目"):
 with st.expander("文档管理"):
     st.caption("文档删除及生命周期管理已迁移至「文档管理」页面。")
     if st.button("前往「文档管理」", key=f"goto_document_management_{document.id}"):
-        st.switch_page("pages/13_文档管理.py")
+        st.switch_page("pages/11_文档管理.py")
 
 document_pages = sorted(
     database.list_pages(document.id),
@@ -513,7 +513,7 @@ if from_search and search_return_state is not None:
         return_params = search_state_query_params(search_return_state)
         st.session_state["pending_search_query_params"] = return_params
         st.query_params.from_dict(return_params)
-        st.switch_page("pages/3_检索资料.py")
+        st.switch_page("pages/4_检索资料.py")
         st.stop()
 
     current_document_hits = document_hit_results(search_results, document.id)
@@ -693,7 +693,7 @@ if basket_entry.button(
     key="open_basket_from_reader",
     use_container_width=True,
 ):
-    st.switch_page("pages/9_证据篮.py")
+    st.switch_page("pages/7_证据篮.py")
 
 with st.expander("将当前页选区加入证据篮", expanded=False):
     original_source = page.extracted_text.strip() or page.ocr_text.strip()
@@ -749,6 +749,29 @@ with st.expander("将当前页选区加入证据篮", expanded=False):
         else:
             st.session_state["basket_flash"] = "当前页选区已持久化加入证据篮。"
             st.rerun()
+
+if st.button(
+    "将当前整页加入证据篮",
+    key=f"reader_add_page_basket_{page.id}",
+    help="整页证据引用当前页图像与文本，不复制选区；同一页面只能加入一次。",
+    use_container_width=True,
+):
+    try:
+        basket_service.add_page_item(
+            basket_service.default_basket().id,
+            document.id,
+            page.id,
+        )
+    except DuplicateEvidenceError as exc:
+        st.info(str(exc))
+    except EvidenceBasketError as exc:
+        st.error(f"加入证据篮失败：{exc}")
+    except Exception as exc:
+        LOGGER.exception("加入整页证据失败：page_id=%s", page.id)
+        st.error(f"加入证据篮失败：{exc}")
+    else:
+        st.session_state["basket_flash"] = "当前页整页证据已持久化加入证据篮。"
+        st.rerun()
 
 image_column, editor_column = st.columns([1.08, 1], gap="large")
 with image_column:
@@ -855,6 +878,7 @@ with editor_column:
             document_id=document.id,
             page_id=page.id,
             display_width=image_width,
+            basket_service=basket_service,
         )
 
     st.subheader("页面分类")

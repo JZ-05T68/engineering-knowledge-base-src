@@ -58,6 +58,15 @@ PRESERVED_TABLES = (
     "project_documents", "project_pages",
 )
 
+# schema v7 重建了 evidence_items 并新增列；历史数据保留校验只针对 v4 形态的 19 列
+EVIDENCE_COLUMNS_V4 = (
+    "id", "basket_id", "document_id", "page_id", "document_title", "filename",
+    "page_number", "review_status", "projects_json", "tags_json",
+    "evidence_text", "text_kind", "context", "context_kind", "user_note",
+    "source_text_sha256", "source_locator", "selection_sha256",
+    "added_at", "position",
+)
+
 
 def _insert_note(connection: sqlite3.Connection, row: tuple) -> None:
     placeholders = ", ".join("?" for _ in NOTE_COLUMNS)
@@ -144,6 +153,14 @@ def _create_v4_database(database_path: Path) -> None:
 def _preserved_fingerprint(connection: sqlite3.Connection) -> dict[str, tuple]:
     fingerprint: dict[str, tuple] = {}
     for table in PRESERVED_TABLES:
+        if table == "evidence_items":
+            fingerprint[table] = tuple(
+                connection.execute(
+                    f"SELECT {', '.join(EVIDENCE_COLUMNS_V4)} FROM evidence_items"
+                    " ORDER BY 1"
+                ).fetchall()
+            )
+            continue
         fingerprint[table] = tuple(
             connection.execute(f"SELECT * FROM {table} ORDER BY 1").fetchall()
         )
@@ -183,7 +200,7 @@ def _seed_document_and_page(database_path: Path) -> None:
 
 
 def test_schema_version_and_notes_structure(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 6
+    assert SCHEMA_VERSION == 7
     database_path = _fresh_database(tmp_path)
     with sqlite3.connect(database_path) as connection:
         columns = {row[1]: row for row in connection.execute("PRAGMA table_info(notes)")}
@@ -378,7 +395,7 @@ def test_v4_to_v5_preserves_all_existing_data(tmp_path: Path) -> None:
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert before == after
-    assert version == 6
+    assert version == 7
     assert note_count == 0
 
 
@@ -436,7 +453,7 @@ def test_fresh_database_initializes_at_schema_5(tmp_path: Path) -> None:
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
         ]
-    assert versions == [1, 2, 3, 4, 5, 6]
+    assert versions == [1, 2, 3, 4, 5, 6, 7]
 
 
 def test_remigration_is_noop(tmp_path: Path) -> None:
@@ -452,8 +469,8 @@ def test_remigration_is_noop(tmp_path: Path) -> None:
         migration_rows = connection.execute(
             "SELECT COUNT(*) FROM schema_migrations"
         ).fetchone()[0]
-    assert version == 6
-    assert migration_rows == 6
+    assert version == 7
+    assert migration_rows == 7
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
 
 
@@ -461,7 +478,7 @@ def test_higher_version_database_is_rejected(tmp_path: Path) -> None:
     database_path = _fresh_database(tmp_path)
     with sqlite3.connect(database_path) as connection:
         connection.execute(
-            "INSERT INTO schema_migrations(version, applied_at) VALUES (7, ?)", (TS,)
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (8, ?)", (TS,)
         )
         connection.commit()
     with pytest.raises(MigrationError, match="高于程序支持"):

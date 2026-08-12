@@ -19,6 +19,7 @@ from scripts.release_check import (
     listener_check,
     parse_collected_test_count,
     parse_passed_test_count,
+    parse_skipped_test_count,
     render_report,
     stopped_listener_check,
     successful_test_count,
@@ -30,7 +31,7 @@ from src.config import OfficialEndpointError, Settings
 
 
 def test_release_gate_targets_v024() -> None:
-    assert EXPECTED_VERSION == "0.3.3"
+    assert EXPECTED_VERSION == "0.4.0"
 
 
 def test_all_pass_report_returns_zero_and_clear_summary() -> None:
@@ -205,6 +206,7 @@ def test_pytest_count_parsers_support_project_quiet_output() -> None:
     assert parse_collected_test_count(collected_output) == 15
     assert parse_collected_test_count("15 tests collected in 0.2s") == 15
     assert parse_passed_test_count(passed_output) == 15
+    assert parse_skipped_test_count("14 passed, 1 skipped in 2.01s") == 1
     assert successful_test_count(
         "............... [100%]", returncode=0, collected=15
     ) == 15

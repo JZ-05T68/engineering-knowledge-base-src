@@ -274,12 +274,12 @@ def _render_item(item: AggregationItem) -> None:
             st.session_state["pending_reader_query_params"] = source_params
             st.query_params.clear()
             st.query_params.update(source_params)
-            st.switch_page("pages/2_浏览资料.py")
+            st.switch_page("pages/3_浏览资料.py")
         if (
             item.source_kind is AggregationSourceKind.EVIDENCE
             and st.button("查看证据篮", key=f"agg_basket_{item.source_id}")
         ):
-            st.switch_page("pages/9_证据篮.py")
+            st.switch_page("pages/7_证据篮.py")
 
 
 def _safe_int(value: object) -> int | None:

@@ -86,7 +86,7 @@ def _build_review_app(
     )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(runtime, "application_document_service", lambda: service)
-    app_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
+    app_path = next((Path(__file__).parents[1] / "pages").glob("5_*.py"))
     app = AppTest.from_file(str(app_path)).run(timeout=10)
     return app, database, page.id
 

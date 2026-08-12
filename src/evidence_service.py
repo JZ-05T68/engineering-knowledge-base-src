@@ -11,6 +11,7 @@ from src.models import (
     EvidenceBasket,
     EvidenceItem,
     EvidenceTextKind,
+    EvidenceType,
     PageStatus,
     SearchField,
     SearchResult,
@@ -212,30 +213,12 @@ class EvidenceBasketPackageBuilder:
                 ]
             )
 
-        lines.extend(["", "### 原始材料", ""])
-        if item.text_kind is EvidenceTextKind.ORIGINAL:
-            lines.extend(
-                [
-                    "可信度：该选区已在加入时匹配当前 PDF 文本层或 OCR 原始文本。",
-                ]
-            )
-            if item.from_ocr_text:
-                lines.extend(["", f"> OCR 提示：{OCR_EVIDENCE_WARNING}"])
-            lines.extend(["", _markdown_block(item.evidence_text)])
+        if item.evidence_type is EvidenceType.PAGE:
+            lines.extend(_page_evidence_lines(item))
+        elif item.evidence_type is EvidenceType.IMAGE_REGION:
+            lines.extend(_region_evidence_lines(item))
         else:
-            lines.append("（本条选区未匹配原始文本；不得视为已验证原文。）")
-
-        lines.extend(["", "### 用户摘录", ""])
-        if item.text_kind is EvidenceTextKind.USER_EXCERPT:
-            lines.extend(
-                [
-                    "可信度：用户摘录 / 整理内容，未经原文匹配确认。",
-                    "",
-                    _markdown_block(item.evidence_text),
-                ]
-            )
-        else:
-            lines.append("（无；本条选区已归入原始材料。）")
+            lines.extend(_text_selection_evidence_lines(item))
 
         lines.extend(
             [
@@ -250,6 +233,66 @@ class EvidenceBasketPackageBuilder:
             ]
         )
         return lines
+
+
+def _page_evidence_lines(item: EvidenceItem) -> list[str]:
+    """Render a whole-page evidence body: locator info, no fabricated text."""
+
+    return [
+        "",
+        "### 原始材料",
+        "",
+        f"证据类型：{EvidenceType.PAGE.label}（{EvidenceType.PAGE.value}）。",
+        "本条引用该页全部内容；页面定位信息见上方“来源定位”，"
+        "请以原始页面图像与 PDF 为准。",
+    ]
+
+
+def _region_evidence_lines(item: EvidenceItem) -> list[str]:
+    """Render an image-region evidence body: coordinates and image identity."""
+
+    sha256 = item.region_image_sha256 or ""
+    digest = f"{sha256[:16]}…" if sha256 else "未记录"
+    return [
+        "",
+        "### 原始材料",
+        "",
+        f"证据类型：{EvidenceType.IMAGE_REGION.label}（{EvidenceType.IMAGE_REGION.value}）。",
+        f"区域坐标（原图像素）：({item.region_x0}, {item.region_y0}) – "
+        f"({item.region_x1}, {item.region_y1})。",
+        f"页面图像：{item.region_image_width}×{item.region_image_height} 像素，"
+        f"SHA-256 摘要 {digest}。",
+    ]
+
+
+def _text_selection_evidence_lines(item: EvidenceItem) -> list[str]:
+    """Render the unchanged v0.0.5 text-selection evidence body."""
+
+    lines = ["", "### 原始材料", ""]
+    if item.text_kind is EvidenceTextKind.ORIGINAL:
+        lines.extend(
+            [
+                "可信度：该选区已在加入时匹配当前 PDF 文本层或 OCR 原始文本。",
+            ]
+        )
+        if item.from_ocr_text:
+            lines.extend(["", f"> OCR 提示：{OCR_EVIDENCE_WARNING}"])
+        lines.extend(["", _markdown_block(item.evidence_text)])
+    else:
+        lines.append("（本条选区未匹配原始文本；不得视为已验证原文。）")
+
+    lines.extend(["", "### 用户摘录", ""])
+    if item.text_kind is EvidenceTextKind.USER_EXCERPT:
+        lines.extend(
+            [
+                "可信度：用户摘录 / 整理内容，未经原文匹配确认。",
+                "",
+                _markdown_block(item.evidence_text),
+            ]
+        )
+    else:
+        lines.append("（无；本条选区已归入原始材料。）")
+    return lines
 
 
 def _path_lines(result: SearchResult) -> list[str]:

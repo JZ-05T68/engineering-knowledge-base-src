@@ -58,7 +58,7 @@ from src.search_state import (
 LOGGER = logging.getLogger(__name__)
 RESULTS_PER_PAGE = 10
 
-st.set_page_config(page_title="检索资料｜工程知识库 v0.3.3", page_icon="🔎", layout="wide")
+st.set_page_config(page_title="检索资料｜工程知识库 v0.4.0", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
 st.markdown(
@@ -369,7 +369,7 @@ if entry_columns[1].button(
     use_container_width=True,
     key="open_evidence_basket",
 ):
-    st.switch_page("pages/9_证据篮.py")
+    st.switch_page("pages/7_证据篮.py")
 
 basket_flash = st.session_state.pop("basket_flash", "")
 if basket_flash:
@@ -802,7 +802,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
                     )
                     st.session_state["pending_reader_query_params"] = navigation_params
                     st.query_params.from_dict(navigation_params)
-                    st.switch_page("pages/2_浏览资料.py")
+                    st.switch_page("pages/3_浏览资料.py")
             preview_open = active_state.preview_page_id == result.page_id
             if preview_action.button(
                 "关闭快速预览" if preview_open else "打开快速预览",
@@ -1031,7 +1031,7 @@ def _render_group_result_card(result: SearchResult, result_index: int) -> None:
                 )
                 st.session_state["pending_reader_query_params"] = navigation_params
                 st.query_params.from_dict(navigation_params)
-                st.switch_page("pages/2_浏览资料.py")
+                st.switch_page("pages/3_浏览资料.py")
         if preview_action.button(
             "关闭快速预览" if preview_open else "打开快速预览",
             key=f"toggle_preview_{result.page_id}",
