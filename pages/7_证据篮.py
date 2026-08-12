@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 
 import streamlit as st
 
-from src.evidence_basket_service import EvidenceBasketError
+from src.evidence_basket_service import (
+    EmptyEvidenceBasketError,
+    EvidenceBasketError,
+)
 from src.evidence_prompt_builder import NO_CONFIRMED_EVIDENCE_MESSAGE
 from src.models import EvidenceConfirmationStatus, EvidenceType
 from src.runtime import application_evidence_basket_service
@@ -251,12 +255,14 @@ if st.button(
     use_container_width=True,
 ):
     try:
-        st.session_state["basket_prompt_package"] = (
-            basket_service.export_prompt_package(
-                prompt_question,
-                basket_id=basket.id,
-            )
+        generated_package = basket_service.export_prompt_package(
+            prompt_question,
+            basket_id=basket.id,
         )
+        st.session_state["basket_prompt_package"] = generated_package
+        st.session_state["basket_prompt_fingerprint"] = hashlib.sha256(
+            generated_package.encode("utf-8")
+        ).hexdigest()
     except EvidenceBasketError as exc:
         st.error(f"无法生成引用提示词包：{exc}")
     except Exception as exc:
@@ -264,6 +270,22 @@ if st.button(
         st.error(f"生成引用提示词包失败：{exc}")
 
 prompt_package = st.session_state.get("basket_prompt_package", "")
+if prompt_package:
+    try:
+        current_fingerprint = basket_service.prompt_package_fingerprint(
+            prompt_question,
+            basket_id=basket.id,
+        )
+    except EmptyEvidenceBasketError:
+        current_fingerprint = None
+    except EvidenceBasketError as exc:
+        current_fingerprint = None
+        st.error(f"证据来源校验失败，先前生成的提示词包已失效：{exc}")
+    if st.session_state.get("basket_prompt_fingerprint") != current_fingerprint:
+        st.session_state.pop("basket_prompt_package", None)
+        st.session_state.pop("basket_prompt_fingerprint", None)
+        prompt_package = ""
+        st.info("证据或问题已变化，请重新生成引用提示词包。")
 if prompt_package:
     st.code(prompt_package, language="markdown")
 

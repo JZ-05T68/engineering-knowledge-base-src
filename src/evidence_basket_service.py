@@ -391,15 +391,42 @@ class EvidenceBasketService:
         because they never enter the package.
         """
 
-        from src.evidence_prompt_builder import (
-            NO_CONFIRMED_EVIDENCE_MESSAGE,
-            EvidencePromptBuilder,
-        )
+        from src.evidence_prompt_builder import EvidencePromptBuilder
 
         basket = self.default_basket() if basket_id is None else self._require_basket(basket_id)
+        validated, page_texts = self._confirmed_prompt_inputs(basket.id)
+        return EvidencePromptBuilder().build(question, validated, page_texts=page_texts)
+
+    def prompt_package_fingerprint(
+        self,
+        question: str,
+        *,
+        basket_id: int | None = None,
+    ) -> str:
+        """Hash the exact prompt that the current effective inputs would generate.
+
+        Freshness guard (v0.4.2): the fingerprint is derived from the same
+        validated, confirmed-only inputs as :meth:`export_prompt_package`, so
+        any change that would alter the generated prompt — question, confirmed
+        set, order, notes, page text or source validity — changes the
+        fingerprint, while unconfirmed-only changes never do. Source
+        validation stays fail closed: a broken confirmed source raises here
+        exactly as it would during generation.
+        """
+
+        prompt = self.export_prompt_package(question, basket_id=basket_id)
+        return _sha256(prompt)
+
+    def _confirmed_prompt_inputs(
+        self, basket_id: int
+    ) -> tuple[list[EvidenceItem], dict[int, str]]:
+        """Return validated confirmed items and current PAGE source texts."""
+
+        from src.evidence_prompt_builder import NO_CONFIRMED_EVIDENCE_MESSAGE
+
         confirmed = [
             item
-            for item in self.list_items(basket.id)
+            for item in self.list_items(basket_id)
             if item.confirmation_status is EvidenceConfirmationStatus.CONFIRMED
         ]
         if not confirmed:
@@ -413,7 +440,7 @@ class EvidenceBasketService:
             if page is None:  # pragma: no cover - _validated_snapshot already checked
                 raise EvidenceSourceError(f"页面记录不存在（页面编号 {item.page_id}）。")
             page_texts[item.id] = _original_source_text(page)
-        return EvidencePromptBuilder().build(question, validated, page_texts=page_texts)
+        return validated, page_texts
 
     def _require_basket(self, basket_id: int) -> EvidenceBasket:
         basket = self._repository.get_basket(basket_id)
