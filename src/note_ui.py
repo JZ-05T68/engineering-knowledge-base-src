@@ -274,12 +274,16 @@ def _render_page_section(
             page_id, text, importance=level
         ),
         flash="页面级笔记已保存。",
+        save_button_type="primary",
     )
     _render_text_selection_create(note_service, page_id)
     _render_image_region_create(note_service, document_id, page_id, display_width)
 
 
-def _render_create_form(*, scope: str, owner_id: int, title: str, create, flash: str) -> None:
+def _render_create_form(
+    *, scope: str, owner_id: int, title: str, create, flash: str,
+    save_button_type: str = "secondary",
+) -> None:
     key = note_create_key(scope, owner_id)
     text = st.text_area(
         f"{title}（最多 {MAX_NOTE_TEXT} 字符）",
@@ -294,7 +298,9 @@ def _render_create_form(*, scope: str, owner_id: int, title: str, create, flash:
         format_func=lambda item: item.label,
         key=f"{key}_imp",
     )
-    if st.button(f"保存{title.removeprefix('新建')}", key=f"{key}_save"):
+    if st.button(
+        f"保存{title.removeprefix('新建')}", key=f"{key}_save", type=save_button_type
+    ):
         if not text.strip():
             st.warning("个人笔记不能为空")
             return

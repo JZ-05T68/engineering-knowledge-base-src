@@ -147,6 +147,16 @@ def test_create_page_note_secondary(tmp_path, monkeypatch) -> None:
     assert notes[0].note.importance == "secondary"
 
 
+def test_create_save_button_styles(tmp_path, monkeypatch) -> None:
+    """UI-AMEND-02: 页面级保存按钮 primary；文档级保持 secondary 默认。"""
+    app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    page_save = _button(app, f"note_create_page_{page.id}_save")
+    document_save = _button(app, f"note_create_document_{document_id}_save")
+    assert page_save.proto.type == "primary"
+    assert document_save.proto.type == "secondary"
+
+
 def test_create_text_selection_with_level_and_reset(tmp_path, monkeypatch) -> None:
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
