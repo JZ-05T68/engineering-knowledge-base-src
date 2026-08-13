@@ -228,7 +228,7 @@ document 生命周期绑定。**本版不保留 detached note。**
 v0.3.1 的隔离区为 `.deletion-quarantine/{doc_id}-{timestamp}/`，文件加
 序号前缀移入。它支持"移回"但不携带足以可靠判定恢复方向的持久化元数据。
 
-### 11.2 per-operation manifest/journal（冻结要求）
+### 11.2 每次操作的 manifest/journal（冻结要求）
 
 S2 起，每一次删除操作使用独立目录：
 

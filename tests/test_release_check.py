@@ -30,8 +30,8 @@ from src.backup_service import BackupValidation
 from src.config import OfficialEndpointError, Settings
 
 
-def test_release_gate_targets_v024() -> None:
-    assert EXPECTED_VERSION == "0.4.2"
+def test_release_gate_targets_v043() -> None:
+    assert EXPECTED_VERSION == "0.4.3"
 
 
 def test_all_pass_report_returns_zero_and_clear_summary() -> None:

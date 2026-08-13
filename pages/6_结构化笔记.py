@@ -12,7 +12,7 @@ from src.runtime import application_database
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="结构化笔记｜工程知识库 v0.4.2", page_icon="🗂️", layout="wide")
+st.set_page_config(page_title="结构化笔记｜工程知识库 v0.4.3", page_icon="🗂️", layout="wide")
 st.title("结构化笔记")
 st.caption("集中查看文档级、页面级、文字选区和图片区域笔记，并返回原始文档或页面。")
 
