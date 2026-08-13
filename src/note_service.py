@@ -282,7 +282,9 @@ class NoteService:
             "LEFT JOIN documents "
             "ON documents.id = COALESCE(notes.document_id, pages.document_id) "
             f"{where} "
-            "ORDER BY notes.updated_at DESC, notes.id DESC LIMIT ? OFFSET ?"
+            "ORDER BY CASE notes.importance "
+            "WHEN 'primary' THEN 0 WHEN 'secondary' THEN 1 ELSE 2 END, "
+            "notes.updated_at DESC, notes.id DESC LIMIT ? OFFSET ?"
         )
         with self._database._connection() as connection:
             rows = connection.execute(sql, (*parameters, limit, offset)).fetchall()

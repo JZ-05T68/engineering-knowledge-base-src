@@ -101,6 +101,11 @@ def _button(app: AppTest, key: str):
     return matches[0]
 
 
+def _start_create(app: AppTest, page_id: int) -> None:
+    """FIX-A：从结构化笔记 tab 入口激活全宽框选 workbench。"""
+    _button(app, f"note_image_create_start_{page_id}").click().run()
+
+
 def _warnings(app: AppTest) -> list[str]:
     return [warning.value for warning in app.warning]
 
@@ -134,29 +139,40 @@ def test_component_version_and_call_contract(tmp_path: Path, monkeypatch) -> Non
     assert importlib.metadata.version("streamlit-image-coordinates") == "0.4.0"
     calls: list = []
     _mock_component(monkeypatch, None, calls)
-    app, _, _, _ = _build_reader(tmp_path, monkeypatch)
+    app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
     assert not app.exception
-    assert calls, "创建组件应被调用"
+    # FIX-A：未激活时不渲染 selector workbench
+    assert not calls
+    page = _page1(database, document_id)
+    _start_create(app, page.id)
+    assert calls, "激活后创建组件应被调用"
     for kwargs in calls:
         assert kwargs["click_and_drag"] is True
         assert kwargs["cursor"] == "crosshair"
-        assert "_w" in kwargs["key"]
+        assert kwargs["use_column_width"] == "always"
+        assert "width" not in kwargs
+        assert "_w" not in kwargs["key"]
     assert any("create_region" in kwargs["key"] for kwargs in calls)
     assert "streamlit_drawable_canvas" not in dir(note_ui)
 
 
-def test_component_key_contains_display_width(tmp_path: Path, monkeypatch) -> None:
+def test_component_key_has_no_width_version(tmp_path: Path, monkeypatch) -> None:
+    """FIX-A：组件 key 不再携带页面缩放 slider 的宽度版本。"""
     calls: list = []
     _mock_component(monkeypatch, None, calls)
-    app, _, _, _ = _build_reader(tmp_path, monkeypatch)
+    app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    _start_create(app, page.id)
     key = next(kwargs["key"] for kwargs in calls if "create_region" in kwargs["key"])
-    assert key.endswith("_w850")
+    assert "_w" not in key
     slider = next(s for s in app.slider if s.label == "页面缩放")
     slider.set_value(600).run()
     calls.clear()
     app.run(timeout=25)
-    key = next(kwargs["key"] for kwargs in calls if "create_region" in kwargs["key"])
-    assert key.endswith("_w600")
+    key_after = next(
+        kwargs["key"] for kwargs in calls if "create_region" in kwargs["key"]
+    )
+    assert key_after == key
 
 
 # --- B. drag handling ------------------------------------------------------------
@@ -164,7 +180,9 @@ def test_component_key_contains_display_width(tmp_path: Path, monkeypatch) -> No
 
 def test_valid_drag_stores_region_in_session(tmp_path: Path, monkeypatch) -> None:
     _mock_component(monkeypatch, _drag(85, 128, 340, 510))
-    app, _, _, _ = _build_reader(tmp_path, monkeypatch)
+    app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    _start_create(app, page.id)
     assert not app.exception
     successes = [success.value for success in app.success]
     assert any("当前框选" in value for value in successes)
@@ -174,6 +192,7 @@ def test_reversed_drag_sorted(tmp_path: Path, monkeypatch) -> None:
     _mock_component(monkeypatch, _drag(340, 510, 85, 128))
     app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
+    _start_create(app, page.id)
     assert _create_region(app, page.id) == {"x0": 80, "y0": 120, "x1": 320, "y1": 480}
 
 
@@ -181,14 +200,16 @@ def test_out_of_bounds_clamped(tmp_path: Path, monkeypatch) -> None:
     _mock_component(monkeypatch, _drag(-100, -100, 2000, 3000))
     app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
+    _start_create(app, page.id)
     assert _create_region(app, page.id) == {"x0": 0, "y0": 0, "x1": 800, "y1": 1200}
 
 
 def test_zero_area_and_garbage_rejected(tmp_path: Path, monkeypatch) -> None:
     _mock_component(monkeypatch, _drag(100, 100, 100, 100))
     app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
-    assert any("框选区域无效" in value for value in _warnings(app))
     page = _page1(database, document_id)
+    _start_create(app, page.id)
+    assert any("框选区域无效" in value for value in _warnings(app))
     assert _create_region(app, page.id) is None
 
     _mock_component(monkeypatch, {"x1": None, "y1": 1})
@@ -199,10 +220,11 @@ def test_zero_area_and_garbage_rejected(tmp_path: Path, monkeypatch) -> None:
 def test_rerun_does_not_duplicate_create(tmp_path: Path, monkeypatch) -> None:
     _mock_component(
         monkeypatch,
-        lambda kwargs: _drag(85, 128, 340, 510) if "_v0_" in kwargs["key"] else None,
+        lambda kwargs: _drag(85, 128, 340, 510) if kwargs["key"].endswith("_v0") else None,
     )
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
+    _start_create(app, page.id)
     app.text_area(key=f"note_image_create_personal_{page.id}").input("区域笔记").run()
     _button(app, f"note_image_create_save_{page.id}").click().run()
     app.run(timeout=25)
@@ -211,26 +233,20 @@ def test_rerun_does_not_duplicate_create(tmp_path: Path, monkeypatch) -> None:
     assert len(notes) == 1
 
 
-# --- C. zoom consistency ----------------------------------------------------------
+# --- C. zoom decoupling ----------------------------------------------------------
 
 
-def test_same_region_maps_identically_across_widths(tmp_path: Path, monkeypatch) -> None:
-    results: dict[int, dict] = {}
-    for width in (500, 850, 1400):
-        scale = width / 800
-        _mock_component(
-            monkeypatch,
-            _drag(int(80 * scale), int(120 * scale), int(320 * scale), int(480 * scale),
-                  width=width, height=int(1200 * scale)),
-        )
-        app, database, _, document_id = _build_reader(tmp_path / f"w{width}", monkeypatch)
-        slider = next(s for s in app.slider if s.label == "页面缩放")
-        slider.set_value(width).run()
-        page = _page1(database, document_id)
-        results[width] = _create_region(app, page.id)
-    assert results[500] == results[850] == results[1400] == {
-        "x0": 80, "y0": 120, "x1": 320, "y1": 480
-    }
+def test_region_mapping_independent_of_zoom_slider(tmp_path: Path, monkeypatch) -> None:
+    """FIX-A：坐标换算只看组件回报的实际显示尺寸，与页面缩放 slider 无关。"""
+    _mock_component(monkeypatch, _drag(85, 128, 340, 510))
+    app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    _start_create(app, page.id)
+    expected = {"x0": 80, "y0": 120, "x1": 320, "y1": 480}
+    assert _create_region(app, page.id) == expected
+    slider = next(s for s in app.slider if s.label == "页面缩放")
+    slider.set_value(1400).run()
+    assert _create_region(app, page.id) == expected
 
 
 # --- D. create success --------------------------------------------------------------
@@ -239,16 +255,18 @@ def test_same_region_maps_identically_across_widths(tmp_path: Path, monkeypatch)
 def test_create_success_uses_service_side_png_facts(tmp_path: Path, monkeypatch) -> None:
     _mock_component(
         monkeypatch,
-        lambda kwargs: _drag(85, 128, 340, 510) if "_v0_" in kwargs["key"] else None,
+        lambda kwargs: _drag(85, 128, 340, 510) if kwargs["key"].endswith("_v0") else None,
     )
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
     expected_hash = _png_hash(database, document_id)
 
+    _start_create(app, page.id)
     app.text_area(key=f"note_image_create_personal_{page.id}").input("阀体区域").run()
     _button(app, f"note_image_create_save_{page.id}").click().run()
     assert not app.exception
 
+    views = note_service.list_page_notes(page.id)
     views = note_service.list_page_notes(page.id)
     assert len(views) == 1
     note = views[0].note
@@ -259,10 +277,11 @@ def test_create_success_uses_service_side_png_facts(tmp_path: Path, monkeypatch)
         80, 120, 320, 480,
     )
     assert views[0].source_status is NoteSourceStatus.VALID
-    # 状态清理：框选与个人笔记清空、组件版本前进
-    assert f"note_image_create_region_{page.id}" not in app.session_state
-    assert app.text_area(key=f"note_image_create_personal_{page.id}").value == ""
+    # 状态清理：下一次渲染应用 pending-clear，框选与 active 状态复位
     assert any("图片区域笔记已保存" in success.value for success in app.success)
+    app.run(timeout=25)
+    assert f"note_image_create_region_{page.id}" not in app.session_state
+    assert f"note_image_create_active_{page.id}" not in app.session_state
 
 
 # --- E. create failures ----------------------------------------------------------------
@@ -272,6 +291,7 @@ def test_create_requires_region_and_personal(tmp_path: Path, monkeypatch) -> Non
     _mock_component(monkeypatch, None)
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
+    _start_create(app, page.id)
     _button(app, f"note_image_create_save_{page.id}").click().run()
     assert any("请先在页面图像上拖拽" in value for value in _warnings(app))
 
@@ -297,10 +317,11 @@ def test_create_missing_and_unreadable_png(tmp_path: Path, monkeypatch) -> None:
 def test_create_failure_keeps_inputs(tmp_path: Path, monkeypatch) -> None:
     _mock_component(
         monkeypatch,
-        lambda kwargs: _drag(85, 128, 340, 510) if "_v0_" in kwargs["key"] else None,
+        lambda kwargs: _drag(85, 128, 340, 510) if kwargs["key"].endswith("_v0") else None,
     )
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
+    _start_create(app, page.id)
 
     def fail(*args, **kwargs):
         raise NoteWriteError("保存笔记失败，请重试")
@@ -381,7 +402,7 @@ def test_rebind_full_flow(tmp_path: Path, monkeypatch) -> None:
     before = note_service.get_note(note_id).note
 
     def component(kwargs):
-        if f"rebind_region_{note_id}" in kwargs["key"] and "_v0_" in kwargs["key"]:
+        if f"rebind_region_{note_id}" in kwargs["key"] and kwargs["key"].endswith("_v0"):
             return _drag(170, 255, 510, 680)
         return None
 
@@ -418,7 +439,7 @@ def test_rebind_failure_keeps_original(tmp_path: Path, monkeypatch) -> None:
     before = note_service.get_note(note_id).note
 
     def component(kwargs):
-        if f"rebind_region_{note_id}" in kwargs["key"] and "_v0_" in kwargs["key"]:
+        if f"rebind_region_{note_id}" in kwargs["key"] and kwargs["key"].endswith("_v0"):
             return _drag(170, 255, 510, 680)
         return None
 
@@ -510,12 +531,13 @@ def test_region_does_not_leak_across_pages(tmp_path: Path, monkeypatch) -> None:
     _mock_component(
         monkeypatch,
         lambda kwargs: _drag(85, 128, 340, 510)
-        if "_pg1_" in kwargs["key"] and "_v0_" in kwargs["key"]
+        if "_pg1_" in kwargs["key"] and kwargs["key"].endswith("_v0")
         else None,
     )
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page2 = database.get_page_by_number(document_id, 2)
     page1 = _page1(database, document_id)
+    _start_create(app, page1.id)
     assert f"note_image_create_region_{page1.id}" in app.session_state
 
     page_select = next(sb for sb in app.selectbox if sb.label == "页码")
@@ -527,6 +549,7 @@ def test_advanced_manual_coordinates(tmp_path: Path, monkeypatch) -> None:
     _mock_component(monkeypatch, None)
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
     page = _page1(database, document_id)
+    _start_create(app, page.id)
     app.number_input(key=f"note_image_manual_x0_{page.id}").set_value(50).run()
     app.number_input(key=f"note_image_manual_y0_{page.id}").set_value(60).run()
     app.number_input(key=f"note_image_manual_x1_{page.id}").set_value(250).run()
@@ -540,3 +563,42 @@ def test_advanced_manual_coordinates(tmp_path: Path, monkeypatch) -> None:
     assert (note.region_x0, note.region_y0, note.region_x1, note.region_y1) == (
         50, 60, 250, 360,
     )
+
+
+def test_manual_coordinate_fallback_label(tmp_path: Path, monkeypatch) -> None:
+    """FIX-B：手动坐标 fallback 保留、默认折叠、文案面向普通用户。"""
+    _mock_component(monkeypatch, None)
+    app, database, _, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    _start_create(app, page.id)
+    labels = [expander.label for expander in app.expander]
+    assert "手动坐标输入（备用）" in labels
+    assert "高级坐标输入（调试与故障兜底）" not in labels
+    fallback = next(
+        expander for expander in app.expander if expander.label == "手动坐标输入（备用）"
+    )
+    assert fallback.proto.expanded is False
+
+
+def test_create_active_state_lifecycle(tmp_path: Path, monkeypatch) -> None:
+    """FIX-A：入口留在结构化笔记 tab；激活/取消/保存后 active 状态正确清理。"""
+    _mock_component(monkeypatch, _drag(85, 128, 340, 510))
+    app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)
+    page = _page1(database, document_id)
+    active_key = f"note_image_create_active_{page.id}"
+    # 入口仍在结构化笔记 tab（expander 存在），未激活时不进入框选状态
+    assert "新建图片区域笔记" in [expander.label for expander in app.expander]
+    assert active_key not in app.session_state
+    # 激活后 active=True
+    _start_create(app, page.id)
+    assert app.session_state[active_key] is True
+    # 取消后清理
+    _button(app, f"note_image_create_cancel_{page.id}").click().run()
+    assert active_key not in app.session_state
+    # 保存成功后同样在下一次渲染清理
+    _start_create(app, page.id)
+    app.text_area(key=f"note_image_create_personal_{page.id}").input("区域笔记").run()
+    _button(app, f"note_image_create_save_{page.id}").click().run()
+    app.run(timeout=25)
+    assert active_key not in app.session_state
+    assert len(note_service.list_page_notes(page.id)) == 1

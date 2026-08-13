@@ -773,6 +773,8 @@ if st.button(
         st.session_state["basket_flash"] = "当前页整页证据已持久化加入证据篮。"
         st.rerun()
 
+# FIX-A：图片区域框选 workbench 的全宽渲染区（active 时才写入内容）。
+region_selector_area = st.container()
 image_column, editor_column = st.columns([1.08, 1], gap="large")
 with image_column:
     st.subheader("原始页面")
@@ -877,7 +879,7 @@ with editor_column:
             note_service,
             document_id=document.id,
             page_id=page.id,
-            display_width=image_width,
+            region_selector_area=region_selector_area,
             basket_service=basket_service,
         )
 

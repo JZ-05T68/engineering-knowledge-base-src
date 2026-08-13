@@ -284,13 +284,40 @@ def test_filter_pagination_and_default_order(env: dict) -> None:
     page_two = service.list_note_summaries(importance=None, limit=2, offset=2)
     assert len(page_one) == 2 and len(page_two) == 1
     ordered = [item.note.id for item in (*page_one, *page_two)]
-    assert ordered == sorted(ids.values(), reverse=True)  # updated_at/id DESC 不变
+    # FIX-C：默认排序为 重点 → 次重点 → 一般（同档内 updated_at/id DESC）
+    assert ordered == [ids["primary"], ids["secondary"], ids["normal"]]
     with pytest.raises(NoteValidationError):
         service.list_note_summaries(importance="high", limit=100)
     with pytest.raises(NoteValidationError):
         service.count_notes(importance="key")
     with pytest.raises(NoteValidationError):
         service.list_notes(importance="重点", limit=100)
+
+
+def test_list_orders_importance_then_recency(env: dict) -> None:
+    """FIX-C：重点 → 次重点 → 一般；同一重要程度内 updated_at DESC。"""
+    service: NoteService = env["service"]
+    normal_id = service.create_page_note(1, "一般", importance="normal").note.id
+    primary_old = service.create_page_note(1, "重点（旧）", importance="primary").note.id
+    secondary_id = service.create_page_note(1, "次重点", importance="secondary").note.id
+    primary_new = service.create_page_note(1, "重点（新）", importance="primary").note.id
+    with sqlite3.connect(env["database"].database_path) as connection:
+        connection.execute(
+            "UPDATE notes SET updated_at = '2026-01-01T00:00:00+00:00' WHERE id = ?",
+            (primary_old,),
+        )
+        connection.execute(
+            "UPDATE notes SET updated_at = '2026-03-01T00:00:00+00:00' WHERE id = ?",
+            (primary_new,),
+        )
+        connection.commit()
+    items = service.list_note_summaries(limit=100)
+    assert [item.note.id for item in items] == [
+        primary_new,
+        primary_old,
+        secondary_id,
+        normal_id,
+    ]
 
 
 # --- E. preferences ----------------------------------------------------------

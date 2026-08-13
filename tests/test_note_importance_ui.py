@@ -176,6 +176,7 @@ def test_create_image_region_with_level(tmp_path, monkeypatch) -> None:
     page = _page1(database, document_id)
     _mock_component(monkeypatch, _drag())
     app.run(timeout=25)
+    _button(app, f"note_image_create_start_{page.id}").click().run()
     app.text_area(key=f"note_image_create_personal_{page.id}").input("重点区域").run()
     _selectbox(app, f"note_image_create_imp_{page.id}").set_value(
         NoteImportance.PRIMARY

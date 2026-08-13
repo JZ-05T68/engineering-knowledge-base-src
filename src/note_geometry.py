@@ -22,9 +22,9 @@ def make_component_key(
     """Build a stable, page-scoped component key.
 
     The key encodes the owning document, page, interaction mode and an anchor
-    version so that switching pages never leaks component state. The caller
-    appends the display-width token (``_w{width}``) because the component only
-    rescales when its iframe is rebuilt.
+    version so that switching pages never leaks component state. The component
+    itself rescales to the available width (``use_column_width="always"``), so
+    no display-width token is embedded in the key.
     """
     if not mode or not mode.replace("_", "").isalnum():
         raise ValueError(f"非法 key 模式: {mode!r}")

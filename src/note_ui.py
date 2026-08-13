@@ -14,6 +14,7 @@ from pathlib import Path
 
 import streamlit as st
 from PIL import Image, ImageDraw
+from streamlit.delta_generator import DeltaGenerator
 from streamlit_image_coordinates import streamlit_image_coordinates
 
 from src.evidence_basket_service import (
@@ -164,14 +165,16 @@ def render_structured_notes_tab(
     *,
     document_id: int,
     page_id: int,
-    display_width: int,
+    region_selector_area: DeltaGenerator | None = None,
     basket_service: EvidenceBasketService | None = None,
 ) -> None:
     """Render the whole「结构化笔记」tab: document notes + current-page notes.
 
     ``basket_service`` is optional: pages that pass it get a「加入证据篮」
     action on anchored notes; pages that omit it render notes exactly as
-    before.
+    before. ``region_selector_area`` is the full-width slot where the active
+    image-region framing workbench renders (FIX-A); when omitted, the
+    workbench falls back to inline rendering.
     """
 
     flash = st.session_state.pop(_FLASH_KEY, "")
@@ -182,7 +185,12 @@ def render_structured_notes_tab(
     _render_document_section(note_service, document_id, preferences)
     st.divider()
     _render_page_section(
-        note_service, document_id, page_id, display_width, preferences, basket_service
+        note_service,
+        document_id,
+        page_id,
+        region_selector_area,
+        preferences,
+        basket_service,
     )
 
 
@@ -223,7 +231,7 @@ def _render_page_section(
     note_service: NoteService,
     document_id: int,
     page_id: int,
-    display_width: int,
+    region_selector_area: DeltaGenerator | None,
     preferences: NoteDisplayPreferences,
     basket_service: EvidenceBasketService | None,
 ) -> None:
@@ -264,7 +272,7 @@ def _render_page_section(
         )
     for view in region_views:
         _render_image_region_note(
-            note_service, view, document_id, display_width, preferences, basket_service
+            note_service, view, document_id, region_selector_area, preferences, basket_service
         )
     _render_create_form(
         scope="page",
@@ -277,7 +285,7 @@ def _render_page_section(
         save_button_type="primary",
     )
     _render_text_selection_create(note_service, page_id)
-    _render_image_region_create(note_service, document_id, page_id, display_width)
+    _render_image_region_create(note_service, document_id, page_id, region_selector_area)
 
 
 def _render_create_form(
@@ -751,8 +759,12 @@ def _discard_rebind_preview(preview_key: str, confirm_key: str) -> None:
 
 
 def _render_image_region_create(
-    note_service: NoteService, document_id: int, page_id: int, display_width: int
+    note_service: NoteService,
+    document_id: int,
+    page_id: int,
+    region_selector_area: DeltaGenerator | None,
 ) -> None:
+    active_key = f"note_image_create_active_{page_id}"
     with st.expander("新建图片区域笔记", expanded=False):
         try:
             preview = note_service.get_image_region_source_preview(page_id)
@@ -765,25 +777,41 @@ def _render_image_region_create(
         except Exception as exc:
             _show_load_error(exc)
             return
+        if not st.session_state.get(active_key):
+            st.caption("进入框选后，完整页面图像会显示在页面上方的全宽区域。")
+            if st.button("开始框选", key=f"note_image_create_start_{page_id}"):
+                st.session_state[active_key] = True
+                st.rerun()
+            return
+        st.info("框选进行中：请在页面上方的全宽区域完成框选与保存。")
 
+    # FIX-A：active 后整页框选 workbench 渲染到全宽 slot，不再受右栏宽度限制。
+    workbench = (
+        region_selector_area if region_selector_area is not None else st.container()
+    )
+    with workbench:
+        st.markdown("**新建图片区域笔记（全宽框选区）**")
+        if st.button("取消框选", key=f"note_image_create_cancel_{page_id}"):
+            _queue_key_clear(active_key, f"note_image_create_region_{page_id}")
+            st.rerun()
+            return
         st.caption(
             f"原始 PNG 尺寸：{preview.width} × {preview.height} 像素，"
-            "框选坐标以此为准（显示宽度不影响最终坐标）。"
+            "框选坐标以此为准（显示缩放不影响最终坐标）。"
         )
         version = st.session_state.get(f"note_image_anchor_version_create_{page_id}", 0)
-        component_key = (
-            make_component_key(
-                document_id, page_id, mode="create_region", anchor_version=version
+        component_key = make_component_key(
+            document_id, page_id, mode="create_region", anchor_version=version
+        )
+        # FIX-D：整页图像加中性边框，帮助用户感知画布范围（纯展示，不影响坐标）。
+        with st.container(border=True):
+            value = streamlit_image_coordinates(
+                str(preview.path),
+                key=component_key,
+                click_and_drag=True,
+                cursor="crosshair",
+                use_column_width="always",
             )
-            + f"_w{display_width}"
-        )
-        value = streamlit_image_coordinates(
-            str(preview.path),
-            width=display_width,
-            key=component_key,
-            click_and_drag=True,
-            cursor="crosshair",
-        )
         region_key = f"note_image_create_region_{page_id}"
         if value is not None:
             try:
@@ -815,7 +843,7 @@ def _render_image_region_create(
                 _queue_key_clear(region_key)
                 st.rerun()
 
-        with st.expander("高级坐标输入（调试与故障兜底）", expanded=False):
+        with st.expander("手动坐标输入（备用）", expanded=False):
             columns = st.columns(4)
             manual = {
                 "x0": columns[0].number_input(
@@ -849,13 +877,13 @@ def _render_image_region_create(
                     st.session_state[region_key] = rect
                     st.rerun()
 
-        personal = st.text_area(
+        st.text_area(
             "个人笔记",
             height=120,
             key=f"note_image_create_personal_{page_id}",
             placeholder="记录你对这个区域的判断、说明和想法。",
         )
-        level = st.selectbox(
+        st.selectbox(
             "重要程度",
             options=_IMPORTANCE_LEVELS,
             index=2,
@@ -863,52 +891,72 @@ def _render_image_region_create(
             key=f"note_image_create_imp_{page_id}",
         )
         if st.button("保存图片区域笔记", key=f"note_image_create_save_{page_id}"):
-            if not region:
-                st.warning("请先在页面图像上拖拽选择一个区域。")
-                return
-            if not personal.strip():
-                st.warning("个人笔记不能为空")
-                return
-            try:
-                note_service.create_image_region_note(
-                    page_id,
-                    region["x0"],
-                    region["y0"],
-                    region["x1"],
-                    region["y1"],
-                    personal,
-                    importance=level.value,
-                )
-            except PageImageMissingError:
-                st.warning("当前页面图像不存在，无法创建图片区域笔记。")
-            except PageImageUnreadableError:
-                st.warning("当前页面图像无法读取，请检查页面文件完整性。")
-            except InvalidImageRegionError:
-                st.warning("框选区域无效，请重新选择。")
-            except Exception as exc:
-                _show_save_error(exc)  # 框选与个人笔记均保留
-            else:
-                st.session_state[f"note_image_anchor_version_create_{page_id}"] = (
-                    version + 1
-                )
-                _queue_key_clear(
-                    region_key,
-                    f"note_image_create_personal_{page_id}",
-                    f"note_image_create_imp_{page_id}",
-                    f"note_image_manual_x0_{page_id}",
-                    f"note_image_manual_y0_{page_id}",
-                    f"note_image_manual_x1_{page_id}",
-                    f"note_image_manual_y1_{page_id}",
-                )
-                st.session_state[_FLASH_KEY] = "图片区域笔记已保存。"
-                st.rerun()
+            # 保存成功后不做 st.rerun：workbench 的卸载由 pending-clear 在下一
+            # 次渲染完成（rerun 会中断本 pass，已渲染的组件状态会与卸载后的
+            # session state 不一致）。成功/失败信息均在本 pass 内联显示。
+            if _finish_image_region_create(note_service, page_id, active_key):
+                st.success("图片区域笔记已保存。")
+
+
+def _finish_image_region_create(
+    note_service: NoteService, page_id: int, active_key: str
+) -> bool:
+    """Validate and persist the image-region create form (FIX-A).
+
+    Returns True when the note was persisted; the workbench then unmounts via
+    pending key clears on the next render (no st.rerun after save, so the
+    current pass renders every widget to a consistent tree). Validation or
+    write failures show a warning/error and return False, with every input
+    preserved.
+    """
+
+    region_key = f"note_image_create_region_{page_id}"
+    region = st.session_state.get(region_key)
+    if not region:
+        st.warning("请先在页面图像上拖拽选择一个区域。")
+        return False
+    personal = str(st.session_state.get(f"note_image_create_personal_{page_id}", ""))
+    if not personal.strip():
+        st.warning("个人笔记不能为空")
+        return False
+    level = st.session_state.get(f"note_image_create_imp_{page_id}")
+    importance = level.value if isinstance(level, NoteImportance) else "normal"
+    try:
+        note_service.create_image_region_note(
+            page_id,
+            region["x0"],
+            region["y0"],
+            region["x1"],
+            region["y1"],
+            personal,
+            importance=importance,
+        )
+    except PageImageMissingError:
+        st.warning("当前页面图像不存在，无法创建图片区域笔记。")
+        return False
+    except PageImageUnreadableError:
+        st.warning("当前页面图像无法读取，请检查页面文件完整性。")
+        return False
+    except InvalidImageRegionError:
+        st.warning("框选区域无效，请重新选择。")
+        return False
+    except Exception as exc:
+        _show_save_error(exc)  # 框选与个人笔记均保留
+        return False
+    st.session_state[f"note_image_anchor_version_create_{page_id}"] = (
+        st.session_state.get(f"note_image_anchor_version_create_{page_id}", 0) + 1
+    )
+    # workbench 的卸载由 pending-clear 在下一次渲染完成；只能清理非 widget
+    # 的普通 session key，卸载后的 widget key 不得 pending-clear。
+    _queue_key_clear(active_key, region_key)
+    return True
 
 
 def _render_image_region_note(
     note_service: NoteService,
     view: NoteView,
     document_id: int,
-    display_width: int,
+    region_selector_area: DeltaGenerator | None,
     preferences: NoteDisplayPreferences,
     basket_service: EvidenceBasketService | None,
 ) -> None:
@@ -950,7 +998,7 @@ def _render_image_region_note(
             if st.button("编辑", key=f"note_image_edit_open_{note.id}"):
                 st.session_state[f"note_image_edit_mode_{note.id}"] = True
                 st.rerun()
-        _render_image_rebind_area(note_service, view, document_id, display_width)
+        _render_image_rebind_area(note_service, view, document_id, region_selector_area)
         if basket_service is not None:
             _render_add_to_basket_button(
                 basket_service, document_id=document_id, note=note
@@ -1023,7 +1071,10 @@ def _render_image_region_edit(note_service: NoteService, view: NoteView) -> None
 
 
 def _render_image_rebind_area(
-    note_service: NoteService, view: NoteView, document_id: int, display_width: int
+    note_service: NoteService,
+    view: NoteView,
+    document_id: int,
+    region_selector_area: DeltaGenerator | None,
 ) -> None:
     note = view.note
     active_key = f"note_image_rebind_active_{note.id}"
@@ -1033,6 +1084,14 @@ def _render_image_rebind_area(
                 st.session_state[active_key] = True
                 st.rerun()
             return
+        st.info("重新框选进行中：请在页面上方的全宽区域完成选择与确认。")
+
+    # FIX-A：active 后 rebind workbench 与创建路径共用同一个全宽 slot 策略。
+    workbench = (
+        region_selector_area if region_selector_area is not None else st.container()
+    )
+    with workbench:
+        st.markdown(f"**重新框选区域 · 图片区域笔记 #{note.id}**")
         if st.button("取消重新框选", key=f"note_image_rebind_stop_{note.id}"):
             _queue_key_clear(
                 active_key,
@@ -1057,22 +1116,21 @@ def _render_image_rebind_area(
         st.caption(f"当前图像：{preview.width} × {preview.height} 像素")
 
         version = st.session_state.get(f"note_image_anchor_version_rebind_{note.id}", 0)
-        component_key = (
-            make_component_key(
-                document_id,
-                note.page_id,
-                mode=f"rebind_region_{note.id}",
-                anchor_version=version,
+        component_key = make_component_key(
+            document_id,
+            note.page_id,
+            mode=f"rebind_region_{note.id}",
+            anchor_version=version,
+        )
+        # FIX-D：与创建路径一致，整页图像加中性边框（纯展示，不影响坐标）。
+        with st.container(border=True):
+            value = streamlit_image_coordinates(
+                str(preview.path),
+                key=component_key,
+                click_and_drag=True,
+                cursor="crosshair",
+                use_column_width="always",
             )
-            + f"_w{display_width}"
-        )
-        value = streamlit_image_coordinates(
-            str(preview.path),
-            width=display_width,
-            key=component_key,
-            click_and_drag=True,
-            cursor="crosshair",
-        )
         region_key = f"note_image_rebind_region_{note.id}"
         if value is not None:
             try:
