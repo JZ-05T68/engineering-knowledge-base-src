@@ -645,10 +645,10 @@ def _apply_version_six(connection: sqlite3.Connection) -> None:
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 color_primary TEXT NOT NULL DEFAULT '#c0392b'
                     CHECK (color_primary GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
-                color_secondary TEXT NOT NULL DEFAULT '#b8860b' CHECK (
+                color_secondary TEXT NOT NULL DEFAULT '#2563eb' CHECK (
                     color_secondary GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'
                 ),
-                color_normal TEXT NOT NULL DEFAULT '#5a6570'
+                color_normal TEXT NOT NULL DEFAULT '#000000'
                     CHECK (color_normal GLOB '#[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]'),
                 updated_at TEXT NOT NULL
             )

@@ -249,6 +249,7 @@ def test_preference_default_row_index_and_version(tmp_path: Path) -> None:
     assert len(rows) == 1
     row = rows[0]
     assert row[0] == 1
+    assert row[1:4] == ("#c0392b", "#2563eb", "#000000")  # UI-AMEND-01 默认配色
     for color in row[1:4]:
         assert color == color.lower() and len(color) == 7 and color.startswith("#")
     assert row[4]

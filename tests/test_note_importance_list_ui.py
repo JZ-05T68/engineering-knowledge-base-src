@@ -174,7 +174,7 @@ def test_filter_shrinks_results_and_page_resets(tmp_path, monkeypatch) -> None:
 
 @pytest.mark.parametrize(
     ("label", "color"),
-    [("重点", "#c0392b"), ("次重点", "#b8860b"), ("一般", "#5a6570")],
+    [("重点", "#c0392b"), ("次重点", "#2563eb"), ("一般", "#000000")],
 )
 def test_list_badge_labels_and_colors(tmp_path, monkeypatch, label, color) -> None:
     app, _, _, _, _, _ = _build_app(tmp_path, monkeypatch)
@@ -238,15 +238,15 @@ def test_settings_load_current_colors_and_save(tmp_path, monkeypatch) -> None:
     app, database, service, _, _, _ = _build_app(tmp_path, monkeypatch)
     pickers = {picker.key: picker.value for picker in app.color_picker}
     assert pickers["note_list_pref_color_primary"] == "#c0392b"
-    assert pickers["note_list_pref_color_secondary"] == "#b8860b"
-    assert pickers["note_list_pref_color_normal"] == "#5a6570"
+    assert pickers["note_list_pref_color_secondary"] == "#2563eb"
+    assert pickers["note_list_pref_color_normal"] == "#000000"
 
     before = service.get_display_preferences()
     app.color_picker(key="note_list_pref_color_primary").set_value("#102030").run()
     _button(app, "note_list_pref_save").click().run()
     updated = service.get_display_preferences()
     assert updated.color_primary == "#102030"
-    assert updated.color_secondary == "#b8860b"
+    assert updated.color_secondary == "#2563eb"
     assert updated.updated_at >= before.updated_at
     assert any("配色已保存" in success.value for success in app.success)
     # rerun 后控件展示数据库 canonical 值，badge 立即生效
@@ -290,7 +290,7 @@ def test_reset_restores_defaults_and_keeps_filter(tmp_path, monkeypatch) -> None
     preferences = service.get_display_preferences()
     assert (preferences.color_primary, preferences.color_secondary) == (
         "#c0392b",
-        "#b8860b",
+        "#2563eb",
     )
     assert any("配色已恢复默认" in success.value for success in app.success)
     # badge 回到默认配色；等级筛选保持不清空

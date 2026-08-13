@@ -300,8 +300,8 @@ def test_default_preferences_read(env: dict) -> None:
     preferences = env["service"].get_display_preferences()
     assert preferences == NoteDisplayPreferences(
         color_primary="#c0392b",
-        color_secondary="#b8860b",
-        color_normal="#5a6570",
+        color_secondary="#2563eb",
+        color_normal="#000000",
         updated_at=preferences.updated_at,
     )
     assert preferences.updated_at is not None
@@ -367,8 +367,8 @@ def test_reset_preferences(env: dict) -> None:
     reset = service.reset_display_preferences()
     assert (reset.color_primary, reset.color_secondary, reset.color_normal) == (
         "#c0392b",
-        "#b8860b",
-        "#5a6570",
+        "#2563eb",
+        "#000000",
     )
 
 
@@ -380,7 +380,7 @@ def test_missing_row_falls_back_without_repairing(env: dict) -> None:
     preferences = service.get_display_preferences()
     assert (preferences.color_primary, preferences.color_secondary) == (
         "#c0392b",
-        "#b8860b",
+        "#2563eb",
     )
     assert preferences.updated_at is None
     with sqlite3.connect(env["database"].database_path) as connection:
@@ -429,6 +429,10 @@ def test_badge_foreground_extremes_and_threshold() -> None:
     assert badge_foreground("#7f7f7f") == "#ffffff"
     # 确定性
     assert badge_foreground("#c0392b") == badge_foreground("#c0392b")
+    # UI-AMEND-01：三个新默认背景（红 / 蓝 / 黑）均为白字
+    assert badge_foreground("#c0392b") == "#ffffff"
+    assert badge_foreground("#2563eb") == "#ffffff"
+    assert badge_foreground("#000000") == "#ffffff"
     # 大小写均可（输入为 canonical 前的前端值由 service 规范化；
     # helper 本身也接受大写合法形式）
     assert badge_foreground("#FFAA00") == "#1a1a1a"
@@ -443,4 +447,18 @@ def test_foreground_for_default_palette() -> None:
         defaults.color_secondary,
         defaults.color_normal,
     ):
-        assert badge_foreground(background) in {"#1a1a1a", "#ffffff"}
+        # UI-AMEND-01：红 / 蓝 / 黑默认背景全部为白字
+        assert badge_foreground(background) == "#ffffff"
+
+
+def test_custom_preferences_not_rewritten_on_startup(env: dict) -> None:
+    """UI-AMEND-01: 程序重启（新建 Database/NoteService）不得覆盖已保存配色。"""
+    service: NoteService = env["service"]
+    service.update_display_preferences("#112233", "#445566", "#778899")
+    restarted = NoteService(Database(env["database"].database_path))
+    preferences = restarted.get_display_preferences()
+    assert (
+        preferences.color_primary,
+        preferences.color_secondary,
+        preferences.color_normal,
+    ) == ("#112233", "#445566", "#778899")

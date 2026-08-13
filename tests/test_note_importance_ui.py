@@ -309,8 +309,8 @@ def test_edit_error_keeps_state(tmp_path, monkeypatch) -> None:
 
 @pytest.mark.parametrize(
     ("level", "label", "color"),
-    [("primary", "重点", "#c0392b"), ("secondary", "次重点", "#b8860b"),
-     ("normal", "一般", "#5a6570")],
+    [("primary", "重点", "#c0392b"), ("secondary", "次重点", "#2563eb"),
+     ("normal", "一般", "#000000")],
 )
 def test_badge_label_and_default_color(tmp_path, monkeypatch, level, label, color) -> None:
     app, database, note_service, document_id = _build_reader(tmp_path, monkeypatch)

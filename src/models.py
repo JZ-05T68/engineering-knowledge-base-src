@@ -634,8 +634,8 @@ class NoteDisplayPreferences:
     """
 
     color_primary: str = "#c0392b"
-    color_secondary: str = "#b8860b"
-    color_normal: str = "#5a6570"
+    color_secondary: str = "#2563eb"
+    color_normal: str = "#000000"
     updated_at: datetime | None = None
 
 
