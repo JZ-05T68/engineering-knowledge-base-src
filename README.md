@@ -444,13 +444,13 @@ schtasks.exe /Query /TN EngineeringKnowledgeBase
 | `src/document_service.py` | 导入、笔记、复核、重试和显式删除流程 |
 | `scripts/service_manager.py` | 后台启停、状态、PID、健康检查和自启动管理 |
 | `scripts/restore_backup.py` | 停服后的正式恢复与隔离恢复验收入口 |
-| `scripts/release_check.py` | v0.2.0 统一发布检查、正式备份创建与既有发布备份复验 |
+| `scripts/release_check.py` | 统一发布检查、正式备份创建与既有发布备份复验 |
 | `data/raw/` | 原始 PDF（沿用 v0.0.1 路径以保持兼容） |
 | `data/pages/` | 按文档编号保存的页面 PNG |
 | `data/markdown/` | 按文档编号保存的页面 Markdown |
 | `data/database/knowledge.db` | SQLite 主数据库 |
 | `data/database/backups/` | 历史 schema 迁移前数据库备份；不等同于完整资料备份 |
-| `backups/` | v0.1.2 及兼容历史补丁版本的完整资料备份；位于 `data/` 之外，避免递归纳入 |
+| `backups/` | 当前版本及兼容补丁版本的完整资料备份；位于 `data/` 之外，避免递归纳入 |
 | `logs/` | 应用、服务管理和启动控制台轮转日志 |
 | `runtime/` | 当前服务 PID 记录；异常退出后的过期记录会自动识别 |
 
@@ -460,9 +460,9 @@ schtasks.exe /Query /TN EngineeringKnowledgeBase
 
 ### 升级
 
-v0.2.0 继续使用 schema v4，**没有数据库迁移、字段变更或新增索引**。从 v0.1.x 升级不会
-触发数据库备份、重建 FTS 或重写文档、页面、标签、项目、复核状态及证据篮数据；已有 v4
-数据库会经过幂等初始化并继续执行完整性与外键检查。
+v0.4.3 当前使用 **schema v7**。程序启动时读取 `schema_migrations`，按顺序补齐缺失迁移；
+只要既有非空数据库低于 v7，就会先通过 SQLite 在线备份 API 创建一致性数据库备份，再执行事务迁移。
+迁移结束后必须同时通过 `integrity_check` 与 `foreign_key_check`，否则启动失败并保留原数据库和迁移前备份。
 
 历史上首次从 schema v3 升级到 schema v4 时，程序使用 SQLite 在线备份 API 创建一致性
 备份，文件形如：
@@ -471,18 +471,18 @@ v0.2.0 继续使用 schema v4，**没有数据库迁移、字段变更或新增�
 data/database/backups/knowledge.v3.<时间戳>.db
 ```
 
-schema v4 只新增 `evidence_baskets` 和 `evidence_items`，不重建 `documents`、`pages` 或 FTS5。
-证据篮与条目通过外键关联；删除文档或页面时对应证据条目级联清理，删除证据篮时只级联其条目。
-条目使用 `(basket_id, page_id, selection_sha256)` 防重复，并使用 `(basket_id, position)` 保证
-顺序唯一。备注限制为 4000 字符；表结构已经支持多个证据篮，v0.2.0 界面默认使用一个篮子。
+真实迁移关系如下：
 
-迁移事务会比较迁移前后的文档数、页面数、FTS 行数、五种复核状态计数、PDF 路径和页面图像
-路径，并执行 `integrity_check` 与 `foreign_key_check`。任何一步失败都会回滚整个 schema v4
-事务，原 schema v3 数据库和迁移前备份均保留。程序也继续支持从更早 schema 依次安全迁移。
+- schema v4：新增 `evidence_baskets` 与旧版文字选区 `evidence_items`；
+- schema v5：新增文档、页面、文字选区和图片区域四类结构化 `notes`；
+- schema v6：为笔记增加 `importance`，并新增单行 `note_display_preferences`；
+- schema v7：在同一事务中重建 `evidence_items`，支持 `page`、`text_selection`、`image_region`
+  三类证据及 `confirmation_status` / `confirmed_at` 人工确认状态。既有证据保留原 ID 并迁移为
+  未确认的文字选区证据，迁移会显式核对条目数量和 ID 集合。
 
-从 v0.1.1 升级不需要移动 `data/`、重导 PDF 或重建索引。先停止旧服务并保留现有 `data/`，
-更新程序后再启动 v0.2.0；确认首页、检索、阅读、证据篮和系统维护页的真实统计。历史
-`knowledge.v3.<时间戳>.db` 只用于 schema v4 迁移故障恢复，不包含完整 PDF、PNG 和 Markdown，
+升级不需要移动 `data/`、重新导入 PDF 或手工重建 FTS。先保留完整资料备份，再更新程序并启动；
+启动完成后在“系统维护”核对 schema v7、文档、页面、FTS、笔记和证据统计。历史
+`knowledge.v<旧 schema>.<时间戳>.db` 只用于迁移故障恢复，不包含完整 PDF、PNG 和 Markdown，
 不能替代完整资料备份。
 
 ### 创建和验证完整备份
@@ -494,7 +494,7 @@ schema v4 只新增 `evidence_baskets` 和 `evidence_items`，不重建 `documen
 备份目录结构：
 
 ```text
-backups/ekb-v0.2.0-<时间戳>/
+backups/ekb-v0.4.3-<时间戳>/
 ├── manifest.json
 ├── config/
 │   └── settings.json
@@ -545,15 +545,17 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\restore_backup.py `
-  --backup ".\backups\ekb-v0.1.2-<时间戳>" --confirm RESTORE
+  --backup ".\backups\ekb-v0.4.3-<时间戳>" --confirm RESTORE
 ```
 
 4. 脚本会再次校验格式、版本、schema、数据库、外键、清单、大小、哈希和文件引用；通过后先创建
-   `pre-restore-v0.1.2-<时间戳>` 完整备份，再在临时目录中恢复。数据库路径会安全重定位到当前
+   `pre-restore-v0.4.3-<时间戳>` 完整备份，再在临时目录中恢复。数据库路径会安全重定位到当前
    正式目录，不会把备份数据库中的绝对路径直接当作写入目标。
 5. 恢复后脚本重新检查数据库统计和文件哈希。成功后启动服务并再运行一次只读诊断。
 
-正式服务仍在运行、manifest 缺失/损坏、应用版本或 schema 不兼容、数据库损坏、文件缺失、大小或
+v0.4.3 正式恢复只接受 `0.4` 系列的当前或更早补丁版本，并要求备份 schema 恰为 v7；旧 schema
+备份应先由对应旧版本恢复，再启动当前程序完成迁移。正式服务仍在运行、manifest 缺失/损坏、
+应用版本或 schema 不兼容、数据库损坏、文件缺失、大小或
 哈希不一致、路径逃逸、符号链接和恢复前备份失败都会中止恢复。系统不提供绕过验证的“强制恢复”。
 若切换后的检查失败，脚本会恢复原正式目录；恢复前完整备份仍保留。
 
@@ -571,8 +573,9 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
 - 清空笔记只处理所选页面笔记，不改变原 PDF、页面图片或提取文本。
 - 删除标签只删除标签及关联。
 - 删除项目只删除项目及关联。
-- 删除单条证据或清空证据篮只修改 schema v4 证据表，不删除或改写任何用户资料。
-- 删除文档需要输入文档标题二次确认；只清理该文档自己的记录、原 PDF、页面 PNG 和 Markdown，不会删除其他文档。
+- 删除单条证据或清空证据篮只修改 schema v7 的 `evidence_items`，不删除或改写原 PDF、页面图像或笔记。
+- 删除文档需要输入文档标题二次确认；文件先进入逐操作隔离区并记录 manifest，数据库事务成功后
+  才清理隔离副本；崩溃恢复会依据文档记录、路径和 SHA-256 保守完成恢复或清理，不会影响其他文档。
 - 关键关联和元数据修改使用 SQLite 事务。
 
 ## 常见故障排查
@@ -610,7 +613,7 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\release_check.py `
-  --existing-backup ".\backups\release-v0.1.2-<时间戳>" `
+  --existing-backup ".\backups\release-v0.4.3-<时间戳>" `
   --expect-service-stopped
 ```
 
@@ -635,13 +638,13 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
   文档、标签、项目三次查询。
 - 全局和本文件命中导航只覆盖当前加载上限内的有序结果；超过上限时界面明确显示“已加载 / 完整
   匹配”范围，不会把当前 10 条页面分页误作完整导航范围。
-- Streamlit 没有可靠的原生滚动位置恢复接口。v0.2.0 会恢复结果焦点并显示“返回位置”文字标识，
+- Streamlit 没有可靠的原生滚动位置恢复接口。当前版本会恢复结果焦点并显示“返回位置”文字标识，
   但不会注入脆弱 JavaScript 强行恢复像素级滚动位置。
 - 文档分组和快速预览分别只在 URL 保存一个展开文档 ID 和一个预览页面 ID；切换到其他组或预览时
   替换旧值，以避免 URL 随结果数量膨胀。
 - 文档、项目和标签的快速查找依赖 Streamlit 本地页面重跑，不是浏览器端虚拟列表；数千个
   筛选项时仍受 Streamlit 组件渲染速度影响。
-- schema 支持多个证据篮，但 v0.2.0 界面只操作一个默认篮子；命名和切换多个篮子留待后续版本。
+- schema v7 支持多个证据篮，但当前界面只操作一个默认篮子；命名和切换多个篮子留待后续版本。
 - 正式恢复必须停服并使用独立脚本；Streamlit 页面只做预检查，不在数据库仍被占用时尝试在线覆盖。
 - 完整备份是本地目录格式，不压缩、不加密，也不提供云同步；备份介质的访问控制由用户负责。
 - 诊断中的目录“可读写”使用操作系统权限判断，不会为了测试权限而写入正式数据目录；统一发布检查
@@ -651,10 +654,12 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
 
 ## 发布状态
 
-v0.1.2 正式发布于 2026-07-21；本地 annotated tag 和正式发布备份均以完整发布门禁 PASS 为前提。
-当前源码仓库 `origin` 使用 SSH：
-`git@github.com:JZ-05T68/engineering-knowledge-base-src.git`。各版本的远程状态以 GitHub tag 和 Release 的实时审计为准。
+当前公开版本为 **v0.4.3 — 真实问题验证与 AI 就绪决策门**，已于 2026-08-14 正式发布。
+`v0.4.3` annotated tag 指向发布提交 `e737d91051da9b78dbfd5ab68e4376b7faad6bfb`；
+GitHub Release 为非 draft、非 prerelease。RPV-01～11 与 H1～H7 已通过，RPV-12 按
+DF-AMEND-02 延后至 v0.5.0，OBS-E 保持为 v0.5.x 的 MEDIUM 显式技术债。
 
-v0.1.0 已完成第一次完整人工测试，A–J 共 65 项在修复复测后全部通过；本次发布直接从
-v0.0.8 收口到 v0.1.0，不存在中间的 v0.0.9。详细验证记录见
-`docs/v0.1.0-manual-test-results.md`。
+当前源码仓库 `origin` 使用 SSH：
+`git@github.com:JZ-05T68/engineering-knowledge-base-src.git`。各版本远程状态以 GitHub tag 和
+Release 的实时审计为准；v0.1.2 等历史版本的发布事实、备份记录和测试结论保留在上文、
+[CHANGELOG](CHANGELOG.md) 与对应历史文档中。
