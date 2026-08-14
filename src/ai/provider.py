@@ -87,6 +87,7 @@ class CompletionResult:
     text: str
     model: str
     usage: CompletionUsage | None = None
+    finish_reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,14 +118,22 @@ class RerankResult:
 class CompletionProvider(Protocol):
     """Minimal contract of a text completion provider."""
 
-    def complete(self, prompt: str, *, model: str | None = None) -> CompletionResult:
+    def complete(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        max_completion_tokens: int | None = None,
+    ) -> CompletionResult:
         """Return the completion for ``prompt``.
 
         ``model`` overrides the provider's default model for this call.
-        Implementations raise ``AIUnavailableError`` when the provider
-        cannot be called at all, and ``AIExecutionError`` when an attempted
-        call fails. Semantic dissatisfaction with an answer is never a
-        reason for the client layer to retry automatically.
+        ``max_completion_tokens`` caps the generated tokens for this call;
+        ``None`` leaves the provider default. Implementations raise
+        ``AIUnavailableError`` when the provider cannot be called at all,
+        and ``AIExecutionError`` when an attempted call fails. Semantic
+        dissatisfaction with an answer is never a reason for the client
+        layer to retry automatically.
         """
         ...
 

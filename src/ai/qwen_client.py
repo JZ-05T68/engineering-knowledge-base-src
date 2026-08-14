@@ -5,26 +5,34 @@ endpoint layout, request payloads, response parsing, and error mapping of
 the Qwen API. Business services never import this module; they depend on
 the protocols in ``src.ai.provider``.
 
-Phase v0.5.0-1 constraint — **no real network request**:
+Wire transport:
 
-- The wire transport is an injected callable. The default is the
-  unconfigured transport, which raises ``AIUnavailableError`` on any call,
-  so this adapter structurally cannot emit real HTTP traffic in this
-  phase. A real transport is a later-phase change, explicitly wired.
+- The wire transport is an injected callable. ``urllib_transport`` is the
+  minimal standard-library HTTP implementation; it is never wired in
+  automatically. The default remains the unconfigured transport, which
+  raises ``AIUnavailableError`` on any call, so manual mode, a missing API
+  key, application startup, import, and provider construction can never
+  emit network traffic. Only an explicit ``complete``/``embed`` call on a
+  provider that was deliberately built with a real transport can send a
+  request.
 - Construction performs no I/O: it does not read the environment, touch
   the disk, or open a connection.
 
 Retry policy (cost and loop guardrails):
 
 - At most ``max_extra_attempts`` (default 2) extra attempts per call, a
-  flat bounded loop — never recursive, never an agent loop.
+  flat bounded loop — never recursive, never an agent loop, and callers
+  can override it (a paid smoke call forces 0).
 - Only transient transport failures are retried: network-level failures
   (no HTTP status), HTTP 429, and HTTP 5xx.
 - Client errors (other 4xx), malformed responses, and semantic
   dissatisfaction with an answer are never retried.
 
 The chat-completions and embeddings payloads follow the DashScope
-OpenAI-compatible mode. The rerank channel uses a different vendor
+OpenAI-compatible mode. Thinking is a vendor-specific paid behavior:
+``qwen3.7-plus`` enables it by default, so every request explicitly sends
+``enable_thinking: false`` unless the adapter was deliberately constructed
+with thinking enabled. The rerank channel uses a different vendor
 contract whose official specification is verified in a later phase;
 ``rerank`` therefore raises ``AIUnavailableError`` for now instead of
 guessing a wire protocol.
@@ -32,6 +40,9 @@ guessing a wire protocol.
 
 from __future__ import annotations
 
+import json
+import urllib.error
+import urllib.request
 from collections.abc import Mapping, Sequence
 from typing import Any, Final, Protocol
 
@@ -50,6 +61,7 @@ __all__ = [
     "QwenProvider",
     "QwenTransportError",
     "Transport",
+    "urllib_transport",
 ]
 
 DEFAULT_BASE_URL: Final[str] = "https://dashscope.aliyuncs.com/compatible-mode/v1"
@@ -88,6 +100,44 @@ class QwenTransportError(RuntimeError):
     def __init__(self, message: str, *, status_code: int | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
+
+
+def urllib_transport(
+    url: str,
+    headers: Mapping[str, str],
+    payload: Mapping[str, Any],
+    timeout_seconds: float,
+) -> Mapping[str, Any]:
+    """Minimal standard-library HTTP transport (explicit opt-in only).
+
+    Sends one JSON POST via ``urllib`` and returns the decoded response
+    body. HTTP error statuses become ``QwenTransportError`` with the
+    status code; network and timeout failures become ``QwenTransportError``
+    without a status code; a non-JSON or non-object body is an
+    ``AIExecutionError``. Credentials never appear in raised messages —
+    only status codes and transport reasons are reported.
+    """
+
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url, data=body, headers=dict(headers), method="POST"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            raw = response.read()
+    except urllib.error.HTTPError as exc:
+        raise QwenTransportError(
+            f"HTTP 错误响应（状态 {exc.code}）", status_code=exc.code
+        ) from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise QwenTransportError(f"网络传输失败：{type(exc).__name__}") from exc
+    try:
+        decoded = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise AIExecutionError("AI 响应解析失败：响应不是合法 JSON。") from exc
+    if not isinstance(decoded, Mapping):
+        raise AIExecutionError("AI 响应解析失败：响应不是 JSON 对象。")
+    return decoded
 
 
 def _unconfigured_transport(
@@ -133,6 +183,7 @@ class QwenProvider:
         base_url: str = DEFAULT_BASE_URL,
         timeout_seconds: float = 30.0,
         max_extra_attempts: int = MAX_EXTRA_ATTEMPTS,
+        enable_thinking: bool = False,
         transport: Transport = _unconfigured_transport,
     ) -> None:
         if max_extra_attempts < 0:
@@ -147,6 +198,7 @@ class QwenProvider:
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._max_extra_attempts = max_extra_attempts
+        self._enable_thinking = enable_thinking
         self._transport = transport
 
     @property
@@ -155,15 +207,33 @@ class QwenProvider:
 
         return bool(self._api_key)
 
-    def complete(self, prompt: str, *, model: str | None = None) -> CompletionResult:
-        """Return the completion for ``prompt`` via the chat endpoint."""
+    def complete(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        max_completion_tokens: int | None = None,
+    ) -> CompletionResult:
+        """Return the completion for ``prompt`` via the chat endpoint.
+
+        Every request explicitly carries ``enable_thinking`` (default off —
+        thinking is a paid behavior that higher layers must opt into) and
+        ``stream: false``; ``max_completion_tokens`` is included when given.
+        No tools, web search, or agent fields are ever added.
+        """
 
         self._require_credential()
         chosen_model = model or self._llm_model
         payload: dict[str, Any] = {
             "model": chosen_model,
             "messages": [{"role": "user", "content": prompt}],
+            "enable_thinking": self._enable_thinking,
+            "stream": False,
         }
+        if max_completion_tokens is not None:
+            if max_completion_tokens <= 0:
+                raise ValueError("max_completion_tokens 必须为正数")
+            payload["max_completion_tokens"] = max_completion_tokens
         response = self._post("/chat/completions", payload)
         return self._parse_completion(response, chosen_model)
 
@@ -239,7 +309,18 @@ class QwenProvider:
             text=text,
             model=str(response.get("model") or requested_model),
             usage=QwenProvider._parse_usage(response.get("usage")),
+            finish_reason=QwenProvider._parse_finish_reason(choices[0]),
         )
+
+    @staticmethod
+    def _parse_finish_reason(choice: Any) -> str | None:
+        """Read the optional finish reason; absent or non-text is not an error."""
+
+        if isinstance(choice, Mapping):
+            reason = choice.get("finish_reason")
+            if isinstance(reason, str) and reason:
+                return reason
+        return None
 
     @staticmethod
     def _parse_embeddings(

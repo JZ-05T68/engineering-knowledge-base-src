@@ -25,7 +25,13 @@ from src.ai.provider import (
 
 
 class _FakeCompletion:
-    def complete(self, prompt: str, *, model: str | None = None) -> CompletionResult:
+    def complete(
+        self,
+        prompt: str,
+        *,
+        model: str | None = None,
+        max_completion_tokens: int | None = None,
+    ) -> CompletionResult:
         return CompletionResult(text=f"echo:{prompt}", model=model or "fake-model")
 
 

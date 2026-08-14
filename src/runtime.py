@@ -10,7 +10,7 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.ai.provider import CompletionProvider
-from src.ai.qwen_client import QwenProvider
+from src.ai.qwen_client import QwenProvider, urllib_transport
 from src.backup_service import BackupService
 from src.batch_service import PageBatchService
 from src.classification_metadata import ClassificationMetadataService
@@ -113,6 +113,7 @@ def application_ai_provider() -> CompletionProvider | None:
         embedding_model=settings.ai_embedding_model,
         rerank_model=settings.ai_rerank_model,
         timeout_seconds=settings.ai_timeout_seconds,
+        transport=urllib_transport,
     )
 
 

@@ -70,13 +70,14 @@ def test_api_key_is_masked_in_repr_and_str() -> None:
 def test_formal_settings_loader_refreshes_ai_fields_after_cache_clear(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # Explicit env values (not delenv) so the checkout's own .env cannot leak in.
     monkeypatch.setenv("EKB_AI_MODE", "api")
     get_settings.cache_clear()
 
     try:
         assert get_settings().ai_mode == "api"
 
-        monkeypatch.delenv("EKB_AI_MODE")
+        monkeypatch.setenv("EKB_AI_MODE", "manual")
         get_settings.cache_clear()
         assert get_settings().ai_mode == "manual"
     finally:

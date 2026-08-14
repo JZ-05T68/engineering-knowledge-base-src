@@ -74,6 +74,8 @@ def test_complete_builds_openai_compatible_request() -> None:
     assert payload == {
         "model": "qwen3.7-plus",
         "messages": [{"role": "user", "content": "什么是 PID 控制？"}],
+        "enable_thinking": False,
+        "stream": False,
     }
     assert timeout == 12.5
     assert result.text == "回答"
@@ -275,6 +277,57 @@ def test_rerank_is_explicitly_deferred() -> None:
 
     with pytest.raises(AIUnavailableError, match="rerank"):
         provider.rerank("查询", ["文档一", "文档二"])
+
+
+def test_thinking_is_explicitly_off_by_default() -> None:
+    """qwen3.7-plus enables thinking by default; we must always send false."""
+
+    transport = FakeTransport([_completion_body()])
+    _provider(transport).complete("hi")
+
+    assert transport.calls[0][2]["enable_thinking"] is False
+    assert transport.calls[0][2]["stream"] is False
+
+
+def test_thinking_requires_explicit_opt_in() -> None:
+    transport = FakeTransport([_completion_body()])
+    _provider(transport, enable_thinking=True).complete("hi")
+
+    assert transport.calls[0][2]["enable_thinking"] is True
+
+
+def test_max_completion_tokens_included_only_when_given() -> None:
+    transport = FakeTransport([_completion_body(), _completion_body()])
+    provider = _provider(transport)
+
+    provider.complete("hi", max_completion_tokens=64)
+    provider.complete("hi")
+
+    assert transport.calls[0][2]["max_completion_tokens"] == 64
+    assert "max_completion_tokens" not in transport.calls[1][2]
+
+
+def test_invalid_max_completion_tokens_fails_before_any_call() -> None:
+    transport = FakeTransport([])
+
+    with pytest.raises(ValueError, match="max_completion_tokens"):
+        _provider(transport).complete("hi", max_completion_tokens=0)
+
+    assert transport.calls == []
+
+
+def test_finish_reason_is_captured_when_present() -> None:
+    body = _completion_body()
+    body["choices"][0]["finish_reason"] = "stop"
+    result = _provider(FakeTransport([body])).complete("hi")
+
+    assert result.finish_reason == "stop"
+
+
+def test_finish_reason_absent_is_none_not_error() -> None:
+    result = _provider(FakeTransport([_completion_body()])).complete("hi")
+
+    assert result.finish_reason is None
 
 
 def test_invalid_policy_arguments_are_rejected() -> None:
