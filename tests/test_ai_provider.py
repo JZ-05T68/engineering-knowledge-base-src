@@ -36,7 +36,7 @@ class _FakeCompletion:
 
 
 class _FakeEmbedding:
-    def embed(self, texts, *, model: str | None = None) -> EmbeddingResult:
+    def embed(self, texts, *, model=None, dimensions=None) -> EmbeddingResult:
         return EmbeddingResult(
             embeddings=tuple((1.0,) for _ in texts), model=model or "fake-embedding"
         )

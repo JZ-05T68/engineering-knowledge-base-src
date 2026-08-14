@@ -52,6 +52,7 @@ from src.ai.provider import (
     CompletionResult,
     CompletionUsage,
     EmbeddingResult,
+    EmbeddingUsage,
     RerankResult,
 )
 
@@ -238,17 +239,40 @@ class QwenProvider:
         return self._parse_completion(response, chosen_model)
 
     def embed(
-        self, texts: Sequence[str], *, model: str | None = None
+        self,
+        texts: Sequence[str],
+        *,
+        model: str | None = None,
+        dimensions: int | None = None,
     ) -> EmbeddingResult:
-        """Return one embedding per input text, in input order."""
+        """Return one embedding per input text, in input order.
+
+        The payload stays minimal (model, input, float encoding, optional
+        dimensions) with no thinking-related or vendor-extra fields. The
+        response is validated fail-closed: vector count must match the
+        input count, indexes must be an exact permutation of the input
+        positions, no vector may be empty, non-numeric values are
+        rejected, and a requested ``dimensions`` value must match every
+        returned vector.
+        """
 
         self._require_credential()
         if not texts:
             raise ValueError("embedding 输入不能为空")
+        if dimensions is not None and dimensions <= 0:
+            raise ValueError("dimensions 必须为正数")
         chosen_model = model or self._embedding_model
-        payload: dict[str, Any] = {"model": chosen_model, "input": list(texts)}
+        payload: dict[str, Any] = {
+            "model": chosen_model,
+            "input": list(texts),
+            "encoding_format": "float",
+        }
+        if dimensions is not None:
+            payload["dimensions"] = dimensions
         response = self._post("/embeddings", payload)
-        return self._parse_embeddings(response, chosen_model)
+        return self._parse_embeddings(
+            response, chosen_model, expected_count=len(texts), dimensions=dimensions
+        )
 
     def rerank(
         self,
@@ -324,24 +348,65 @@ class QwenProvider:
 
     @staticmethod
     def _parse_embeddings(
-        response: Mapping[str, Any], requested_model: str
+        response: Mapping[str, Any],
+        requested_model: str,
+        *,
+        expected_count: int,
+        dimensions: int | None,
     ) -> EmbeddingResult:
-        """Parse one OpenAI-compatible embeddings response, in input order."""
+        """Parse and fail-closed validate one embeddings response."""
 
         try:
             data = response["data"]
-            ordered = sorted(data, key=lambda item: item.get("index", 0))
-            vectors = tuple(
-                tuple(float(value) for value in item["embedding"]) for item in ordered
-            )
-        except (KeyError, TypeError, ValueError) as exc:
+            items = sorted(data, key=lambda item: item["index"])
+        except (KeyError, TypeError) as exc:
             raise AIExecutionError(
                 "AI 响应解析失败：缺少 data/embedding 结构。"
             ) from exc
+        if len(items) != expected_count:
+            raise AIExecutionError(
+                f"AI 响应校验失败：返回向量数 {len(items)} 与输入数 {expected_count} 不一致。"
+            )
+        if [item["index"] for item in items] != list(range(expected_count)):
+            raise AIExecutionError("AI 响应校验失败：embedding index 与输入顺序不对应。")
+        vectors: list[tuple[float, ...]] = []
+        for item in items:
+            raw_vector = item.get("embedding")
+            if raw_vector is None:
+                raise AIExecutionError("AI 响应解析失败：缺少 data/embedding 结构。")
+            if not isinstance(raw_vector, Sequence) or isinstance(raw_vector, str):
+                raise AIExecutionError("AI 响应校验失败：embedding 不是数值数组。")
+            if len(raw_vector) == 0:
+                raise AIExecutionError("AI 响应校验失败：存在空 embedding 向量。")
+            if dimensions is not None and len(raw_vector) != dimensions:
+                raise AIExecutionError(
+                    f"AI 响应校验失败：向量维度 {len(raw_vector)} 与请求值 {dimensions} 不一致。"
+                )
+            try:
+                vectors.append(tuple(float(value) for value in raw_vector))
+            except (TypeError, ValueError) as exc:
+                raise AIExecutionError(
+                    "AI 响应校验失败：embedding 含非数值元素。"
+                ) from exc
         return EmbeddingResult(
-            embeddings=vectors,
+            embeddings=tuple(vectors),
             model=str(response.get("model") or requested_model),
+            usage=QwenProvider._parse_embedding_usage(response.get("usage")),
         )
+
+    @staticmethod
+    def _parse_embedding_usage(raw_usage: Any) -> EmbeddingUsage | None:
+        """Parse optional embedding token usage; absent usage is not an error."""
+
+        if not isinstance(raw_usage, Mapping):
+            return None
+        try:
+            return EmbeddingUsage(
+                prompt_tokens=int(raw_usage["prompt_tokens"]),
+                total_tokens=int(raw_usage["total_tokens"]),
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            raise AIExecutionError("AI 响应解析失败：usage 结构不完整。") from exc
 
     @staticmethod
     def _parse_usage(raw_usage: Any) -> CompletionUsage | None:

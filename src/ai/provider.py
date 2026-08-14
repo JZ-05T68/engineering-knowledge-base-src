@@ -39,6 +39,7 @@ __all__ = [
     "CompletionUsage",
     "EmbeddingProvider",
     "EmbeddingResult",
+    "EmbeddingUsage",
     "RerankHit",
     "RerankProvider",
     "RerankResult",
@@ -91,11 +92,24 @@ class CompletionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class EmbeddingUsage:
+    """Token accounting reported by one embedding call.
+
+    Embeddings only consume input tokens; there is no completion side,
+    so this deliberately does not reuse ``CompletionUsage``.
+    """
+
+    prompt_tokens: int
+    total_tokens: int
+
+
+@dataclass(frozen=True, slots=True)
 class EmbeddingResult:
     """Embeddings for one batch of input texts, in input order."""
 
     embeddings: tuple[tuple[float, ...], ...]
     model: str
+    usage: EmbeddingUsage | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,9 +157,18 @@ class EmbeddingProvider(Protocol):
     """Minimal contract of a text embedding provider."""
 
     def embed(
-        self, texts: Sequence[str], *, model: str | None = None
+        self,
+        texts: Sequence[str],
+        *,
+        model: str | None = None,
+        dimensions: int | None = None,
     ) -> EmbeddingResult:
-        """Return one embedding per input text, in input order."""
+        """Return one embedding per input text, in input order.
+
+        ``dimensions`` requests a specific vector size; implementations
+        fail closed when the returned vectors do not match it. A missing
+        usage report is expressed as ``usage=None``, never fabricated.
+        """
         ...
 
 

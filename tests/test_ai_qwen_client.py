@@ -248,10 +248,15 @@ def test_embed_builds_batch_request_and_preserves_input_order() -> None:
 
     url, _, payload, timeout = transport.calls[0]
     assert url == f"{DEFAULT_BASE_URL}/embeddings"
-    assert payload == {"model": "qwen3.7-text-embedding", "input": ["第一", "第二"]}
+    assert payload == {
+        "model": "qwen3.7-text-embedding",
+        "input": ["第一", "第二"],
+        "encoding_format": "float",
+    }
     assert timeout == 12.5
     assert result.embeddings == ((0.1, 0.2), (0.5, 0.6))
     assert result.model == "qwen3.7-text-embedding"
+    assert result.usage is None
 
 
 def test_embed_rejects_empty_input_before_any_call() -> None:
@@ -270,6 +275,89 @@ def test_embed_malformed_response_fails_without_retry() -> None:
         _provider(transport).embed(["文本"])
 
     assert len(transport.calls) == 1
+
+
+def _embedding_body(vectors: list[list[float]], **extra: Any) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": "qwen3.7-text-embedding",
+        "data": [
+            {"index": index, "embedding": vector}
+            for index, vector in enumerate(vectors)
+        ],
+    }
+    body.update(extra)
+    return body
+
+
+def test_embed_sends_dimensions_and_validates_them() -> None:
+    body = _embedding_body([[0.1] * 1024, [0.2] * 1024])
+    transport = FakeTransport([body])
+    provider = _provider(transport)
+
+    result = provider.embed(["甲", "乙"], dimensions=1024)
+
+    assert transport.calls[0][2]["dimensions"] == 1024
+    assert len(result.embeddings) == 2
+    assert len(result.embeddings[0]) == 1024
+
+
+def test_embed_parses_usage_when_present() -> None:
+    body = _embedding_body(
+        [[0.1]], usage={"prompt_tokens": 7, "total_tokens": 7}
+    )
+    result = _provider(FakeTransport([body])).embed(["文本"])
+
+    assert result.usage is not None
+    assert result.usage.prompt_tokens == 7
+    assert result.usage.total_tokens == 7
+
+
+def test_embed_fails_closed_on_vector_count_mismatch() -> None:
+    transport = FakeTransport([_embedding_body([[0.1], [0.2]])])
+
+    with pytest.raises(AIExecutionError, match="向量数"):
+        _provider(transport).embed(["仅一条"])
+
+    assert len(transport.calls) == 1
+
+
+def test_embed_fails_closed_on_index_mismatch() -> None:
+    body = _embedding_body([[0.1], [0.2]])
+    body["data"][1]["index"] = 7
+    transport = FakeTransport([body])
+
+    with pytest.raises(AIExecutionError, match="index"):
+        _provider(transport).embed(["甲", "乙"])
+
+
+def test_embed_fails_closed_on_wrong_dimensions() -> None:
+    transport = FakeTransport([_embedding_body([[0.1, 0.2]])])
+
+    with pytest.raises(AIExecutionError, match="维度"):
+        _provider(transport).embed(["文本"], dimensions=1024)
+
+
+def test_embed_fails_closed_on_empty_vector() -> None:
+    transport = FakeTransport([_embedding_body([[]])])
+
+    with pytest.raises(AIExecutionError, match="空 embedding"):
+        _provider(transport).embed(["文本"])
+
+
+def test_embed_fails_closed_on_non_numeric_vector() -> None:
+    transport = FakeTransport([_embedding_body([["not-a-number"]])])
+
+    with pytest.raises(AIExecutionError, match="非数值"):
+        _provider(transport).embed(["文本"])
+
+
+def test_embed_rejects_non_positive_dimensions_before_any_call() -> None:
+    transport = FakeTransport([])
+
+    with pytest.raises(ValueError, match="dimensions"):
+        _provider(transport).embed(["文本"], dimensions=0)
+
+    assert transport.calls == []
 
 
 def test_rerank_is_explicitly_deferred() -> None:
