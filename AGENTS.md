@@ -39,11 +39,19 @@ The initial version must support:
 
 ## AI mode
 
-The default AI mode is manual.
+The default AI mode is manual (`ai_mode = "manual"`). Since v0.5.0 an optional AI capability exists, but it is disabled by default.
 
-Do not require an API key for the application to start.
+Do not require an API key for the application to start. Without an API key, every existing offline feature (PDF import, search, reading, notes, evidence, deletion/recovery, backup) must keep working unchanged.
 
-Provide a provider interface for future API integration, but do not enable or require any paid API in v0.0.1.
+The official runtime AI provider is Qwen (Aliyun Bailian / DashScope). Business services must depend only on the vendor-neutral contracts in `src/ai/provider.py`; vendor-specific endpoints, payloads, response parsing and error mapping live in `src/ai/qwen_client.py` only.
+
+API keys must never be hard-coded, committed to Git, written to logs, diagnostics or backups, or leaked into test snapshots. They are read via `EKB_AI_API_KEY` / `.env` into the `SecretStr` settings field.
+
+The AI provider must never become a startup dependency of the existing PDF / search / reading / notes / evidence / data-safety paths.
+
+No unbounded retries, no agent loops, and no automatic repeated paid calls because a semantic answer looks unsatisfying. Only bounded transport-level retries are allowed (by default at most 2 extra attempts, only for network errors, HTTP 429 and 5xx).
+
+Development-tool models (the coding agent) and the EKB runtime model are fully decoupled; never conflate them.
 
 ## Technology
 

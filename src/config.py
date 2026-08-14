@@ -6,7 +6,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Final, Literal
 
-from pydantic import Field, ValidationError
+from pydantic import Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -50,8 +50,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_title: str = "工程知识库 v0.4.3"
-    app_version: str = "0.4.3"
+    app_title: str = "工程知识库 v0.5.0"
+    app_version: str = "0.5.0"
     host: Literal["127.0.0.1"] = OFFICIAL_HOST
     port: int = Field(default=OFFICIAL_PORT, ge=1, le=65535)
 
@@ -69,6 +69,17 @@ class Settings(BaseSettings):
 
     minimum_text_length: int = Field(default=20, ge=0)
     pdf_render_dpi: int = Field(default=150, ge=72, le=600)
+
+    # Optional AI layer (v0.5.0). Manual by default: without an API key the
+    # application starts and every existing offline feature keeps working.
+    ai_mode: Literal["manual", "api"] = "manual"
+    ai_provider: Literal["qwen"] = "qwen"
+    ai_api_key: SecretStr = SecretStr("")
+    ai_llm_model: str = "qwen3.7-plus"
+    ai_llm_model_hard: str = "qwen3.8-max"
+    ai_embedding_model: str = "qwen3.7-text-embedding"
+    ai_rerank_model: str = "qwen3-rerank"
+    ai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
 
     def ensure_directories(self) -> None:
         """Create all writable local directories without removing existing data."""

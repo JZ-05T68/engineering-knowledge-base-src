@@ -1,5 +1,22 @@
 # 变更记录
 
+## v0.5.0 — AI Foundation / Provider Boundary（开发中）
+
+状态：开发中，未发布。
+
+### 变更
+
+- 开发版本推进至 0.5.0，开始首个正式 AI 接入版本的基础设施建设。
+- 新增 `src/ai/` 厂商无关 AI provider 契约层（Completion / Embedding / Rerank
+  三个职责拆分的 Protocol、冻结结果 dataclass、统一异常族），原
+  `src/prompt_builder.py` 的 `AIProvider` 扩展点迁入契约层并保留兼容导出。
+- 新增 Qwen（阿里云百炼）适配器骨架：传输层为注入式 callable，当前阶段默认
+  传输层拒绝发起任何真实网络请求；重试为有限传输级重试（默认最多 2 次额外
+  尝试，仅覆盖网络错误 / 429 / 5xx），不存在递归重试或 Agent 循环。
+- 新增 `EKB_AI_*` 配置项；AI 默认为手动模式（manual），未配置 API Key 时
+  应用完整正常启动，全部原有离线功能不受影响。API Key 经 SecretStr 读取，
+  不进入日志、诊断与快照。
+
 ## v0.4.3 — 真实问题验证与 AI 就绪决策门
 
 发布日期：2026-08-14

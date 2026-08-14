@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.runtime import application_settings
 
-st.set_page_config(page_title="运行说明｜工程知识库 v0.4.3", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="运行说明｜工程知识库 v0.5.0", page_icon="⚙️", layout="wide")
 st.title("设置与运行说明")
 
 settings = application_settings()
@@ -37,7 +37,11 @@ st.markdown(
 - 服务仅绑定 `127.0.0.1`，不会默认向局域网开放。
 """
 )
-st.info("v0.4.3 不包含账号、登录、云同步、付费 API、向量数据库或联网必需功能。")
+st.info(
+    "v0.5.0 不包含账号、登录、云同步、向量数据库或联网必需功能。"
+    "AI 默认为手动模式：未配置 API Key 时全部原有功能离线可用，"
+    "可选的 Qwen API 接入默认关闭，且不会在后台自动发起请求。"
+)
 st.caption(
     "当前数据库为 schema v7。已有 schema v6 数据库升级时会先创建一致性备份，再将既有证据"
     "保留为未确认的文字选区证据，并增加整页、文字选区、图片区域三类证据与人工确认状态。"

@@ -1,4 +1,4 @@
-"""Streamlit dashboard for Engineering Knowledge Base v0.4.3."""
+"""Streamlit dashboard for Engineering Knowledge Base v0.5.0."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ from src.runtime import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="工程知识库 v0.4.3", page_icon="📚", layout="wide")
-st.title("工程知识库 v0.4.3")
+st.set_page_config(page_title="工程知识库 v0.5.0", page_icon="📚", layout="wide")
+st.title("工程知识库 v0.5.0")
 st.caption("本地、单用户的页面级工程知识管理系统")
 
 try:
@@ -129,5 +129,6 @@ st.markdown(
 )
 st.info(
     f"所有资料仅保存在本机 `{settings.data_dir}`。服务只监听 "
-    f"`{settings.host}:{settings.port}`，核心功能离线可用，不需要 API Key。"
+    f"`{settings.host}:{settings.port}`，核心功能离线可用；AI 默认为手动模式，"
+    "未配置 API Key 不影响任何原有功能。"
 )

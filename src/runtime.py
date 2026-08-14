@@ -9,6 +9,8 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from src.ai.provider import CompletionProvider
+from src.ai.qwen_client import QwenProvider
 from src.backup_service import BackupService
 from src.batch_service import PageBatchService
 from src.classification_metadata import ClassificationMetadataService
@@ -85,6 +87,33 @@ def application_database() -> Database:
 
     settings = application_settings()
     return Database(settings.database_path)
+
+
+@lru_cache(maxsize=1)
+def application_ai_provider() -> CompletionProvider | None:
+    """Return the optional AI provider, or ``None`` when AI is disabled.
+
+    AI is an optional capability, never a startup dependency: manual mode,
+    a missing API key, or an unknown provider all yield ``None``, and no
+    existing service receives or requires this provider. Construction is
+    cheap and performs no network I/O; the current phase's adapter uses
+    the unconfigured transport that refuses real API requests.
+    """
+
+    settings = application_settings()
+    if settings.ai_mode != "api" or settings.ai_provider != "qwen":
+        return None
+    api_key = settings.ai_api_key.get_secret_value()
+    if not api_key:
+        return None
+    return QwenProvider(
+        api_key=api_key,
+        llm_model=settings.ai_llm_model,
+        llm_model_hard=settings.ai_llm_model_hard,
+        embedding_model=settings.ai_embedding_model,
+        rerank_model=settings.ai_rerank_model,
+        timeout_seconds=settings.ai_timeout_seconds,
+    )
 
 
 @lru_cache(maxsize=1)
