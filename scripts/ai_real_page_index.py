@@ -374,6 +374,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     arguments = parser.parse_args(argv)
 
+    # 硬护栏：真实付费索引只允许隔离的 staging 实例。该检查先于任何
+    # 配置读取、provider 装配、HTTP 或 embedding 调用。
+    if arguments.confirm_paid_call and not arguments.staging:
+        print("GUARD FAIL: 真实付费索引仅允许在隔离的 staging 实例执行"
+              "（必须同时显式传入 --staging）。")
+        print("未发起任何网络请求。")
+        return 3
+
     if arguments.staging:
         settings = staging_settings()
         print(f"instance: staging（root={settings.data_dir.parent}，port={settings.port}）")

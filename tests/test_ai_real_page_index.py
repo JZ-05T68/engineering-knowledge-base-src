@@ -99,6 +99,12 @@ def _patch_settings(
     monkeypatch.setattr(index_script, "get_settings", lambda: settings)
 
 
+def _patch_staging(
+    monkeypatch: pytest.MonkeyPatch, settings: Settings
+) -> None:
+    monkeypatch.setattr(index_script, "staging_settings", lambda: settings)
+
+
 # ---------------------------------------------------------------- dry-run path
 def test_default_is_dry_run_with_zero_api(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -206,14 +212,35 @@ def test_selection_reports_state_and_skips_sensitive(
 
 
 # ------------------------------------------------------------------ paid guards
+def test_paid_without_staging_is_refused_before_any_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    database_path = tmp_path / "data" / "database" / "knowledge.db"
+    _library(database_path, ["文本一"])
+    monkeypatch.setattr(
+        index_script,
+        "get_settings",
+        lambda: pytest.fail("staging 护栏必须先于配置读取触发"),
+    )
+
+    exit_code = index_script.main(["--confirm-paid-call"])
+
+    out = capsys.readouterr().out
+    assert exit_code == 3
+    assert "仅允许在隔离的 staging 实例执行" in out
+    assert "未发起任何网络请求" in out
+    assert FakeQwenProvider.constructed == []
+    assert FakeQwenProvider.calls == []
+
+
 def test_paid_requires_ready_guards(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     database_path = tmp_path / "data" / "database" / "knowledge.db"
     _library(database_path, ["文本一"])
-    _patch_settings(monkeypatch, _settings(database_path))  # manual, no key
+    _patch_staging(monkeypatch, _settings(database_path))  # manual, no key
 
-    exit_code = index_script.main(["--confirm-paid-call"])
+    exit_code = index_script.main(["--confirm-paid-call", "--staging"])
 
     assert exit_code == 3
     assert "GUARD FAIL" in capsys.readouterr().out
@@ -226,10 +253,10 @@ def test_api_key_never_appears_in_output(
     database_path = tmp_path / "data" / "database" / "knowledge.db"
     _library(database_path, ["文本一"])
     settings = _settings(database_path, ai_mode="api", ai_api_key=FAKE_KEY)
-    _patch_settings(monkeypatch, settings)
+    _patch_staging(monkeypatch, settings)
 
-    index_script.main([])
-    index_script.main(["--confirm-paid-call"])
+    index_script.main(["--staging"])
+    index_script.main(["--confirm-paid-call", "--staging"])
 
     out = capsys.readouterr().out
     assert FAKE_KEY not in out
@@ -243,9 +270,9 @@ def test_paid_run_single_batch_zero_retry_and_reuse_afterwards(
     database_path = tmp_path / "data" / "database" / "knowledge.db"
     _, ids = _library(database_path, [f"第 {n} 页正文" for n in range(1, 6)])
     settings = _settings(database_path, ai_mode="api", ai_api_key=FAKE_KEY)
-    _patch_settings(monkeypatch, settings)
+    _patch_staging(monkeypatch, settings)
 
-    exit_code = index_script.main(["--confirm-paid-call"])
+    exit_code = index_script.main(["--confirm-paid-call", "--staging"])
 
     out = capsys.readouterr().out
     assert exit_code == 0
@@ -271,7 +298,7 @@ def test_paid_run_single_batch_zero_retry_and_reuse_afterwards(
 
     # 再次付费路径：全部 fresh → NO-OP，0 调用
     FakeQwenProvider.calls = []
-    assert index_script.main(["--confirm-paid-call"]) == 0
+    assert index_script.main(["--confirm-paid-call", "--staging"]) == 0
     assert "NO-OP" in capsys.readouterr().out
     assert FakeQwenProvider.calls == []
 
@@ -286,11 +313,11 @@ def test_paid_path_runs_offline_with_fake_provider(
     monkeypatch.setattr(socket, "create_connection", _blocked)
     database_path = tmp_path / "data" / "database" / "knowledge.db"
     _library(database_path, ["文本一"])
-    _patch_settings(
+    _patch_staging(
         monkeypatch, _settings(database_path, ai_mode="api", ai_api_key=FAKE_KEY)
     )
 
-    assert index_script.main(["--confirm-paid-call"]) == 0
+    assert index_script.main(["--confirm-paid-call", "--staging"]) == 0
 
 
 def test_indexer_page_ids_allowlist_is_validated(tmp_path: Path) -> None:
