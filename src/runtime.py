@@ -14,7 +14,7 @@ from src.ai.qwen_client import QwenProvider, urllib_transport
 from src.backup_service import BackupService
 from src.batch_service import PageBatchService
 from src.classification_metadata import ClassificationMetadataService
-from src.config import Settings, get_settings
+from src.config import Settings, runtime_settings
 from src.database import Database
 from src.deletion_recovery import reconcile_quarantine
 from src.diagnostic_service import DiagnosticService
@@ -67,9 +67,14 @@ def configure_logging(log_path: Path) -> None:
 
 @lru_cache(maxsize=1)
 def application_settings() -> Settings:
-    """Return validated settings and create required local directories."""
+    """Return validated settings and create required local directories.
 
-    settings = get_settings()
+    Resolves through ``runtime_settings``: a process started as the staging
+    instance (``EKB_STAGING_INSTANCE=1``) is fully isolated under the
+    staging root; any other process uses the formal guarded settings.
+    """
+
+    settings = runtime_settings()
     settings.ensure_directories()
     configure_logging(settings.log_path)
     logging.getLogger(__name__).info(

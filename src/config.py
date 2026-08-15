@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Final, Literal
@@ -14,6 +15,8 @@ OFFICIAL_HOST: Final[str] = "127.0.0.1"
 OFFICIAL_PORT: Final[int] = 8501
 STAGING_PORT: Final[int] = 8502
 DEFAULT_STAGING_ROOT: Final[Path] = PROJECT_ROOT / "staging-data"
+#: Environment flag selecting the staging instance inside an app process.
+STAGING_ENV_VAR: Final[str] = "EKB_STAGING_INSTANCE"
 
 
 class OfficialEndpointError(ValueError):
@@ -149,3 +152,17 @@ def staging_settings(root: Path | None = None) -> Settings:
         runtime_dir=runtime_dir,
         pid_path=runtime_dir / "engineering-kb-staging.pid.json",
     )
+
+
+def runtime_settings() -> Settings:
+    """Resolve the settings for one application process.
+
+    A process launched with ``STAGING_ENV_VAR=1`` (the staging service
+    manager path) runs entirely on :func:`staging_settings`; every other
+    process gets the guarded formal settings exactly as before. Production
+    behavior is unchanged when the flag is absent.
+    """
+
+    if os.environ.get(STAGING_ENV_VAR) == "1":
+        return staging_settings()
+    return get_settings()

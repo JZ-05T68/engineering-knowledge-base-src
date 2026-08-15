@@ -24,13 +24,32 @@ PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.config import OfficialEndpointError, get_settings  # noqa: E402
+from src.config import (  # noqa: E402
+    OfficialEndpointError,
+    Settings,
+    get_settings,
+    staging_settings,
+)
 
 TASK_NAME: Final[str] = "EngineeringKnowledgeBase"
 HEALTH_PATH: Final[str] = "/_stcore/health"
 START_TIMEOUT_SECONDS: Final[int] = 30
 STOP_TIMEOUT_SECONDS: Final[int] = 10
 LOGGER = logging.getLogger("service_manager")
+
+#: Settings of the instance being managed; ``None`` means production.
+_ACTIVE_SETTINGS: Settings | None = None
+
+
+def active_settings() -> Settings:
+    """Return the settings of the managed instance (production by default).
+
+    Production callers see ``get_settings()`` exactly as before; with
+    ``--staging`` the manager operates on the isolated staging instance
+    (port 8502, staging pid/log/runtime paths) instead.
+    """
+
+    return _ACTIVE_SETTINGS if _ACTIVE_SETTINGS is not None else get_settings()
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,7 +64,7 @@ class ServiceState:
 def configure_manager_logging() -> None:
     """Write manager events to a bounded local log."""
 
-    settings = get_settings()
+    settings = active_settings()
     settings.logs_dir.mkdir(parents=True, exist_ok=True)
     handler = RotatingFileHandler(
         settings.logs_dir / "service-manager.log",
@@ -130,7 +149,7 @@ def process_executable(pid: int) -> Path | None:
 def read_pid_record() -> dict[str, object] | None:
     """Read a validated project PID record; malformed records are treated as stale."""
 
-    path = get_settings().pid_path
+    path = active_settings().pid_path
     if not path.is_file():
         return None
     try:
@@ -147,7 +166,7 @@ def read_pid_record() -> dict[str, object] | None:
 def write_pid_record(pid: int) -> None:
     """Atomically persist process identity for precise future stop operations."""
 
-    settings = get_settings()
+    settings = active_settings()
     settings.runtime_dir.mkdir(parents=True, exist_ok=True)
     record = {
         "pid": pid,
@@ -182,7 +201,7 @@ def record_matches_process(record: dict[str, object]) -> bool:
 def detect_state(*, clean_stale: bool = True) -> ServiceState:
     """Combine PID, process identity, health, and port state."""
 
-    settings = get_settings()
+    settings = active_settings()
     record = read_pid_record()
     if record is not None:
         pid = int(record["pid"])
@@ -215,7 +234,7 @@ def detect_state(*, clean_stale: bool = True) -> ServiceState:
 def start_service(*, open_browser: bool = True) -> int:
     """Start one detached local service and wait for a verified health response."""
 
-    settings = get_settings()
+    settings = active_settings()
     state = detect_state()
     if state.code == "running":
         print(f"工程知识库已经运行（PID {state.pid}）。")
@@ -262,6 +281,12 @@ def start_service(*, open_browser: bool = True) -> int:
         creation_flags = 0x00000008 | 0x00000200 | 0x08000000
     environment = os.environ.copy()
     environment["PYTHONUTF8"] = "1"
+    if _ACTIVE_SETTINGS is not None:
+        # staging 子进程必须整体运行在 staging_settings 之上，而不是
+        # 临时改写 production 配置。
+        environment["EKB_STAGING_INSTANCE"] = "1"
+    else:
+        environment.pop("EKB_STAGING_INSTANCE", None)
     with console_log.open("a", encoding="utf-8") as output:
         process = subprocess.Popen(
             command,
@@ -297,7 +322,7 @@ def start_service(*, open_browser: bool = True) -> int:
 def stop_service() -> int:
     """Stop only the exact process recorded for this project."""
 
-    settings = get_settings()
+    settings = active_settings()
     record = read_pid_record()
     if record is None:
         state = detect_state()
@@ -475,16 +500,28 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     start_parser = subparsers.add_parser("start", help="启动后台服务")
     start_parser.add_argument("--no-browser", action="store_true")
-    subparsers.add_parser("stop", help="停止本项目服务")
-    subparsers.add_parser("status", help="查看运行状态")
+    start_parser.add_argument(
+        "--staging", action="store_true", help="管理隔离的 staging 实例（8502）"
+    )
+    stop_parser = subparsers.add_parser("stop", help="停止本项目服务")
+    stop_parser.add_argument(
+        "--staging", action="store_true", help="停止 staging 实例（不影响 production）"
+    )
+    status_parser = subparsers.add_parser("status", help="查看运行状态")
+    status_parser.add_argument(
+        "--staging", action="store_true", help="查看 staging 实例状态"
+    )
     subparsers.add_parser("enable-autostart", help="启用当前用户登录后自启")
     subparsers.add_parser("disable-autostart", help="关闭当前用户登录后自启")
     return parser
 
 
 def main() -> int:
-    configure_manager_logging()
     arguments = build_parser().parse_args()
+    if getattr(arguments, "staging", False):
+        global _ACTIVE_SETTINGS
+        _ACTIVE_SETTINGS = staging_settings()
+    configure_manager_logging()
     try:
         if arguments.command == "start":
             return start_service(open_browser=not arguments.no_browser)
