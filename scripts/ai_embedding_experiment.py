@@ -28,7 +28,6 @@ Usage::
 from __future__ import annotations
 
 import argparse
-import math
 import subprocess
 import sys
 import time
@@ -42,6 +41,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.ai.provider import AIError  # noqa: E402
 from src.ai.qwen_client import QwenProvider, urllib_transport  # noqa: E402
+from src.ai.vector_recall import cosine_similarity  # noqa: E402
 from src.config import OfficialEndpointError, Settings, get_settings  # noqa: E402
 
 EXPERIMENT_MODEL: Final[str] = "qwen3.7-text-embedding"
@@ -67,21 +67,6 @@ DOCUMENTS: Final[tuple[str, ...]] = (
 EXPECTED_TOP1: Final[dict[int, int]] = {0: 0, 1: 5}
 
 BATCH_TEXTS: Final[tuple[str, ...]] = QUERIES + DOCUMENTS
-
-
-def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
-    """Return the cosine similarity of two equal-length, non-zero vectors."""
-
-    if len(a) != len(b):
-        raise ValueError(f"向量维度不一致：{len(a)} vs {len(b)}")
-    if not a:
-        raise ValueError("向量不能为空")
-    dot = math.fsum(x * y for x, y in zip(a, b, strict=True))
-    norm_a = math.sqrt(math.fsum(x * x for x in a))
-    norm_b = math.sqrt(math.fsum(y * y for y in b))
-    if norm_a == 0 or norm_b == 0:
-        raise ValueError("零向量无法计算余弦相似度")
-    return dot / (norm_a * norm_b)
 
 
 def rank_documents(

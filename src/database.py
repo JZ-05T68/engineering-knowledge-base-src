@@ -1565,6 +1565,35 @@ class Database:
             ).fetchone()
         return _page_embedding_from_row(row) if row is not None else None
 
+    def list_page_embeddings(
+        self,
+        *,
+        model: str,
+        dimensions: int,
+        config_version: int,
+    ) -> tuple[PageEmbedding, ...]:
+        """List the current stored embeddings for one configuration.
+
+        Read-only, deterministic (``page_id`` then ``id`` ascending), with
+        fail-closed vector decoding. Being listed does **not** imply fresh:
+        freshness is decided by the caller against the current source-text
+        fingerprint, never inside SQL.
+        """
+
+        normalized_model = _validate_embedding_configuration(
+            model=model, dimensions=dimensions, config_version=config_version
+        )
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM page_embeddings
+                WHERE model = ? AND dimensions = ? AND config_version = ?
+                ORDER BY page_id ASC, id ASC
+                """,
+                (normalized_model, dimensions, config_version),
+            ).fetchall()
+        return tuple(_page_embedding_from_row(row) for row in rows)
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds")
@@ -1647,17 +1676,14 @@ def _normalize_name(value: str, kind: str) -> tuple[str, str]:
     return display, display.casefold()
 
 
-def _validate_page_embedding_identity(
+def _validate_embedding_configuration(
     *,
-    page_id: int,
     model: str,
     dimensions: int,
     config_version: int,
 ) -> str:
-    """Validate the embedding configuration identity and return the model name."""
+    """Validate one embedding configuration and return the normalized model."""
 
-    if isinstance(page_id, bool) or not isinstance(page_id, int) or page_id <= 0:
-        raise ValueError(f"page_id 必须为正整数：{page_id!r}")
     normalized_model = model.strip()
     if not normalized_model:
         raise ValueError("embedding model 不能为空")
@@ -1670,6 +1696,22 @@ def _validate_page_embedding_identity(
     ):
         raise ValueError(f"config_version 必须为正整数：{config_version!r}")
     return normalized_model
+
+
+def _validate_page_embedding_identity(
+    *,
+    page_id: int,
+    model: str,
+    dimensions: int,
+    config_version: int,
+) -> str:
+    """Validate the embedding configuration identity and return the model name."""
+
+    if isinstance(page_id, bool) or not isinstance(page_id, int) or page_id <= 0:
+        raise ValueError(f"page_id 必须为正整数：{page_id!r}")
+    return _validate_embedding_configuration(
+        model=model, dimensions=dimensions, config_version=config_version
+    )
 
 
 def _validate_page_embedding_fields(
