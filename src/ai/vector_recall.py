@@ -35,7 +35,6 @@ Degradation semantics (aligned with the Phase 6 hybrid boundary):
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import math
 from collections.abc import Sequence
@@ -43,6 +42,7 @@ from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
 from src.ai.hybrid_search import PageHydrationSource
+from src.ai.page_indexer import prepare_page_text
 from src.ai.provider import EmbeddingProvider
 from src.ai.retrieval import RankedHit
 from src.models import PageEmbedding
@@ -125,26 +125,27 @@ class CurrentFingerprintSource(Protocol):
 
 
 class SearchableContentFingerprintSource:
-    """Prototype fingerprint policy: SHA-256 of ``Page.searchable_content``.
+    """Fingerprint pages with the shared Phase 9 preparation policy.
 
-    PROTOTYPE POLICY ONLY (offline fake-vector phase): page-level text,
-    ``Page.searchable_content`` preference order, **no truncation**, no
-    normalization beyond what the page record already carries. This maps to
-    embedding ``config_version = 1``. It must not be quoted as the future
-    production text-preparation policy — truncation/model-limit handling is
-    deliberately deferred.
+    Delegates to ``prepare_page_text`` (prototype ``config_version = 1``:
+    page-level ``Page.searchable_content``, explicit 8000-character
+    truncation, SHA-256 over the exact embeddable text). Keeping recall and
+    indexing on the same policy guarantees an embedding written by the
+    indexer is recognized as fresh here. This remains a prototype policy —
+    production truncation/model-limit handling is deliberately deferred.
     """
 
     def __init__(self, pages: PageHydrationSource) -> None:
         self._pages = pages
 
     def current_source_sha256(self, page_id: int) -> str | None:
-        """Hash the page's current searchable content; ``None`` if missing."""
+        """Hash the page's current prepared text; ``None`` if missing/empty."""
 
         page = self._pages.get_page(page_id)
         if page is None:
             return None
-        return hashlib.sha256(page.searchable_content.encode("utf-8")).hexdigest()
+        prepared = prepare_page_text(page.searchable_content)
+        return prepared.sha256 if prepared is not None else None
 
 
 class PersistentVectorRecallSource:
