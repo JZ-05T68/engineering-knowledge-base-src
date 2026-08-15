@@ -384,6 +384,12 @@ class DocumentDeletionService:
                     f"SELECT COUNT(*) FROM project_pages WHERE page_id IN ({placeholders})",
                     page_ids,
                 ),
+                (
+                    "页面嵌入向量",
+                    f"SELECT COUNT(*) FROM page_embeddings "
+                    f"WHERE page_id IN ({placeholders})",
+                    page_ids,
+                ),
                 # Import records survive with document_id set to NULL
                 # (ON DELETE SET NULL); none may keep referencing the document.
                 (

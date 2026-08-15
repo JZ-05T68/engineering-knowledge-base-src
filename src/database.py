@@ -14,6 +14,7 @@ from typing import Final
 
 import jieba
 
+from src.ai.embedding_store import decode_vector, encode_vector
 from src.migrations import SCHEMA_VERSION, MigrationError, migrate_database
 from src.models import (
     DashboardStats,
@@ -21,6 +22,7 @@ from src.models import (
     ImportRecord,
     ImportStatus,
     Page,
+    PageEmbedding,
     PageStatus,
     Project,
     ReviewProgress,
@@ -1428,6 +1430,141 @@ class Database:
         ).fetchall()
         return [_project_from_row(row) for row in rows]
 
+    # Page embeddings ---------------------------------------------------
+    def upsert_page_embedding(
+        self,
+        *,
+        page_id: int,
+        source_text_sha256: str,
+        model: str,
+        dimensions: int,
+        config_version: int,
+        vector: Sequence[float],
+    ) -> PageEmbedding:
+        """Insert or replace the current embedding for one page configuration.
+
+        The current record is uniquely keyed by
+        ``(page_id, model, dimensions, config_version)``: re-embedding after
+        a source-text change updates ``source_text_sha256``, ``vector`` and
+        ``updated_at`` in place instead of accumulating stale rows. This
+        method never calls any embedding API; the caller supplies the
+        already-computed vector and the fingerprint of the embedded text.
+        """
+
+        normalized_hash, normalized_model = _validate_page_embedding_fields(
+            page_id=page_id,
+            source_text_sha256=source_text_sha256,
+            model=model,
+            dimensions=dimensions,
+            config_version=config_version,
+        )
+        blob = encode_vector(vector, dimensions=dimensions)
+        timestamp = _utc_now()
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO page_embeddings(
+                        page_id, source_text_sha256, model, dimensions,
+                        config_version, vector, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(page_id, model, dimensions, config_version)
+                    DO UPDATE SET
+                        source_text_sha256 = excluded.source_text_sha256,
+                        vector = excluded.vector,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        page_id,
+                        normalized_hash,
+                        normalized_model,
+                        dimensions,
+                        config_version,
+                        sqlite3.Binary(blob),
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+                row = connection.execute(
+                    """
+                    SELECT * FROM page_embeddings
+                    WHERE page_id = ? AND model = ? AND dimensions = ?
+                      AND config_version = ?
+                    """,
+                    (page_id, normalized_model, dimensions, config_version),
+                ).fetchone()
+        except sqlite3.IntegrityError as exc:
+            raise RecordNotFoundError(f"找不到页面：{page_id}") from exc
+        if row is None:  # pragma: no cover - defensive, upsert just wrote it
+            raise DatabaseError("无法读取刚写入的页面 embedding")
+        return _page_embedding_from_row(row)
+
+    def get_page_embedding(
+        self,
+        *,
+        page_id: int,
+        model: str,
+        dimensions: int,
+        config_version: int,
+    ) -> PageEmbedding | None:
+        """Return the current embedding for one page configuration, if any.
+
+        The record is returned regardless of freshness; use
+        :meth:`get_fresh_page_embedding` when a stale vector must not be
+        treated as valid.
+        """
+
+        _validate_page_embedding_identity(
+            page_id=page_id,
+            model=model,
+            dimensions=dimensions,
+            config_version=config_version,
+        )
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM page_embeddings
+                WHERE page_id = ? AND model = ? AND dimensions = ?
+                  AND config_version = ?
+                """,
+                (page_id, model.strip(), dimensions, config_version),
+            ).fetchone()
+        return _page_embedding_from_row(row) if row is not None else None
+
+    def get_fresh_page_embedding(
+        self,
+        *,
+        page_id: int,
+        source_text_sha256: str,
+        model: str,
+        dimensions: int,
+        config_version: int,
+    ) -> PageEmbedding | None:
+        """Return the embedding only when it exactly matches the full identity.
+
+        Freshness requires an exact match on ``source_text_sha256``,
+        ``model``, ``dimensions`` and ``config_version``; any difference
+        returns ``None`` so a stale vector can never leak into recall.
+        """
+
+        normalized_hash, normalized_model = _validate_page_embedding_fields(
+            page_id=page_id,
+            source_text_sha256=source_text_sha256,
+            model=model,
+            dimensions=dimensions,
+            config_version=config_version,
+        )
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM page_embeddings
+                WHERE page_id = ? AND source_text_sha256 = ? AND model = ?
+                  AND dimensions = ? AND config_version = ?
+                """,
+                (page_id, normalized_hash, normalized_model, dimensions, config_version),
+            ).fetchone()
+        return _page_embedding_from_row(row) if row is not None else None
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds")
@@ -1508,6 +1645,74 @@ def _normalize_name(value: str, kind: str) -> tuple[str, str]:
     if len(display) > 100:
         raise ValueError(f"{kind}名称不能超过 100 个字符")
     return display, display.casefold()
+
+
+def _validate_page_embedding_identity(
+    *,
+    page_id: int,
+    model: str,
+    dimensions: int,
+    config_version: int,
+) -> str:
+    """Validate the embedding configuration identity and return the model name."""
+
+    if isinstance(page_id, bool) or not isinstance(page_id, int) or page_id <= 0:
+        raise ValueError(f"page_id 必须为正整数：{page_id!r}")
+    normalized_model = model.strip()
+    if not normalized_model:
+        raise ValueError("embedding model 不能为空")
+    if isinstance(dimensions, bool) or not isinstance(dimensions, int) or dimensions <= 0:
+        raise ValueError(f"dimensions 必须为正整数：{dimensions!r}")
+    if (
+        isinstance(config_version, bool)
+        or not isinstance(config_version, int)
+        or config_version <= 0
+    ):
+        raise ValueError(f"config_version 必须为正整数：{config_version!r}")
+    return normalized_model
+
+
+def _validate_page_embedding_fields(
+    *,
+    page_id: int,
+    source_text_sha256: str,
+    model: str,
+    dimensions: int,
+    config_version: int,
+) -> tuple[str, str]:
+    """Validate the full embedding identity plus the freshness fingerprint."""
+
+    normalized_model = _validate_page_embedding_identity(
+        page_id=page_id,
+        model=model,
+        dimensions=dimensions,
+        config_version=config_version,
+    )
+    normalized_hash = source_text_sha256.strip().lower()
+    if not _SHA256_PATTERN.fullmatch(normalized_hash):
+        raise ValueError("source_text_sha256 必须是 64 位十六进制字符")
+    return normalized_hash, normalized_model
+
+
+def _page_embedding_from_row(row: sqlite3.Row) -> PageEmbedding:
+    dimensions = int(row["dimensions"])
+    try:
+        vector = decode_vector(row["vector"], dimensions=dimensions)
+    except ValueError as exc:
+        raise DatabaseError(
+            f"页面 {row['page_id']} 的 embedding 数据损坏：{exc}"
+        ) from exc
+    return PageEmbedding(
+        id=int(row["id"]),
+        page_id=int(row["page_id"]),
+        source_text_sha256=str(row["source_text_sha256"]),
+        model=str(row["model"]),
+        dimensions=dimensions,
+        config_version=int(row["config_version"]),
+        vector=vector,
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
+        updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
+    )
 
 
 def _document_from_row(row: sqlite3.Row) -> Document:

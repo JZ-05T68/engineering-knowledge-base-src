@@ -832,3 +832,25 @@ class AggregationResult:
     primary_count: int = 0
     secondary_count: int = 0
     normal_count: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class PageEmbedding:
+    """Persisted embedding artifact for one page under one model configuration.
+
+    The current record for a page is uniquely identified by
+    ``(page_id, model, dimensions, config_version)``; ``source_text_sha256``
+    is the freshness fingerprint of the text the vector was computed from.
+    This is a pure persistence record: it carries no similarity score,
+    query, rank, citation, or LLM output.
+    """
+
+    id: int
+    page_id: int
+    source_text_sha256: str
+    model: str
+    dimensions: int
+    config_version: int
+    vector: tuple[float, ...]
+    created_at: datetime
+    updated_at: datetime

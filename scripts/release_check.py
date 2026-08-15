@@ -229,6 +229,7 @@ class ReleaseChecker:
                 )
             )
             results.append(schema_v7_invariants_check(self.settings.database_path))
+            results.append(schema_v8_invariants_check(self.settings.database_path))
 
         results.append(data_pollution_check(self.settings.data_dir))
 
@@ -528,6 +529,69 @@ def schema_v7_invariants_check(database_path: Path) -> CheckResult:
         "Schema v7 invariants",
         CheckStatus.PASS if not issues else CheckStatus.FAIL,
         "证据类型 / 区域锚点 / 人工确认 / 索引 全部在位"
+        if not issues
+        else "；".join(issues),
+    )
+
+
+def schema_v8_invariants_check(database_path: Path) -> CheckResult:
+    """Read-only Phase 7 embedding-persistence invariants of the formal database."""
+
+    try:
+        with closing(sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)) as connection:
+            table_row = connection.execute(
+                "SELECT 1 FROM sqlite_master WHERE type = 'table'"
+                " AND name = 'page_embeddings'"
+            ).fetchone()
+            embedding_columns = {
+                row[1]
+                for row in connection.execute("PRAGMA table_info(page_embeddings)")
+            }
+            foreign_keys = [
+                (row[2], row[3], row[4], row[6])
+                for row in connection.execute("PRAGMA foreign_key_list(page_embeddings)")
+            ]
+            unique_shapes = set()
+            for index in connection.execute(
+                "PRAGMA index_list(page_embeddings)"
+            ).fetchall():
+                if not int(index[2]):
+                    continue
+                unique_shapes.add(
+                    tuple(
+                        column[2]
+                        for column in connection.execute(
+                            f"PRAGMA index_info({index[1]})"
+                        ).fetchall()
+                    )
+                )
+    except (OSError, sqlite3.Error) as exc:
+        return CheckResult("Schema v8 invariants", CheckStatus.FAIL, str(exc))
+    issues: list[str] = []
+    if table_row is None:
+        issues.append("缺少 page_embeddings 表")
+    required_columns = {
+        "id",
+        "page_id",
+        "source_text_sha256",
+        "model",
+        "dimensions",
+        "config_version",
+        "vector",
+        "created_at",
+        "updated_at",
+    }
+    missing_columns = sorted(required_columns - embedding_columns)
+    if missing_columns:
+        issues.append(f"page_embeddings 缺少列：{missing_columns}")
+    if ("pages", "page_id", "id", "CASCADE") not in foreign_keys:
+        issues.append("page_embeddings 缺少 pages(id) ON DELETE CASCADE 外键")
+    if ("page_id", "model", "dimensions", "config_version") not in unique_shapes:
+        issues.append("page_embeddings 缺少配置唯一约束索引")
+    return CheckResult(
+        "Schema v8 invariants",
+        CheckStatus.PASS if not issues else CheckStatus.FAIL,
+        "page_embeddings 表 / 外键级联 / 配置唯一约束 全部在位"
         if not issues
         else "；".join(issues),
     )

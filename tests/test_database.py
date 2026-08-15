@@ -128,7 +128,7 @@ def test_initialization_is_idempotent_and_schema_has_fts5(tmp_path: Path) -> Non
         "evidence_items",
     } <= tables
     assert not any("user" in name.lower() or "account" in name.lower() for name in tables)
-    assert migration_count == 7
+    assert migration_count == 8
 
 
 def test_document_sha256_is_unique_and_metadata_persists(tmp_path: Path) -> None:
@@ -426,7 +426,7 @@ def test_v3_to_v4_migration_preserves_core_data_and_adds_empty_evidence_tables(
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert before == after
-    assert version == 7
+    assert version == 8
     assert (basket_count, item_count) == (0, 0)
 
 

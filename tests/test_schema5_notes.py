@@ -200,7 +200,7 @@ def _seed_document_and_page(database_path: Path) -> None:
 
 
 def test_schema_version_and_notes_structure(tmp_path: Path) -> None:
-    assert SCHEMA_VERSION == 7
+    assert SCHEMA_VERSION == 8
     database_path = _fresh_database(tmp_path)
     with sqlite3.connect(database_path) as connection:
         columns = {row[1]: row for row in connection.execute("PRAGMA table_info(notes)")}
@@ -395,7 +395,7 @@ def test_v4_to_v5_preserves_all_existing_data(tmp_path: Path) -> None:
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert before == after
-    assert version == 7
+    assert version == 8
     assert note_count == 0
 
 
@@ -453,7 +453,7 @@ def test_fresh_database_initializes_at_schema_5(tmp_path: Path) -> None:
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
         ]
-    assert versions == [1, 2, 3, 4, 5, 6, 7]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
 
 
 def test_remigration_is_noop(tmp_path: Path) -> None:
@@ -469,8 +469,8 @@ def test_remigration_is_noop(tmp_path: Path) -> None:
         migration_rows = connection.execute(
             "SELECT COUNT(*) FROM schema_migrations"
         ).fetchone()[0]
-    assert version == 7
-    assert migration_rows == 7
+    assert version == 8
+    assert migration_rows == 8
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
 
 
@@ -478,7 +478,7 @@ def test_higher_version_database_is_rejected(tmp_path: Path) -> None:
     database_path = _fresh_database(tmp_path)
     with sqlite3.connect(database_path) as connection:
         connection.execute(
-            "INSERT INTO schema_migrations(version, applied_at) VALUES (8, ?)", (TS,)
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (9, ?)", (TS,)
         )
         connection.commit()
     with pytest.raises(MigrationError, match="高于程序支持"):

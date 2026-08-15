@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 
 class MigrationError(RuntimeError):
@@ -72,6 +72,8 @@ def migrate_database(database_path: Path) -> Path | None:
             _apply_version_six(connection)
         if current_version < 7:
             _apply_version_seven(connection)
+        if current_version < 8:
+            _apply_version_eight(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -805,6 +807,51 @@ def _apply_version_seven(connection: sqlite3.Connection) -> None:
             raise MigrationError("schema v7 迁移未能完整保留原有证据条目")
         connection.commit()
         LOGGER.info("数据库已迁移到 schema v7")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _apply_version_eight(connection: sqlite3.Connection) -> None:
+    """Add the page_embeddings persistence table without touching existing data.
+
+    v0.5.0 Phase 7: page-level embedding persistence. One additive table,
+    no rebuild of any existing table. The current embedding of a page is
+    uniquely keyed by ``(page_id, model, dimensions, config_version)`` so a
+    re-embedding after a text change updates the row in place instead of
+    accumulating stale vectors; ``source_text_sha256`` is the freshness
+    fingerprint of the embedded text. Rows cascade away with their page.
+    """
+
+    fingerprint = _core_data_fingerprint(connection)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE page_embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                page_id INTEGER NOT NULL REFERENCES pages(id) ON DELETE CASCADE,
+                source_text_sha256 TEXT NOT NULL CHECK (
+                    length(source_text_sha256) = 64
+                ),
+                model TEXT NOT NULL CHECK (length(trim(model)) > 0),
+                dimensions INTEGER NOT NULL CHECK (dimensions > 0),
+                config_version INTEGER NOT NULL CHECK (config_version > 0),
+                vector BLOB NOT NULL CHECK (length(vector) = 1 + 4 * dimensions),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                UNIQUE (page_id, model, dimensions, config_version)
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (8, ?)",
+            (_utc_now(),),
+        )
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v8 迁移改变了现有文档、页面或 FTS 数据")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v8")
     except Exception:
         connection.rollback()
         raise
