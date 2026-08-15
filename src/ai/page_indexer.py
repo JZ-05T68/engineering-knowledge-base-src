@@ -171,6 +171,7 @@ class PageEmbeddingIndexer:
         dimensions: int,
         config_version: int = EMBEDDING_CONFIG_VERSION,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        page_ids: Sequence[int] | None = None,
     ) -> None:
         if not model.strip():
             raise ValueError("embedding model 不能为空")
@@ -184,12 +185,19 @@ class PageEmbeddingIndexer:
             raise ValueError(f"config_version 必须为正整数：{config_version!r}")
         if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size <= 0:
             raise ValueError(f"batch_size 必须为正整数：{batch_size!r}")
+        allowed_ids: frozenset[int] | None = None
+        if page_ids is not None:
+            for value in page_ids:
+                if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                    raise ValueError(f"page_ids 必须为正整数：{value!r}")
+            allowed_ids = frozenset(page_ids)
         self._database = database
         self._embedding = embedding
         self._model = model.strip()
         self._dimensions = dimensions
         self._config_version = config_version
         self._batch_size = batch_size
+        self._page_ids = allowed_ids
 
     def plan_indexing(self) -> PageIndexPlan:
         """Dry-run: classify every page without touching the provider."""
@@ -304,12 +312,22 @@ class PageEmbeddingIndexer:
 
     # ------------------------------------------------------------- internals
     def _iter_pages(self) -> list[Page]:
-        """Enumerate every page deterministically (document id, page number)."""
+        """Enumerate pages deterministically (document id, page number).
+
+        With a ``page_ids`` allowlist only those pages are considered, in
+        the same deterministic order; unknown ids fail closed.
+        """
 
         pages: list[Page] = []
         for document in self._database.list_documents():
             pages.extend(self._database.list_pages(document.id))
-        return pages
+        if self._page_ids is None:
+            return pages
+        selected = [page for page in pages if page.id in self._page_ids]
+        missing = sorted(self._page_ids - {page.id for page in selected})
+        if missing:
+            raise ValueError(f"page_ids 包含不存在的页面：{missing}")
+        return selected
 
     def _classify_pages(self) -> list[_PageWork]:
         """Decide per page: skip empty, reuse fresh, or (re)generate."""

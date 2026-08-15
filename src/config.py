@@ -12,6 +12,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OFFICIAL_HOST: Final[str] = "127.0.0.1"
 OFFICIAL_PORT: Final[int] = 8501
+STAGING_PORT: Final[int] = 8502
+DEFAULT_STAGING_ROOT: Final[Path] = PROJECT_ROOT / "staging-data"
 
 
 class OfficialEndpointError(ValueError):
@@ -109,3 +111,41 @@ def get_settings() -> Settings:
         ) from exc
     require_official_endpoint(settings.host, settings.port)
     return settings
+
+
+def staging_settings(root: Path | None = None) -> Settings:
+    """Build fully isolated AI-staging settings under one separate root.
+
+    Every writable path (data / raw / pages / markdown / database / backups /
+    logs / runtime) is derived under ``root`` — never the production
+    locations — and the staging endpoint is loopback ``STAGING_PORT`` (8502).
+    Explicit constructor arguments outrank any ``EKB_*`` value in ``.env``,
+    so a stray path override in the environment cannot break isolation; the
+    AI credentials and model settings still resolve from ``.env`` as usual.
+
+    The formal-runtime guard (``require_official_endpoint``) deliberately
+    does not apply: staging is a non-formal, explicitly separate instance,
+    and direct ``Settings`` construction is the existing sanctioned
+    extension point. Staging data can be deleted or rebuilt freely without
+    affecting production.
+    """
+
+    staging_root = Path(root) if root is not None else DEFAULT_STAGING_ROOT
+    data_dir = staging_root / "data"
+    database_dir = data_dir / "database"
+    logs_dir = staging_root / "logs"
+    runtime_dir = staging_root / "runtime"
+    return Settings(
+        port=STAGING_PORT,
+        data_dir=data_dir,
+        raw_dir=data_dir / "raw",
+        pages_dir=data_dir / "pages",
+        markdown_dir=data_dir / "markdown",
+        database_dir=database_dir,
+        database_path=database_dir / "knowledge.db",
+        backups_dir=staging_root / "backups",
+        logs_dir=logs_dir,
+        log_path=logs_dir / "engineering-kb-staging.log",
+        runtime_dir=runtime_dir,
+        pid_path=runtime_dir / "engineering-kb-staging.pid.json",
+    )

@@ -38,3 +38,6 @@ runtime/*
 # Operating system files
 .DS_Store
 Thumbs.db
+
+# AI staging instance (Phase 10A, fully isolated local test data)
+staging-data/
