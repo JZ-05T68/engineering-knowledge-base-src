@@ -12,6 +12,7 @@ from src.models import (
     PageStatus,
     SearchField,
     SearchFilters,
+    SearchMode,
     SearchSort,
     SearchViewMode,
 )
@@ -37,6 +38,7 @@ _STATE_KEYS = {
     "has_note",
     "basket",
     "evidence_basket_id",
+    "mode",
     "sort",
     "limit",
     "result_page",
@@ -61,6 +63,7 @@ class SearchPageState:
     query: str = ""
     filters: SearchFilters = SearchFilters()
     sort: SearchSort = SearchSort.RELEVANCE
+    mode: SearchMode = SearchMode.KEYWORD
     limit: int = 50
     result_page: int = 1
     filters_open: bool = False
@@ -113,6 +116,10 @@ def parse_search_state(params: QueryParams | Mapping[str, object]) -> SearchPage
         view_mode = SearchViewMode(_first(params, "view") or SearchViewMode.PAGE.value)
     except ValueError:
         view_mode = SearchViewMode.PAGE
+    try:
+        mode = SearchMode(_first(params, "mode") or SearchMode.KEYWORD.value)
+    except ValueError:
+        mode = SearchMode.KEYWORD
     expanded_document_id = _positive_int(_first(params, "expanded_document"))
     preview_page_id = _positive_int(_first(params, "preview_page"))
     focus_result = _bounded_optional_int(
@@ -130,6 +137,7 @@ def parse_search_state(params: QueryParams | Mapping[str, object]) -> SearchPage
             evidence_basket_id=basket_id,
         ),
         sort=sort,
+        mode=mode,
         limit=limit,
         result_page=result_page,
         filters_open=_first(params, "filters_open").casefold() in _TRUE_VALUES,
@@ -159,6 +167,8 @@ def search_state_query_params(state: SearchPageState) -> dict[str, str]:
         params["has_note"] = "1"
     if filters.evidence_basket_id is not None:
         params["basket"] = str(filters.evidence_basket_id)
+    if state.mode is not SearchMode.KEYWORD:
+        params["mode"] = state.mode.value
     if state.sort is not SearchSort.RELEVANCE:
         params["sort"] = state.sort.value
     if state.limit != 50:

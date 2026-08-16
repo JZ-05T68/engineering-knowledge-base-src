@@ -24,6 +24,7 @@ from src.models import (
     PageStatus,
     SearchField,
     SearchFilters,
+    SearchMode,
     SearchResult,
     SearchSort,
     SearchViewMode,
@@ -33,9 +34,17 @@ from src.runtime import (
     application_classification_metadata_service,
     application_database,
     application_evidence_basket_service,
+    application_hybrid_search_service,
     application_page_batch_service,
 )
 from src.search_history import search_history_reload_html
+from src.search_mode import (
+    auto_execute_allowed,
+    hybrid_is_allowed,
+    hybrid_status_note,
+    provenance_from_outcome,
+    result_source_for,
+)
 from src.search_navigation import (
     SearchNavigationError,
     group_search_results,
@@ -92,6 +101,7 @@ def _state_signature(state: SearchPageState) -> tuple[object, ...]:
         filters.has_note,
         filters.evidence_basket_id,
         state.sort,
+        state.mode,
         state.limit,
         state.result_page,
         state.filters_open,
@@ -99,6 +109,31 @@ def _state_signature(state: SearchPageState) -> tuple[object, ...]:
         state.expanded_document_id,
         state.preview_page_id,
         state.focus_result,
+    )
+
+
+def _search_projection(state: SearchPageState) -> tuple[object, ...]:
+    """Return only the fields that determine a search's result set.
+
+    Unlike ``_state_signature``, this excludes transient UI state (pagination,
+    preview, expanded group, view mode, focus) so that navigating those does
+    not look like a new search. This is the key that gates whether an already
+    executed result may be reused instead of re-embedding.
+    """
+
+    filters = state.filters
+    return (
+        state.query,
+        filters.document_ids,
+        filters.project_ids,
+        filters.tag_ids,
+        filters.statuses,
+        filters.match_fields,
+        filters.has_note,
+        filters.evidence_basket_id,
+        state.sort,
+        state.mode,
+        state.limit,
     )
 
 
@@ -117,6 +152,7 @@ def _set_widget_state(state: SearchPageState) -> None:
     st.session_state["search_has_note"] = filters.has_note
     st.session_state["search_in_basket"] = filters.evidence_basket_id is not None
     st.session_state["search_sort_value"] = state.sort.value
+    st.session_state["search_mode_value"] = state.mode.value
     st.session_state["search_limit"] = state.limit
     st.session_state["search_filters_open"] = state.filters_open
     st.session_state["search_view_mode"] = state.view_mode.value
@@ -130,19 +166,72 @@ def _search_with_state(state: SearchPageState) -> None:
     st.session_state["knowledge_sort"] = state.sort.value
     st.session_state["search_result_page"] = state.result_page
     try:
-        st.session_state["knowledge_results"] = search_service.search(
-            state.query,
-            limit=state.limit,
-            filters=state.filters,
-            sort_by=state.sort,
-        )
+        if hybrid_is_allowed(state.mode, state.filters, state.sort):
+            _run_hybrid_search(state)
+        else:
+            _run_keyword_search(state)
     except Exception as exc:
         LOGGER.exception("全文检索失败：query=%r", state.query)
         st.session_state["search_error"] = f"检索失败：{exc}"
         st.session_state["knowledge_results"] = []
     else:
         st.session_state.pop("search_error", None)
+        st.session_state["search_executed_projection"] = _search_projection(state)
     st.session_state.pop("knowledge_prompt", None)
+
+
+def _run_keyword_search(state: SearchPageState) -> None:
+    """Execute the existing lexical-only search path (zero AI)."""
+
+    st.session_state["knowledge_results"] = search_service.search(
+        state.query,
+        limit=state.limit,
+        filters=state.filters,
+        sort_by=state.sort,
+    )
+    # Keyword mode carries no hybrid provenance or degradation note.
+    st.session_state.pop("search_hybrid_source_meta", None)
+    st.session_state.pop("search_hybrid_note", None)
+
+
+def _run_hybrid_search(state: SearchPageState) -> None:
+    """Execute the canonical hybrid search and keep provenance for rendering.
+
+    ``hybrid_is_allowed`` already guaranteed empty filters and relevance sort,
+    so this is the exact frozen product boundary: no post-filter, no sort
+    recomputation. The outcome carries per-hit lexical/vector provenance used
+    only for lightweight source labelling (never raw scores).
+
+    The canonical factory is resolved lazily here (not at page import) so a
+    keyword search never constructs the hybrid service or an AI provider.
+    """
+
+    outcome = application_hybrid_search_service().search(state.query, limit=state.limit)
+    source_meta = provenance_from_outcome(outcome)
+    note = hybrid_status_note(outcome.vector_status)
+    # An "empty" vector path still falls back to lexical results transparently;
+    # the note tells the user what happened without exposing internals.
+    st.session_state["knowledge_results"] = [item.result for item in outcome.results]
+    st.session_state["search_hybrid_source_meta"] = source_meta
+    st.session_state["search_hybrid_note"] = note
+
+
+def _refresh_display_only(state: SearchPageState) -> None:
+    """Refresh auxiliary display state without re-triggering a hybrid embedding.
+
+    Non-search UI actions (evidence basket add/note/remove, batch completion)
+    may change the result set only through the ``evidence_basket_id`` filter —
+    which is empty whenever the hybrid path is allowed. So:
+
+    - keyword mode: re-run the free lexical search (correct when a basket or
+      other filter is active);
+    - hybrid mode: keep the existing ``knowledge_results`` untouched (no
+      re-embed, and the result set cannot differ since hybrid forbids filters).
+    """
+
+    if hybrid_is_allowed(state.mode, state.filters, state.sort):
+        return
+    _run_keyword_search(state)
 
 
 def _activate_state(
@@ -179,10 +268,12 @@ def _state_from_widgets(active: SearchPageState, basket_id: int) -> SearchPageSt
             SearchField(value) for value in st.session_state["search_field_values"]
         )
         sort = SearchSort(st.session_state["search_sort_value"])
+        mode = SearchMode(st.session_state["search_mode_value"])
     except ValueError:
         statuses = ()
         fields = ()
         sort = SearchSort.RELEVANCE
+        mode = SearchMode.KEYWORD
     filters = SearchFilters(
         document_ids=tuple(int(value) for value in st.session_state["search_document_ids"]),
         project_ids=tuple(int(value) for value in st.session_state["search_project_ids"]),
@@ -195,11 +286,16 @@ def _state_from_widgets(active: SearchPageState, basket_id: int) -> SearchPageSt
         ),
     )
     query = str(st.session_state["search_query_input"])[:500]
-    keep_page = query == active.query and filters == active.filters
+    keep_page = (
+        query == active.query
+        and filters == active.filters
+        and mode == active.mode
+    )
     return SearchPageState(
         query=query,
         filters=filters,
         sort=sort,
+        mode=mode,
         limit=int(st.session_state["search_limit"]),
         result_page=active.result_page if keep_page else 1,
         filters_open=active.filters_open,
@@ -291,7 +387,23 @@ if url_has_state and st.session_state.get("search_url_signature") != url_signatu
     st.session_state["search_active_state"] = url_state
     st.session_state["search_url_signature"] = url_signature
     _set_widget_state(url_state)
-    _search_with_state(url_state)
+    executed_projection = st.session_state.get("search_executed_projection")
+    already_executed = _search_projection(url_state) == executed_projection
+    if auto_execute_allowed(
+        url_state.mode,
+        url_state.filters,
+        url_state.sort,
+        already_executed=already_executed,
+    ):
+        _search_with_state(url_state)
+    elif not already_executed and hybrid_is_allowed(
+        url_state.mode, url_state.filters, url_state.sort
+    ):
+        # A hybrid deep-link / history restore must never auto-embed; restore
+        # the widgets and ask for an explicit click instead.
+        st.session_state["search_hybrid_note"] = (
+            "已恢复 AI 混合检索条件，请点击“搜索 / 应用筛选”执行。"
+        )
     if dict(st.query_params) != search_state_query_params(url_state):
         st.query_params.from_dict(search_state_query_params(url_state))
 elif "search_active_state" not in st.session_state:
@@ -336,6 +448,7 @@ for key, value in {
     "search_has_note": active_state.filters.has_note,
     "search_in_basket": active_state.filters.evidence_basket_id is not None,
     "search_sort_value": active_state.sort.value,
+    "search_mode_value": active_state.mode.value,
     "search_limit": active_state.limit,
     "search_filters_open": active_state.filters_open,
     "search_view_mode": active_state.view_mode.value,
@@ -565,6 +678,22 @@ if active_state.filters_open:
             help="完整匹配总数仍会显示；此设置只限制当前加载的结果卡片",
         )
 
+mode_columns = st.columns([2, 4])
+mode_columns[0].radio(
+    "检索方式",
+    options=[mode.value for mode in SearchMode],
+    format_func=lambda value: SearchMode(value).label,
+    key="search_mode_value",
+    horizontal=True,
+    help=(
+        "关键词检索不会调用 AI；AI 混合检索会在点击搜索时按需调用一次"
+        "语义向量检索（当前仅支持无筛选、按相关度排序）。"
+    ),
+)
+mode_columns[1].caption(
+    "AI 混合检索结合关键词与语义召回；存在筛选或非相关度排序时自动退回关键词检索。"
+)
+
 sort_columns = st.columns([2, 1, 3])
 sort_columns[0].selectbox(
     "排序方式",
@@ -620,7 +749,12 @@ if not results or active_state.view_mode is not SearchViewMode.PAGE:
         st.info("页面范围已变化，原批量选择已清除。")
 active_query_terms = search_service.query_terms(active_state.query)
 has_searched = bool(active_state.query.strip())
+is_hybrid_active = hybrid_is_allowed(active_state.mode, active_state.filters, active_state.sort)
 effective_total = facet_counts.total if active_query_terms else 0
+
+hybrid_note = st.session_state.get("search_hybrid_note", "")
+if hybrid_note:
+    st.caption(hybrid_note)
 
 if has_searched and not active_query_terms:
     st.warning("关键词没有可检索的文字，请输入中文、英文或数字后重试。")
@@ -674,7 +808,10 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
         st.session_state["search_url_signature"] = _state_signature(active_state)
         st.query_params.from_dict(search_state_query_params(active_state))
     heading_columns = st.columns([4, 1, 1])
-    heading_columns[0].subheader(f"搜索结果（共 {effective_total} 个页面）")
+    if is_hybrid_active:
+        heading_columns[0].subheader(f"混合检索结果（已载入 {loaded_count} 条）")
+    else:
+        heading_columns[0].subheader(f"搜索结果（共 {effective_total} 个页面）")
     if heading_columns[1].button(
         "← 上一组",
         disabled=current_page <= 1,
@@ -701,7 +838,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
         f"已加载 {loaded_count} 页；第 {current_page} / {page_count} 组；"
         f"排序：{active_state.sort.label}。"
     )
-    if effective_total > loaded_count:
+    if not is_hybrid_active and effective_total > loaded_count:
         st.caption(
             f"另有 {effective_total - loaded_count} 页未加载；"
             "可在低频条件中提高加载上限或继续筛选。"
@@ -748,7 +885,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
         service=page_batch_service,
         tags=all_tags,
         projects=all_projects,
-        on_finished=lambda: _search_with_state(active_state),
+        on_finished=lambda: _refresh_display_only(active_state),
     )
     evidence_packages = dict(st.session_state.get("evidence_packages", {}))
     for index, result in enumerate(visible_results, start=start + 1):
@@ -840,7 +977,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
                     st.error(f"加入证据篮失败：{exc}")
                 else:
                     st.session_state["basket_flash"] = "证据已持久化加入证据篮。"
-                    _search_with_state(active_state)
+                    _refresh_display_only(active_state)
                     st.rerun()
             if evidence_action.button(
                 "生成 / 复制证据包",
@@ -852,13 +989,24 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
 
             projects = "、".join(result.projects) if result.projects else "未关联项目"
             tags = "、".join(result.tags) if result.tags else "未添加标签"
-            match_sources = result.match_type or "页面内容"
+            hybrid_meta = st.session_state.get("search_hybrid_source_meta", {})
+            match_sources = (
+                result_source_for(result.page_id, hybrid_meta)
+                if is_hybrid_active and hybrid_meta
+                else (result.match_type or "页面内容")
+            )
+            semantic_only = is_hybrid_active and (
+                result_source_for(result.page_id, hybrid_meta or {}) == "语义召回"
+            )
             st.caption(f"所属项目：{projects}　|　标签：{tags}")
             st.caption(f"命中字段 / 来源：{match_sources}")
-            st.caption(
-                f"本页关键词字面命中 {result.match_count} 次（重叠词组按最长项计一次）；"
-                f"显示 {len(result.snippets)} 个去重片段。"
-            )
+            if semantic_only:
+                st.caption("该结果由语义相似度召回，可打开原页查看上下文。")
+            else:
+                st.caption(
+                    f"本页关键词字面命中 {result.match_count} 次（重叠词组按最长项计一次）；"
+                    f"显示 {len(result.snippets)} 个去重片段。"
+                )
             if result.snippets:
                 for snippet_number, match_snippet in enumerate(result.snippets, start=1):
                     st.caption(
@@ -871,6 +1019,8 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
                         ),
                         unsafe_allow_html=True,
                     )
+            elif semantic_only:
+                st.caption("")
             else:
                 st.caption("该页没有可用命中上下文；仍可打开阅读页核对页面图像。")
             if preview_open:
@@ -943,7 +1093,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
                                 st.error(f"保存证据备注失败：{exc}")
                             else:
                                 st.session_state["basket_flash"] = "证据备注已保存。"
-                                _search_with_state(active_state)
+                                _refresh_display_only(active_state)
                                 st.rerun()
                         if remove_action.button(
                             "移除这条证据",
@@ -959,7 +1109,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
                                 st.error(f"移除证据失败：{exc}")
                             else:
                                 st.session_state["basket_flash"] = "已移除一条证据。"
-                                _search_with_state(active_state)
+                                _refresh_display_only(active_state)
                                 st.rerun()
             if result.page_id in evidence_packages:
                 with st.expander("引用证据包（右上角可复制）", expanded=True):
@@ -1067,10 +1217,21 @@ def _render_group_result_card(result: SearchResult, result_index: int) -> None:
                 st.session_state["basket_flash"] = "证据已持久化加入证据篮。"
                 st.rerun()
 
-        st.caption(
-            f"命中字段：{result.match_type or '页面内容'}；"
-            f"关键词字面命中 {result.match_count} 次；显示 {len(result.snippets)} 个去重片段。"
+        hybrid_meta = st.session_state.get("search_hybrid_source_meta", {})
+        group_match_sources = (
+            result_source_for(result.page_id, hybrid_meta)
+            if is_hybrid_active and hybrid_meta
+            else (result.match_type or "页面内容")
         )
+        group_semantic_only = is_hybrid_active and group_match_sources == "语义召回"
+        if group_semantic_only:
+            st.caption(f"命中来源：{group_match_sources}")
+            st.caption("该结果由语义相似度召回，可打开原页查看上下文。")
+        else:
+            st.caption(
+                f"命中字段：{group_match_sources}；"
+                f"关键词字面命中 {result.match_count} 次；显示 {len(result.snippets)} 个去重片段。"
+            )
         for snippet_number, match_snippet in enumerate(result.snippets, start=1):
             st.caption(f"片段 {snippet_number} · {match_snippet.field.label}")
             st.markdown(
@@ -1079,7 +1240,7 @@ def _render_group_result_card(result: SearchResult, result_index: int) -> None:
                 ),
                 unsafe_allow_html=True,
             )
-        if not result.snippets:
+        if not result.snippets and not group_semantic_only:
             st.caption("没有可用文本上下文；可打开阅读页核对原图。")
 
         if preview_open:
@@ -1165,12 +1326,15 @@ def _render_group_result_card(result: SearchResult, result_index: int) -> None:
 
 if results and active_state.view_mode is SearchViewMode.DOCUMENT:
     loaded_count = len(results)
-    st.subheader(f"搜索结果（共 {effective_total} 个页面）")
+    if is_hybrid_active:
+        st.subheader(f"混合检索结果（已载入 {loaded_count} 条）")
+    else:
+        st.subheader(f"搜索结果（共 {effective_total} 个页面）")
     st.caption(
         f"已加载 {loaded_count} 页；排序：{active_state.sort.label}；"
         "文档组按首个全局结果的位置排列，组内保持同一全局排序。"
     )
-    if effective_total > loaded_count:
+    if not is_hybrid_active and effective_total > loaded_count:
         st.warning(
             f"当前分组与导航覆盖前 {loaded_count} / {effective_total} 个结果；"
             "完整组计数仍按全部匹配页计算，未加载页不会被误作可导航项。"

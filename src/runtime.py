@@ -125,6 +125,7 @@ def application_ai_provider() -> CompletionProvider | None:
         embedding_model=settings.ai_embedding_model,
         rerank_model=settings.ai_rerank_model,
         timeout_seconds=settings.ai_timeout_seconds,
+        max_extra_attempts=0,
         transport=urllib_transport,
     )
 

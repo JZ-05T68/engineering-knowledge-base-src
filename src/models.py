@@ -94,6 +94,29 @@ class SearchSort(StrEnum):
         }[self]
 
 
+class SearchMode(StrEnum):
+    """Supported search execution modes stored in the URL state.
+
+    ``KEYWORD`` is the default and never triggers embedding. ``HYBRID`` is an
+    explicit user opt-in that may trigger one query embedding per explicit
+    search action; it is only honoured when every ``SearchFilters`` field is
+    empty/default and ``sort`` is ``RELEVANCE``, otherwise it silently falls
+    back to ``KEYWORD`` execution.
+    """
+
+    KEYWORD = "keyword"
+    HYBRID = "hybrid"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown by the search-mode switcher."""
+
+        return {
+            self.KEYWORD: "关键词检索",
+            self.HYBRID: "AI 混合检索",
+        }[self]
+
+
 class ReviewQueueSort(StrEnum):
     """Supported, SQL-whitelisted orders for the manual-review queue."""
 

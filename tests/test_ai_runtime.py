@@ -5,7 +5,8 @@ from __future__ import annotations
 import pytest
 
 import src.runtime as runtime
-from src.ai.qwen_client import QwenProvider
+from src.ai.provider import AIExecutionError
+from src.ai.qwen_client import QwenProvider, QwenTransportError
 from src.config import Settings
 
 
@@ -45,6 +46,34 @@ def test_api_mode_with_key_builds_qwen_provider(
 
     assert isinstance(provider, QwenProvider)
     assert provider.is_configured
+
+
+def test_application_provider_forces_zero_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The EKB runtime policy pins max_extra_attempts to 0 for the app.
+
+    The Qwen library default stays 2; only the runtime factory's own provider
+    is pinned. Verified through observable behaviour: a provider with zero
+    retry calls the transport exactly once and raises on the first transient
+    failure instead of retrying.
+    """
+    _stub_settings(monkeypatch, ai_mode="api", ai_api_key="sk-runtime-test")
+
+    provider = runtime.application_ai_provider()
+    assert isinstance(provider, QwenProvider)
+
+    calls: list[int] = []
+
+    def _failing_transport(url, headers, payload, timeout_seconds):
+        calls.append(1)
+        raise QwenTransportError("transient", status_code=503)
+
+    provider._transport = _failing_transport
+    with pytest.raises(AIExecutionError):
+        provider.embed(("query",), model="qwen3.7-text-embedding", dimensions=1024)
+
+    assert len(calls) == 1
 
 
 def test_provider_factory_is_cached_per_process(
