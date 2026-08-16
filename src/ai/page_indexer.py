@@ -45,6 +45,7 @@ from src.models import Page
 __all__ = [
     "DEFAULT_BATCH_SIZE",
     "EMBEDDING_CONFIG_VERSION",
+    "EMBEDDING_DIMENSIONS",
     "MAX_SOURCE_TEXT_CHARS",
     "PageEmbeddingIndexer",
     "PageIndexFailure",
@@ -59,6 +60,13 @@ LOGGER = logging.getLogger(__name__)
 
 #: Prototype text-preparation version; bump on any policy change.
 EMBEDDING_CONFIG_VERSION: Final = 1
+
+#: Current persisted embedding dimensions contract — the canonical internal
+#: single source of truth. This is **not** a user-settable "default": every
+#: embedding persisted under the current ``EMBEDDING_CONFIG_VERSION`` follows
+#: this exact vector size, so the runtime query/recall assembly must reference
+#: this constant and never re-derive or hard-code a dimension value.
+EMBEDDING_DIMENSIONS: Final = 1024
 
 #: Explicit prototype truncation limit in characters (not a production
 #: model-context policy; real truncation/model-limit handling is deferred).

@@ -9,8 +9,14 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from src.ai.provider import CompletionProvider
+from src.ai.hybrid_search import HybridSearchService
+from src.ai.page_indexer import EMBEDDING_CONFIG_VERSION, EMBEDDING_DIMENSIONS
+from src.ai.provider import CompletionProvider, EmbeddingProvider
 from src.ai.qwen_client import QwenProvider, urllib_transport
+from src.ai.vector_recall import (
+    PersistentVectorRecallSource,
+    SearchableContentFingerprintSource,
+)
 from src.backup_service import BackupService
 from src.batch_service import PageBatchService
 from src.classification_metadata import ClassificationMetadataService
@@ -24,6 +30,7 @@ from src.evidence_basket_service import EvidenceBasketService
 from src.models import QuarantineReconciliation
 from src.pdf_service import PdfService
 from src.rapidocr_engine import RapidOcrEngine
+from src.search_service import SearchService
 
 
 def configure_logging(log_path: Path) -> None:
@@ -120,6 +127,38 @@ def application_ai_provider() -> CompletionProvider | None:
         timeout_seconds=settings.ai_timeout_seconds,
         transport=urllib_transport,
     )
+
+
+@lru_cache(maxsize=1)
+def application_hybrid_search_service() -> HybridSearchService:
+    """Return the process-wide hybrid search service (lexical + optional vector).
+
+    The lexical side is the natural-language-normalizing ``SearchService`` —
+    never the raw ``Database`` — so free-form queries such as
+    ``定时器预分频器`` become real FTS5 OR terms instead of an empty literal
+    gate. The vector side is a ``PersistentVectorRecallSource`` over the same
+    database, assembled only when an embedding provider is configured; without
+    AI the service degrades to lexical-only (``vector=None``), identical to
+    today's offline search. Construction is cheap and performs no network I/O:
+    no provider is initialized in manual mode, and an API key is never
+    required for the application to start.
+    """
+
+    settings = application_settings()
+    database = application_database()
+    lexical = SearchService(database)
+    provider = application_ai_provider()
+    vector = None
+    if isinstance(provider, EmbeddingProvider):
+        vector = PersistentVectorRecallSource(
+            query_embedding=provider,
+            embeddings=database,
+            fingerprints=SearchableContentFingerprintSource(database),
+            model=settings.ai_embedding_model,
+            dimensions=EMBEDDING_DIMENSIONS,
+            config_version=EMBEDDING_CONFIG_VERSION,
+        )
+    return HybridSearchService(lexical=lexical, hydration=database, vector=vector)
 
 
 @lru_cache(maxsize=1)
