@@ -1,18 +1,25 @@
 # 变更记录
 
-## v0.5.0 — AI Foundation / Provider Boundary（开发中）
+## v0.5.0 — AI Foundation / Optional AI Hybrid Search
 
-状态：开发中，未发布。
+状态：release content 已准备完成；tag / push / GitHub Release 尚待后续 Human Gate。
+开发日期：2026-08-16。
 
 ### 变更
 
-- 开发版本推进至 0.5.0，开始首个正式 AI 接入版本的基础设施建设。
+- 开发版本推进至 0.5.0，接入首个正式可选的 AI 能力层（默认手动模式 `ai_mode="manual"`，
+  AI 从不作为启动依赖）。
 - 新增 `src/ai/` 厂商无关 AI provider 契约层（Completion / Embedding / Rerank
   三个职责拆分的 Protocol、冻结结果 dataclass、统一异常族），原
   `src/prompt_builder.py` 的 `AIProvider` 扩展点迁入契约层并保留兼容导出。
-- 新增 Qwen（阿里云百炼）适配器骨架：传输层为注入式 callable，当前阶段默认
-  传输层拒绝发起任何真实网络请求；重试为有限传输级重试（默认最多 2 次额外
-  尝试，仅覆盖网络错误 / 429 / 5xx），不存在递归重试或 Agent 循环。
+- 新增 Qwen（阿里云百炼）适配器：传输层为注入式 callable，未配置时默认传输层
+  拒绝发起任何真实网络请求。重试为有限传输级重试，且 **application runtime
+  正式策略已固化为 `max_extra_attempts = 0`（retry = 0）**；`src/ai/qwen_client.py`
+  中库级 `MAX_EXTRA_ATTEMPTS = 2` 仅作为未显式覆盖时的库层默认值保留，不构成
+  application runtime 当前行为。不存在递归重试或 Agent 循环。
+- 新增 AI 混合检索（Hybrid Search）：自然语言词面 + 语义向量（`qwen3.7-text-embedding`，
+  1024 维，RRF 融合），带产品门控（无筛选 + 相关度排序）与来源标签；一次显式搜索
+  触发至多一次 query embedding。详见 `docs/v0.5.0-release-notes.md`。
 - 新增 `EKB_AI_*` 配置项；AI 默认为手动模式（manual），未配置 API Key 时
   应用完整正常启动，全部原有离线功能不受影响。API Key 经 SecretStr 读取，
   不进入日志、诊断与快照。
