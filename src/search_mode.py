@@ -75,6 +75,34 @@ def hybrid_status_note(vector_status: VectorPathStatus) -> str:
     return ""
 
 
+def hybrid_gate_fallback_note(
+    mode: SearchMode,
+    filters: SearchFilters,
+    sort: SearchSort,
+) -> str:
+    """Return the per-search notice for a gate-forced keyword execution.
+
+    Only non-empty when the user explicitly selected ``HYBRID`` but the
+    filter/sort gate forced this particular search onto the keyword path;
+    pure keyword users and gate-clean hybrid states get an empty string.
+    """
+
+    if mode is SearchMode.HYBRID and not hybrid_is_allowed(mode, filters, sort):
+        return "当前筛选或排序条件不支持 AI 混合检索，本次搜索已使用关键词检索。"
+    return ""
+
+
+def hybrid_vector_active(vector_status: VectorPathStatus) -> bool:
+    """Return whether a hybrid outcome actually used the vector recall path.
+
+    ``OK`` and ``EMPTY`` both mean the vector path ran; ``DISABLED``,
+    ``UNAVAILABLE`` and ``FAILED`` mean the executed result set is purely
+    lexical, so the UI must present it as a keyword result set.
+    """
+
+    return vector_status in (VectorPathStatus.OK, VectorPathStatus.EMPTY)
+
+
 def provenance_from_outcome(
     outcome: HybridSearchOutcome,
 ) -> dict[int, tuple[int | None, int | None]]:
@@ -118,8 +146,10 @@ def auto_execute_allowed(
 
 __all__ = [
     "auto_execute_allowed",
+    "hybrid_gate_fallback_note",
     "hybrid_is_allowed",
     "hybrid_status_note",
+    "hybrid_vector_active",
     "provenance_from_outcome",
     "result_source",
     "result_source_for",

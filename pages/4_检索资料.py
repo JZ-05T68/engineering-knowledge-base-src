@@ -40,8 +40,10 @@ from src.runtime import (
 from src.search_history import search_history_reload_html
 from src.search_mode import (
     auto_execute_allowed,
+    hybrid_gate_fallback_note,
     hybrid_is_allowed,
     hybrid_status_note,
+    hybrid_vector_active,
     provenance_from_outcome,
     result_source_for,
 )
@@ -189,9 +191,14 @@ def _run_keyword_search(state: SearchPageState) -> None:
         filters=state.filters,
         sort_by=state.sort,
     )
-    # Keyword mode carries no hybrid provenance or degradation note.
+    # Keyword mode carries no hybrid provenance. When the user selected hybrid
+    # but the filter/sort gate forced keyword execution, record an explicit
+    # per-search note so this fallback never passes silently.
     st.session_state.pop("search_hybrid_source_meta", None)
-    st.session_state.pop("search_hybrid_note", None)
+    st.session_state["search_hybrid_note"] = hybrid_gate_fallback_note(
+        state.mode, state.filters, state.sort
+    )
+    st.session_state["search_executed_vector_active"] = False
 
 
 def _run_hybrid_search(state: SearchPageState) -> None:
@@ -214,6 +221,11 @@ def _run_hybrid_search(state: SearchPageState) -> None:
     st.session_state["knowledge_results"] = [item.result for item in outcome.results]
     st.session_state["search_hybrid_source_meta"] = source_meta
     st.session_state["search_hybrid_note"] = note
+    # Record whether the vector path actually ran; a degraded outcome is a
+    # purely lexical result set and must be presented as one.
+    st.session_state["search_executed_vector_active"] = hybrid_vector_active(
+        outcome.vector_status
+    )
 
 
 def _refresh_display_only(state: SearchPageState) -> None:
@@ -750,6 +762,14 @@ if not results or active_state.view_mode is not SearchViewMode.PAGE:
 active_query_terms = search_service.query_terms(active_state.query)
 has_searched = bool(active_state.query.strip())
 is_hybrid_active = hybrid_is_allowed(active_state.mode, active_state.filters, active_state.sort)
+# The results heading must reflect the actually executed path, never the
+# requested mode: a gate-forced fallback or an AI-degraded hybrid outcome is a
+# purely lexical result set. This flag is written together with
+# ``knowledge_results`` by the search runners, so it never disagrees with the
+# loaded results.
+hybrid_results_active = bool(
+    st.session_state.get("search_executed_vector_active", False)
+)
 effective_total = facet_counts.total if active_query_terms else 0
 
 hybrid_note = st.session_state.get("search_hybrid_note", "")
@@ -808,7 +828,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
         st.session_state["search_url_signature"] = _state_signature(active_state)
         st.query_params.from_dict(search_state_query_params(active_state))
     heading_columns = st.columns([4, 1, 1])
-    if is_hybrid_active:
+    if hybrid_results_active:
         heading_columns[0].subheader(f"混合检索结果（已载入 {loaded_count} 条）")
     else:
         heading_columns[0].subheader(f"搜索结果（共 {effective_total} 个页面）")
@@ -1326,7 +1346,7 @@ def _render_group_result_card(result: SearchResult, result_index: int) -> None:
 
 if results and active_state.view_mode is SearchViewMode.DOCUMENT:
     loaded_count = len(results)
-    if is_hybrid_active:
+    if hybrid_results_active:
         st.subheader(f"混合检索结果（已载入 {loaded_count} 条）")
     else:
         st.subheader(f"搜索结果（共 {effective_total} 个页面）")

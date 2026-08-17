@@ -19,8 +19,10 @@ from src.models import (
 )
 from src.search_mode import (
     auto_execute_allowed,
+    hybrid_gate_fallback_note,
     hybrid_is_allowed,
     hybrid_status_note,
+    hybrid_vector_active,
     provenance_from_outcome,
     result_source,
     result_source_for,
@@ -96,6 +98,47 @@ class TestHybridStatusNote:
 
     def test_ok_is_silent(self) -> None:
         assert hybrid_status_note(VectorPathStatus.OK) == ""
+
+
+class TestHybridGateFallbackNote:
+    def test_keyword_mode_is_silent(self) -> None:
+        assert hybrid_gate_fallback_note(
+            SearchMode.KEYWORD, _filters(has_note=True), SearchSort.RELEVANCE
+        ) == ""
+
+    def test_gate_clean_hybrid_is_silent(self) -> None:
+        assert hybrid_gate_fallback_note(
+            SearchMode.HYBRID, _filters(), SearchSort.RELEVANCE
+        ) == ""
+
+    def test_hybrid_with_filter_shows_note(self) -> None:
+        assert hybrid_gate_fallback_note(
+            SearchMode.HYBRID, _filters(has_note=True), SearchSort.RELEVANCE
+        ) == "当前筛选或排序条件不支持 AI 混合检索，本次搜索已使用关键词检索。"
+
+    def test_hybrid_with_non_relevance_sort_shows_note(self) -> None:
+        assert hybrid_gate_fallback_note(
+            SearchMode.HYBRID, _filters(), SearchSort.DOCUMENT_PAGE
+        ) == "当前筛选或排序条件不支持 AI 混合检索，本次搜索已使用关键词检索。"
+
+
+class TestHybridVectorActive:
+    @pytest.mark.parametrize(
+        "status", [VectorPathStatus.OK, VectorPathStatus.EMPTY]
+    )
+    def test_ran_vector_path_is_active(self, status: VectorPathStatus) -> None:
+        assert hybrid_vector_active(status) is True
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            VectorPathStatus.DISABLED,
+            VectorPathStatus.UNAVAILABLE,
+            VectorPathStatus.FAILED,
+        ],
+    )
+    def test_degraded_status_is_purely_lexical(self, status: VectorPathStatus) -> None:
+        assert hybrid_vector_active(status) is False
 
 
 class TestAutoExecuteAllowed:
