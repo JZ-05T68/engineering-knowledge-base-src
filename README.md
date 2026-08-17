@@ -1,18 +1,115 @@
 # Engineering Knowledge Base v0.5.0
 
-一个本地优先、单用户的个人工程知识管理系统。它把 PDF 资料转化为可长期整理、检索和复用的页面级知识资产：**文档 → 理解 → 检索 → 复用 → 工程能力**。
+一个面向 Windows 的本地优先、单用户个人工程知识管理系统。它把用户主动导入的 PDF
+转化为可长期整理、检索、核验和复用的页面级知识资产：
+**文档 → 理解 → 检索 → 证据 → 复用 → 工程能力**。
 
-正式服务固定监听 `127.0.0.1:8501`，核心功能可离线使用，不需要账号、VPN、云存储或付费服务；AI 默认为手动模式，可选的 Qwen API 接入默认关闭，未配置 API Key 不影响任何原有功能。系统不包含注册、登录、权限、OAuth、JWT 或云同步。
+EKB 不是 PDF 摘要器、通用聊天机器人或云文档平台。它以本地文件和 SQLite 为唯一事实来源，
+强调从检索结果回到原页、来源图像和人工确认过的证据。核心功能离线可用，不需要账号、VPN、
+云存储或 API Key；AI 只是显式启用的可选增强。
 
-当前仓库为完整中文版。英文完整版自 v0.5.0 后提供；日文与韩文版自 v1.2.0 后提供；
-俄文版自 v1.3.0 后提供。本版本不提前创建任何半成品多语言入口。
+![EKB v0.5.0 首页概览](docs/assets/v0.5.0/home-overview.jpg)
 
-## v0.5.0 可选的 AI 混合检索能力
+> 截图使用隔离的原创演示资料生成，不包含 production、staging、客户或私人数据。
 
-v0.5.0 在保持全部离线能力不变的前提下，接入首个**可选** AI 能力：AI 混合检索
-（自然语言词面 + 语义向量 `qwen3.7-text-embedding`，RRF 融合），默认仍为关键词检索，
-需显式选择且仅在「无筛选 + 相关度排序」下启用。AI 从不作为启动依赖，未配置
-API Key（手动模式）时一切照常。详见 [v0.5.0 发布说明](docs/v0.5.0-release-notes.md)。
+## v0.5.0 Highlights
+
+- 本地 PDF 导入、逐页 PNG、文本层提取、Markdown 整理、结构化笔记与来源回溯。
+- SQLite FTS5 / jieba 关键词检索，以及显式选择的可选 Hybrid Retrieval。
+- PAGE、TEXT_SELECTION、IMAGE_REGION 三类证据对象，人工确认后生成 citation-grounded
+  Prompt Package；生成过程本身不连接外部 AI。
+- 页面 embedding 持久化、SHA-256 freshness 复用、受控索引编排和付费调用边界。
+- production / staging 数据与端口隔离，默认 manual AI 模式和离线回退。
+
+| 页面阅读与整理 | 离线关键词检索 |
+|---|---|
+| ![双栏页面阅读器](docs/assets/v0.5.0/page-reader.jpg) | ![关键词检索结果](docs/assets/v0.5.0/keyword-search-results.jpg) |
+
+| Hybrid Retrieval 显式模式 | Evidence / Source 工作流 |
+|---|---|
+| ![AI 混合检索模式](docs/assets/v0.5.0/hybrid-retrieval-mode.jpg) | ![证据来源工作流](docs/assets/v0.5.0/evidence-source-workflow.jpg) |
+
+| 文档管理与删除安全边界 |
+|---|
+| ![文档管理](docs/assets/v0.5.0/document-management.jpg) |
+
+Hybrid 截图展示真实 v0.5.0 模式控件与产品门控；截图采集时保持 manual 模式，未发起付费调用。
+真实 Hybrid benchmark 结果见
+[Phase 11D 检索证据](docs/v0.5.0-phase11d-retrieval-benchmark.md)。
+
+## AI Stack（可选）
+
+| 职责 | v0.5.0 默认配置 | 当前边界 |
+|---|---|---|
+| 主 LLM | `qwen3.7-plus` | provider foundation 与受控真实调用；不是应用启动依赖 |
+| 高难度模型配置 | `qwen3.8-max` | 保留配置位，不承诺自动路由或通用问答能力 |
+| Embedding | `qwen3.7-text-embedding`，1024 维 | 当前索引粒度为 page-level |
+| Rerank | `qwen3-rerank` | 契约与配置已预留，运行时通道尚未接入 |
+
+默认 `ai_mode="manual"`。只有用户显式配置 API Key、切换到 API 模式并触发受控操作时，
+才可能产生外部调用；没有 API Key 时，PDF、搜索、阅读、笔记、证据、删除恢复和备份继续工作。
+
+## Hybrid Retrieval
+
+v0.5.0 的混合检索链路是：
+
+1. 自然语言词面召回继续复用本地 `SearchService`、FTS5、jieba 与字段权重；
+2. 从 SQLite 中已有且 fresh 的 page-level embedding 执行持久向量召回；
+3. 对 lexical 与 vector 候选取并集，并使用 RRF 融合；
+4. 显示关键词匹配、语义召回或混合匹配等粗粒度来源标签；
+5. 任一筛选条件或非相关度排序会回退到关键词检索；AI 不可用时核心检索仍可使用。
+
+混合模式只在「无筛选 + 相关度排序」下启用。一次显式搜索至多触发一次 query embedding；
+URL/deep-link 恢复不会自动发起付费调用。当前不把 retrieval quality 宣称为“已经完全解决”，
+也不以语义召回替代关键词检索。
+
+## Embedding Persistence 与成本边界
+
+- embedding 持久化在本地 SQLite `page_embeddings`，当前粒度是页面，不是 chunk。
+- `source_text_sha256`、模型、维度与配置版本共同决定 freshness；fresh 向量直接复用。
+- 缺失或过期页面只通过受控索引编排生成，批量大小与目标范围有明确限制。
+- production 不自动生成 embedding；真实付费索引限定在隔离 staging 流程并要求显式确认。
+- application runtime 正式策略为 `max_extra_attempts = 0`；没有递归重试或 Agent 循环。
+
+## Runtime 与数据隔离
+
+| 实例 | 端点 | 数据根目录 | 用途 |
+|---|---|---|---|
+| production | `127.0.0.1:8501` | `data/` | 正式本地知识资产 |
+| staging | `127.0.0.1:8502` | `staging-data/` | 隔离的受控 AI 验证 |
+
+两个实例的数据库、原始 PDF、页面图像、Markdown、日志、备份和 PID 路径完全分离，且均只绑定
+loopback。原始 PDF 与页面图像不会被自动覆盖或删除；真实付费调用有 staging guard、manual
+默认值和显式操作边界。
+
+## Evidence-first Workflow
+
+`PDF → 页面 → 检索 → 来源核验 → 证据篮 → 人工确认 → 引用提示词包`
+
+Prompt Package 只接纳 confirmed evidence，并在生成前重新验证文档、页码、来源图像与文本锚点。
+任一来源无法证明仍有效时 fail closed。用户可以把本地生成的包手动复制到外部 AI 工具；
+EKB 本身不会因此自动发送资料。
+
+## v0.5.0 Validation
+
+完整 production Gate 对应的 runtime closure baseline 是
+`664d5ef03ee2d1944ebfe993430c4b18aa41805b`：
+
+- Gate 2B：17 / 17 PASS；
+- pytest：1399 / 1399 passed；
+- Ruff：clean；
+- `release_check.py --expect-service-stopped`：exit 0；
+- production `127.0.0.1:8501` health：HTTP 200；
+- production DB：schema v8、integrity ok、foreign key violations = 0、零测试污染；
+- Gate 4 人工验收：PASS，首页与 13 个页面无 exception。
+
+后续纯 README/docs/assets 发布提交只负责 GitHub 展示，不冒充重新执行过完整 production 人工 Gate。
+详见 [v0.5.0 发布说明](docs/v0.5.0-release-notes.md) 与
+[v0.5.x Roadmap](docs/v0.5.x-roadmap.md)。
+
+## 版本演进
+
+以下章节保留各历史版本的真实范围与当时验证口径；它们不是当前 v0.5.0 能力说明。
 
 ## v0.4.3 真实问题验证与 AI 就绪决策门
 
@@ -661,10 +758,10 @@ v0.4.3 正式恢复只接受 `0.4` 系列的当前或更早补丁版本，并要
 
 ## 发布状态
 
-当前公开版本为 **v0.4.3 — 真实问题验证与 AI 就绪决策门**，已于 2026-08-14 正式发布。
-`v0.4.3` annotated tag 指向发布提交 `e737d91051da9b78dbfd5ab68e4376b7faad6bfb`；
-GitHub Release 为非 draft、非 prerelease。RPV-01～11 与 H1～H7 已通过，RPV-12 按
-DF-AMEND-02 延后至 v0.5.0，OBS-E 保持为 v0.5.x 的 MEDIUM 显式技术债。
+当前公开版本为 **v0.5.0 — AI Foundation / Optional Hybrid Retrieval**，发布日期为
+2026-08-17。`v0.5.0` 是 annotated tag，指向最终 GitHub release presentation commit；
+完整 production Gate 的 runtime closure baseline `664d5ef...` 保留在其 ancestry 中，二者职责明确分离。
+GitHub Release 为正式版本（非 draft、非 prerelease）。
 
 当前源码仓库 `origin` 使用 SSH：
 `git@github.com:JZ-05T68/engineering-knowledge-base-src.git`。各版本远程状态以 GitHub tag 和

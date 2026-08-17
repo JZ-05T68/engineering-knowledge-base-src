@@ -2,8 +2,10 @@
 
 ## v0.5.0 — AI Foundation / Optional AI Hybrid Search
 
-状态：release content 已准备完成；tag / push / GitHub Release 尚待后续 Human Gate。
-开发日期：2026-08-16。
+发布日期：2026-08-17。
+
+完整 production Gate 的 runtime closure baseline：
+`664d5ef03ee2d1944ebfe993430c4b18aa41805b`。
 
 ### 变更
 
@@ -20,9 +22,27 @@
 - 新增 AI 混合检索（Hybrid Search）：自然语言词面 + 语义向量（`qwen3.7-text-embedding`，
   1024 维，RRF 融合），带产品门控（无筛选 + 相关度排序）与来源标签；一次显式搜索
   触发至多一次 query embedding。详见 `docs/v0.5.0-release-notes.md`。
+- 新增 page-level embedding SQLite 持久化、`source_text_sha256` freshness 复用、
+  persistent vector recall、索引编排、批量限制与 staging cost guard；未实现 chunk-level indexing。
+- 新增完全隔离的 staging runtime：`127.0.0.1:8502` + `staging-data/`；production 继续使用
+  `127.0.0.1:8501` + `data/`，正式数据不自动生成 embedding。
 - 新增 `EKB_AI_*` 配置项；AI 默认为手动模式（manual），未配置 API Key 时
   应用完整正常启动，全部原有离线功能不受影响。API Key 经 SecretStr 读取，
   不进入日志、诊断与快照。
+
+### 验证
+
+- runtime closure baseline `664d5ef...`：Gate 2B 17 / 17 PASS，1399 / 1399 tests，
+  Ruff clean，release check exit 0，production health HTTP 200。
+- production DB：schema v8、integrity ok、foreign key violations = 0、零测试污染。
+- Gate 4 人工验收 PASS；首页与 13 个页面无 exception。
+- 后续纯 docs/assets GitHub 发布提交不冒充重新执行过完整 production 人工 Gate。
+
+### 后续
+
+- 发布后进入真人测试、AI-assisted testing、retrieval benchmark expansion、缺陷修复和稳定性加固。
+- v0.5.x 支版本数量由质量、稳定性、UX 与成本证据决定，不预设固定数量；详见
+  `docs/v0.5.x-roadmap.md`。
 
 ## v0.4.3 — 真实问题验证与 AI 就绪决策门
 
