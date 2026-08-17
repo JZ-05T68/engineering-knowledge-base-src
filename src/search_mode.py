@@ -16,9 +16,9 @@ Rules (frozen in Phase 11B):
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 
-from src.ai.hybrid_search import HybridSearchOutcome, VectorPathStatus
+from src.ai.hybrid_search import HybridSearchOutcome, HybridSearchResult, VectorPathStatus
 from src.models import SearchFilters, SearchMode, SearchSort
 
 
@@ -144,6 +144,36 @@ def auto_execute_allowed(
     return not hybrid_is_allowed(mode, filters, sort)
 
 
+def weak_evidence_note(
+    vector_status: VectorPathStatus,
+    results: Sequence[HybridSearchResult],
+) -> str:
+    """Return the honest weak-evidence notice, or an empty string.
+
+    A weak-evidence notice is shown only under a conservative, deterministic
+    boolean rule — never a numerical threshold and never a benchmark label:
+
+    - the vector path is healthy/available (``OK`` or ``EMPTY``);
+    - the result set is non-empty;
+    - **every** result has ``lexical_rank is not None`` and
+      ``vector_rank is None``.
+
+    That is: the vector path ran, yet the returned evidence is entirely
+    lexical. Degraded states (``DISABLED``/``UNAVAILABLE``/``FAILED``) are
+    handled by ``hybrid_status_note`` instead, so this never duplicates or
+    conflicts with the existing fallback state.
+    """
+
+    if vector_status not in (VectorPathStatus.OK, VectorPathStatus.EMPTY):
+        return ""
+    if not results:
+        return ""
+    for hit in results:
+        if hit.vector_rank is not None or hit.lexical_rank is None:
+            return ""
+    return "当前结果主要来自关键词匹配，建议结合原文判断相关性。"
+
+
 __all__ = [
     "auto_execute_allowed",
     "hybrid_gate_fallback_note",
@@ -153,4 +183,5 @@ __all__ = [
     "provenance_from_outcome",
     "result_source",
     "result_source_for",
+    "weak_evidence_note",
 ]

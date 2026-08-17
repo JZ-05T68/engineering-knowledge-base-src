@@ -26,6 +26,7 @@ from src.search_mode import (
     provenance_from_outcome,
     result_source,
     result_source_for,
+    weak_evidence_note,
 )
 from src.search_state import SearchPageState, parse_search_state, search_state_query_params
 
@@ -220,3 +221,48 @@ class TestSearchModeState:
     def test_keyword_mode_not_serialized(self) -> None:
         state = SearchPageState(query="定时器", mode=SearchMode.KEYWORD)
         assert "mode" not in search_state_query_params(state)
+
+
+class TestWeakEvidenceNote:
+    def _hit(self, page_id: int, lexical: int | None, vector: int | None):
+        return HybridSearchResult(_result(page_id), 0.5, lexical, vector)
+
+    def test_healthy_vector_with_all_lexical_only(self) -> None:
+        note = weak_evidence_note(
+            VectorPathStatus.OK,
+            (self._hit(1, 1, None), self._hit(2, 2, None)),
+        )
+        assert note == "当前结果主要来自关键词匹配，建议结合原文判断相关性。"
+
+    def test_healthy_vector_with_dual_source_result_suppresses_note(self) -> None:
+        note = weak_evidence_note(
+            VectorPathStatus.OK,
+            (self._hit(1, 1, None), self._hit(2, 2, 1)),
+        )
+        assert note == ""
+
+    def test_empty_vector_path_suppresses_note(self) -> None:
+        note = weak_evidence_note(VectorPathStatus.EMPTY, ())
+        assert note == ""
+
+    def test_disabled_vector_suppresses_note(self) -> None:
+        note = weak_evidence_note(
+            VectorPathStatus.DISABLED, (self._hit(1, 1, None),)
+        )
+        assert note == ""
+
+    def test_unavailable_vector_suppresses_note(self) -> None:
+        note = weak_evidence_note(
+            VectorPathStatus.UNAVAILABLE, (self._hit(1, 1, None),)
+        )
+        assert note == ""
+
+    def test_failed_vector_suppresses_note(self) -> None:
+        note = weak_evidence_note(VectorPathStatus.FAILED, (self._hit(1, 1, None),))
+        assert note == ""
+
+    def test_vector_only_result_suppresses_note(self) -> None:
+        note = weak_evidence_note(
+            VectorPathStatus.OK, (self._hit(1, None, 1),)
+        )
+        assert note == ""

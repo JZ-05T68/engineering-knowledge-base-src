@@ -32,6 +32,7 @@ from src.models import (
 from src.prompt_builder import PromptBuilder
 from src.runtime import (
     application_classification_metadata_service,
+    application_coverage_service,
     application_database,
     application_evidence_basket_service,
     application_hybrid_search_service,
@@ -46,6 +47,7 @@ from src.search_mode import (
     hybrid_vector_active,
     provenance_from_outcome,
     result_source_for,
+    weak_evidence_note,
 )
 from src.search_navigation import (
     SearchNavigationError,
@@ -72,6 +74,12 @@ RESULTS_PER_PAGE = 10
 st.set_page_config(page_title="检索资料｜工程知识库 v0.5.0", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
+_coverage = application_coverage_service().coverage_summary()
+if _coverage.indexable:
+    st.caption(
+        f"向量索引覆盖率：{_coverage.indexed}/{_coverage.indexable}"
+        f"（缺失 {_coverage.missing}，待更新 {_coverage.stale}）。"
+    )
 st.markdown(
     """
     <style>
@@ -199,6 +207,8 @@ def _run_keyword_search(state: SearchPageState) -> None:
         state.mode, state.filters, state.sort
     )
     st.session_state["search_executed_vector_active"] = False
+    # Keyword path carries no vector evidence; clear any stale weak-evidence note.
+    st.session_state.pop("search_weak_evidence_note", None)
 
 
 def _run_hybrid_search(state: SearchPageState) -> None:
@@ -225,6 +235,11 @@ def _run_hybrid_search(state: SearchPageState) -> None:
     # purely lexical result set and must be presented as one.
     st.session_state["search_executed_vector_active"] = hybrid_vector_active(
         outcome.vector_status
+    )
+    # Honest weak-evidence notice: shown only when the vector path ran but the
+    # entire returned evidence is lexical-only (deterministic boolean rule).
+    st.session_state["search_weak_evidence_note"] = weak_evidence_note(
+        outcome.vector_status, outcome.results
     )
 
 
@@ -775,6 +790,10 @@ effective_total = facet_counts.total if active_query_terms else 0
 hybrid_note = st.session_state.get("search_hybrid_note", "")
 if hybrid_note:
     st.caption(hybrid_note)
+
+weak_evidence = st.session_state.get("search_weak_evidence_note", "")
+if weak_evidence and results:
+    st.info(weak_evidence)
 
 if has_searched and not active_query_terms:
     st.warning("关键词没有可检索的文字，请输入中文、英文或数字后重试。")

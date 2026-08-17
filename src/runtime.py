@@ -9,6 +9,7 @@ from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from src.ai.coverage_service import PageEmbeddingCoverageService
 from src.ai.hybrid_search import HybridSearchService
 from src.ai.page_indexer import EMBEDDING_CONFIG_VERSION, EMBEDDING_DIMENSIONS
 from src.ai.provider import CompletionProvider, EmbeddingProvider
@@ -160,6 +161,19 @@ def application_hybrid_search_service() -> HybridSearchService:
             config_version=EMBEDDING_CONFIG_VERSION,
         )
     return HybridSearchService(lexical=lexical, hydration=database, vector=vector)
+
+
+@lru_cache(maxsize=1)
+def application_coverage_service() -> PageEmbeddingCoverageService:
+    """Return the process-wide read-only embedding coverage service.
+
+    Coverage classification is zero-cost and zero-side-effect: it never
+    constructs an embedding provider, never touches the network or an API key,
+    and never writes to the database. The model defaults to the single
+    ``Settings.ai_embedding_model`` source read inside the coverage service.
+    """
+
+    return PageEmbeddingCoverageService(database=application_database())
 
 
 @lru_cache(maxsize=1)
