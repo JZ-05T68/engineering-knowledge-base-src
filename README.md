@@ -564,8 +564,8 @@ schtasks.exe /Query /TN EngineeringKnowledgeBase
 
 ### 升级
 
-v0.4.3 当前使用 **schema v7**。程序启动时读取 `schema_migrations`，按顺序补齐缺失迁移；
-只要既有非空数据库低于 v7，就会先通过 SQLite 在线备份 API 创建一致性数据库备份，再执行事务迁移。
+v0.5.0 当前使用 **schema v8**。程序启动时读取 `schema_migrations`，按顺序补齐缺失迁移；
+只要既有非空数据库低于 v8，就会先通过 SQLite 在线备份 API 创建一致性数据库备份，再执行事务迁移。
 迁移结束后必须同时通过 `integrity_check` 与 `foreign_key_check`，否则启动失败并保留原数据库和迁移前备份。
 
 历史上首次从 schema v3 升级到 schema v4 时，程序使用 SQLite 在线备份 API 创建一致性
@@ -583,9 +583,11 @@ data/database/backups/knowledge.v3.<时间戳>.db
 - schema v7：在同一事务中重建 `evidence_items`，支持 `page`、`text_selection`、`image_region`
   三类证据及 `confirmation_status` / `confirmed_at` 人工确认状态。既有证据保留原 ID 并迁移为
   未确认的文字选区证据，迁移会显式核对条目数量和 ID 集合。
+- schema v8：新增页面级 embedding 持久化表 `page_embeddings`，不重建既有表；迁移会核对文档、
+  页面与 FTS 数据保持不变。
 
 升级不需要移动 `data/`、重新导入 PDF 或手工重建 FTS。先保留完整资料备份，再更新程序并启动；
-启动完成后在“系统维护”核对 schema v7、文档、页面、FTS、笔记和证据统计。历史
+启动完成后在“系统维护”核对 schema v8、文档、页面、FTS、笔记和证据统计。历史
 `knowledge.v<旧 schema>.<时间戳>.db` 只用于迁移故障恢复，不包含完整 PDF、PNG 和 Markdown，
 不能替代完整资料备份。
 
@@ -598,7 +600,7 @@ data/database/backups/knowledge.v3.<时间戳>.db
 备份目录结构：
 
 ```text
-backups/ekb-v0.4.3-<时间戳>/
+backups/ekb-v0.5.0-<时间戳>/
 ├── manifest.json
 ├── config/
 │   └── settings.json
@@ -649,15 +651,15 @@ API Key 或代理凭据。`manifest.json` 中的所有可复制路径必须是�
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\restore_backup.py `
-  --backup ".\backups\ekb-v0.4.3-<时间戳>" --confirm RESTORE
+  --backup ".\backups\ekb-v0.5.0-<时间戳>" --confirm RESTORE
 ```
 
 4. 脚本会再次校验格式、版本、schema、数据库、外键、清单、大小、哈希和文件引用；通过后先创建
-   `pre-restore-v0.4.3-<时间戳>` 完整备份，再在临时目录中恢复。数据库路径会安全重定位到当前
+   `pre-restore-v0.5.0-<时间戳>` 完整备份，再在临时目录中恢复。数据库路径会安全重定位到当前
    正式目录，不会把备份数据库中的绝对路径直接当作写入目标。
 5. 恢复后脚本重新检查数据库统计和文件哈希。成功后启动服务并再运行一次只读诊断。
 
-v0.4.3 正式恢复只接受 `0.4` 系列的当前或更早补丁版本，并要求备份 schema 恰为 v7；旧 schema
+v0.5.0 正式恢复只接受 `0.5` 系列的当前或更早补丁版本，并要求备份 schema 恰为 v8；旧 schema
 备份应先由对应旧版本恢复，再启动当前程序完成迁移。正式服务仍在运行、manifest 缺失/损坏、
 应用版本或 schema 不兼容、数据库损坏、文件缺失、大小或
 哈希不一致、路径逃逸、符号链接和恢复前备份失败都会中止恢复。系统不提供绕过验证的“强制恢复”。
@@ -717,7 +719,7 @@ v0.4.3 正式恢复只接受 `0.4` 系列的当前或更早补丁版本，并要
 
 ```powershell
 .\.venv\Scripts\python.exe scripts\release_check.py `
-  --existing-backup ".\backups\release-v0.4.3-<时间戳>" `
+  --existing-backup ".\backups\release-v0.5.0-<时间戳>" `
   --expect-service-stopped
 ```
 
@@ -727,7 +729,8 @@ v0.4.3 正式恢复只接受 `0.4` 系列的当前或更早补丁版本，并要
 ## 当前限制
 
 - v0.2.2 起提供本地单页印刷体 OCR；仍不执行手写识别、公式 OCR、复杂表格结构识别或批量 OCR。
-- 不包含向量数据库、Embedding、向量搜索或语义搜索。
+- v0.5.0 已提供可选的页面 embedding 持久化、向量召回与 Hybrid Retrieval；关键词检索继续作为
+  离线基础与 AI 不可用时的回退，不宣称具备全面语义理解，也不以向量召回完全替代关键词检索。
 - 不执行大模型自动问答；只能手动复制证据包或受约束提示词。
 - 不联网搜索资料，不抓取聊天记录或未获授权的第三方材料。
 - 字面量搜索不会自动扩展同义词；没有文本层的扫描页需先经本地 OCR 或人工补充笔记后才能按内容检索，否则只能通过元数据找到。
