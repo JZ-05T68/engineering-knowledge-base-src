@@ -1,0 +1,361 @@
+{
+  "corpus_id": "synthetic-engineering-v1",
+  "frozen_at": "2026-08-17",
+  "purpose": "v0.5.1 retrieval quality benchmark 的合成工程语料。模拟真实工程知识库结构（多文档、页面级、中英混合术语），用于离线验证 lexical/vector/RRF/benchmark 机制。topic 权重是确定性的 latent-topic fixture 向量来源，不代表任何真实模型的语义质量。",
+  "embedding_model": "synthetic-fixture-v1",
+  "embedding_dimensions": 20,
+  "embedding_config_version": 1,
+  "topics": [
+    "gpio",
+    "timer",
+    "pwm",
+    "dma",
+    "interrupt_nvic",
+    "encoder",
+    "pid",
+    "control_tuning",
+    "motor_drive",
+    "power_electronics",
+    "kinematics",
+    "odometry",
+    "uart",
+    "i2c_spi",
+    "can_bus",
+    "current_sense",
+    "foreign_cloud",
+    "foreign_battery",
+    "foreign_ros",
+    "reserve"
+  ],
+  "documents": [
+    {
+      "key": "stm32",
+      "title": "STM32 微控制器入门（标准库）",
+      "filename": "stm32_standard_lib.pdf",
+      "pages": [
+        {
+          "key": "stm32/p1",
+          "page_number": 1,
+          "text": "GPIO 是通用输入输出端口。使用任何外设前都要先使能 RCC 时钟，例如 RCC_APB2PeriphClockCmd 打开 GPIOA 时钟。GPIO_InitTypeDef 结构体用于配置引脚的工作模式，包括推挽输出、开漏输出、上拉输入和浮空输入。",
+          "topics": {"gpio": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p2",
+          "page_number": 2,
+          "text": "把 GPIO 引脚配置成推挽输出模式 GPIO_Mode_Out_PP 后，调用 GPIO_SetBits 输出高电平即可点亮 LED，GPIO_ResetBits 输出低电平则熄灭。推挽输出驱动能力强，可以直接驱动小功率发光二极管。",
+          "topics": {"gpio": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p3",
+          "page_number": 3,
+          "text": "GPIO 输入模式常用于读取按键状态，机械按键按下时会产生抖动，通常需要软件延时消抖或硬件消抖。配置上拉输入后，未按下时读到高电平，按下时读到低电平。",
+          "topics": {"gpio": 1.0, "interrupt_nvic": 0.2},
+          "embedded": false
+        },
+        {
+          "key": "stm32/p4",
+          "page_number": 4,
+          "text": "定时器的核心是时基单元，由计数器 CNT、预分频器 PSC 和自动重装载寄存器 ARR 组成。预分频器对输入时钟分频，决定计数器的计数频率；自动重装载寄存器决定计数周期，计数器计到 ARR 时产生更新事件。定时器按功能分为基本定时器、通用定时器和高级定时器。",
+          "topics": {"timer": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p5",
+          "page_number": 5,
+          "text": "定时器框图中，时钟经 PSC 预分频后驱动 CNT 计数，CNT 到达 ARR 时产生更新事件并可触发更新中断，中断请求送入 NVIC 由 CPU 响应。利用更新中断可以周期性地提醒处理器执行控制任务，而不必让程序一直查询计数器的值。",
+          "topics": {"timer": 1.0, "interrupt_nvic": 0.6},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p6",
+          "page_number": 6,
+          "text": "通用定时器支持输入捕获 IC 和输出比较 OC。编码器接口模式下，定时器根据两路输入信号的相位关系自动增减计数，常用于读取旋转编码器的方向和位置，是测速与位置反馈的常用硬件方案。",
+          "topics": {"timer": 0.8, "encoder": 0.8},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p7",
+          "page_number": 7,
+          "text": "定时器的输出比较功能可以产生 PWM 波形，ARR 决定 PWM 周期，捕获比较寄存器 CCR 决定占空比。修改 CCR 的值即可改变输出脉宽，从而控制平均电压。",
+          "topics": {"timer": 0.7, "pwm": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p8",
+          "page_number": 8,
+          "text": "DMA 直接存储器存取可以在外设和存储器之间搬运数据而无需 CPU 逐字节参与。配置好 DMA 通道、源地址、目标地址和传输长度后，数据搬运由 DMA 控制器自动完成，CPU 可以腾出手处理其他任务，传输完成后再通过中断通知。",
+          "topics": {"dma": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "stm32/p9",
+          "page_number": 9,
+          "text": "NVIC 嵌套向量中断控制器管理中断优先级，支持抢占优先级和响应优先级。外部中断 EXTI 可以把 GPIO 引脚的电平变化映射为中断请求，按键触发外部中断后无需主程序轮询。",
+          "topics": {"interrupt_nvic": 1.0, "gpio": 0.3},
+          "embedded": false
+        },
+        {
+          "key": "stm32/p10",
+          "page_number": 10,
+          "text": "USART 串口是最常用的调试外设，配置波特率、数据位、停止位和校验位后即可收发数据。标准库通过 USART_Init 初始化，配合中断或 DMA 可以实现高效的串口数据收发。",
+          "topics": {"uart": 1.0},
+          "embedded": true
+        }
+      ]
+    },
+    {
+      "key": "pid",
+      "title": "PID 控制原理与整定",
+      "filename": "pid_control.pdf",
+      "pages": [
+        {
+          "key": "pid/p1",
+          "page_number": 1,
+          "text": "反馈控制的基本思想是测量被控量并与设定值比较，用误差驱动执行机构。闭环系统通过不断修正误差使输出跟随目标，是温度、速度、位置控制的通用框架。",
+          "topics": {"pid": 0.6, "control_tuning": 0.4},
+          "embedded": false
+        },
+        {
+          "key": "pid/p2",
+          "page_number": 2,
+          "text": "比例环节输出与误差成正比，增大比例系数可以加快响应速度，但比例控制存在静差，单靠比例无法完全消除稳态误差；比例系数过大还会引起系统振荡。",
+          "topics": {"pid": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "pid/p3",
+          "page_number": 3,
+          "text": "积分环节对误差进行累积，只要误差存在积分输出就持续增长，因此能够消除比例控制留下的静差。但执行机构达到极限后误差仍同号累积会造成积分饱和，使系统出现大幅超调。",
+          "topics": {"pid": 1.0, "control_tuning": 0.4},
+          "embedded": false
+        },
+        {
+          "key": "pid/p4",
+          "page_number": 4,
+          "text": "微分环节反映误差的变化趋势，可以提前抑制超调、改善阻尼。但微分对测量噪声非常敏感，噪声经微分放大后会让控制器输出高频抖动，实际使用时常给微分加滤波。",
+          "topics": {"pid": 1.0, "control_tuning": 0.4},
+          "embedded": true
+        },
+        {
+          "key": "pid/p5",
+          "page_number": 5,
+          "text": "位置式 PID 直接输出控制量的绝对值，增量式 PID 输出控制量的增量。增量式不需要累加全部历史误差，手动自动切换时冲击小，在电机控制中应用广泛。",
+          "topics": {"pid": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "pid/p6",
+          "page_number": 6,
+          "text": "PID 参数整定常用 Ziegler-Nichols 临界比例度法和试凑法。试凑法先调比例再加积分最后加微分，观察阶跃响应逐步修正；整定的目标是在响应速度和超调量之间取得平衡。",
+          "topics": {"control_tuning": 1.0, "pid": 0.6},
+          "embedded": true
+        },
+        {
+          "key": "pid/p7",
+          "page_number": 7,
+          "text": "抗积分饱和的常用做法是遇限削弱积分：当控制量达到输出上限且误差仍在增大输出时，停止积分累加。这样执行机构退出饱和后系统能更快恢复，减小超调。",
+          "topics": {"pid": 0.8, "control_tuning": 0.6},
+          "embedded": true
+        },
+        {
+          "key": "pid/p8",
+          "page_number": 8,
+          "text": "数字 PID 需要选择合适的采样周期，采样周期太长会丢失动态信息，太短则加重 CPU 负担并放大微分噪声。工程上常按被控对象时间常数的十分之一选取采样周期。",
+          "topics": {"pid": 0.7, "timer": 0.3},
+          "embedded": false
+        }
+      ]
+    },
+    {
+      "key": "robot",
+      "title": "轮式机器人运动学与里程计",
+      "filename": "robot_kinematics.pdf",
+      "pages": [
+        {
+          "key": "robot/p1",
+          "page_number": 1,
+          "text": "差速驱动底盘通过左右两个驱动轮的转速差实现转向，两轮同速时直线行驶，转速不同时走出弧线，反转时原地旋转。结构简单，是室内移动机器人的常见方案。",
+          "topics": {"kinematics": 0.7, "odometry": 0.5},
+          "embedded": false
+        },
+        {
+          "key": "robot/p2",
+          "page_number": 2,
+          "text": "正运动学根据左右轮速计算机体的线速度和角速度。已知轮半径和轮距，左轮速度加右轮速度的一半是机体线速度，两轮速度差除以轮距是角速度。",
+          "topics": {"kinematics": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "robot/p3",
+          "page_number": 3,
+          "text": "逆运动学由期望的机体线速度和角速度反解左右轮目标转速，是速度控制的上游环节。逆解结果送入电机速度闭环，由控制器跟踪目标轮速。",
+          "topics": {"kinematics": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "robot/p4",
+          "page_number": 4,
+          "text": "机械臂常用 DH 参数描述连杆之间的几何关系，四个参数确定一个连杆变换。串联机械臂的正解是各连杆变换矩阵的连乘，逆解通常没有封闭形式需要数值迭代。",
+          "topics": {"kinematics": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "robot/p5",
+          "page_number": 5,
+          "text": "编码器测速常用 M 法和 T 法：M 法在固定时间窗内数脉冲个数，适合高速；T 法测量相邻脉冲的时间间隔，适合低速。把左右轮脉冲累计换算成位移即可进行航位推算，得到里程计估计。",
+          "topics": {"odometry": 1.0, "encoder": 0.9},
+          "embedded": true
+        },
+        {
+          "key": "robot/p6",
+          "page_number": 6,
+          "text": "里程计依赖轮径和轮距参数，轮胎打滑、地面不平和参数误差都会让航位推算的误差随距离不断累积，车子走直线也可能逐渐偏航。定期用外部观测标定和修正是必要的。",
+          "topics": {"odometry": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "robot/p7",
+          "page_number": 7,
+          "text": "惯性测量单元 IMU 的陀螺仪可以测量角速度，但存在零偏漂移，长时间积分会发散。常把 IMU 与轮式里程计融合，用互补滤波或卡尔曼滤波互相修正。",
+          "topics": {"odometry": 0.6},
+          "embedded": false
+        },
+        {
+          "key": "robot/p8",
+          "page_number": 8,
+          "text": "电机选型要考虑额定转矩、转速和减速比。减速箱放大输出转矩但降低转速，减速比过大还会引入回程间隙，影响位置控制精度。",
+          "topics": {"motor_drive": 0.8},
+          "embedded": false
+        }
+      ]
+    },
+    {
+      "key": "power",
+      "title": "电机驱动与功率电子",
+      "filename": "motor_power.pdf",
+      "pages": [
+        {
+          "key": "power/p1",
+          "page_number": 1,
+          "text": "H 桥由四个开关管组成桥式结构，通过对角导通改变电机两端电压极性，实现正转、反转和制动。H 桥是直流电机驱动电路的基本拓扑。",
+          "topics": {"motor_drive": 0.8, "power_electronics": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "power/p2",
+          "page_number": 2,
+          "text": "H 桥同一桥臂的上下两个开关管绝不能同时导通，否则电源直通短路。驱动信号中必须插入死区时间，保证一个管子关断后另一个才开通，死区时间过短会直通，过长则增加输出畸变。",
+          "topics": {"power_electronics": 1.0, "motor_drive": 0.4},
+          "embedded": false
+        },
+        {
+          "key": "power/p3",
+          "page_number": 3,
+          "text": "PWM 调速利用开关管的快速通断改变电机两端的平均电压，占空比越大平均电压越高，电机转速越快。开关频率通常选在几千赫兹以上，避开人耳可闻范围。",
+          "topics": {"pwm": 1.0, "motor_drive": 0.7},
+          "embedded": true
+        },
+        {
+          "key": "power/p4",
+          "page_number": 4,
+          "text": "MOSFET 的栅极是容性负载，驱动电路要提供足够的充放电电流以缩短开关时间，降低开关损耗。栅极电阻取值需要在开关速度和振铃之间折中。",
+          "topics": {"power_electronics": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "power/p5",
+          "page_number": 5,
+          "text": "电流采样常在桥臂低边串联采样电阻，用放大器把毫伏级压降放大后送入 ADC。采样电阻取值要兼顾功耗与信噪比，放大器的带宽和共模抑制比直接影响采样精度。",
+          "topics": {"current_sense": 1.0, "power_electronics": 0.4},
+          "embedded": true
+        },
+        {
+          "key": "power/p6",
+          "page_number": 6,
+          "text": "过流保护在检测到电流超过阈值时立即封锁驱动输出，防止启动冲击或堵转烧毁开关管。硬件比较器保护响应最快，软件保护则依赖电流采样的实时性。",
+          "topics": {"current_sense": 0.9, "power_electronics": 0.5},
+          "embedded": false
+        },
+        {
+          "key": "power/p7",
+          "page_number": 7,
+          "text": "直流有刷电机的空载转速与电枢电压近似成正比，输出转矩与电枢电流成正比。转速转矩曲线是选型与调速设计的基础。",
+          "topics": {"motor_drive": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "power/p8",
+          "page_number": 8,
+          "text": "开关管关断时电机绕组的感性电流需要续流通路，体二极管或外接续流二极管提供回路。续流回路设计不当会产生电压尖峰和电磁干扰。",
+          "topics": {"power_electronics": 0.9},
+          "embedded": false
+        }
+      ]
+    },
+    {
+      "key": "comm",
+      "title": "嵌入式通信协议",
+      "filename": "embedded_comm.pdf",
+      "pages": [
+        {
+          "key": "comm/p1",
+          "page_number": 1,
+          "text": "UART 异步串口按帧传输，每帧包含起始位、数据位、可选校验位和停止位。收发双方必须约定相同的波特率和帧格式，没有时钟线，靠波特率同步。",
+          "topics": {"uart": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "comm/p2",
+          "page_number": 2,
+          "text": "RS-232 使用正负电平表示逻辑，与单片机的 TTL 电平不兼容，需要电平转换芯片。传输距离比 TTL 远，但速率较低，逐渐被 USB 转串口取代。",
+          "topics": {"uart": 0.9},
+          "embedded": false
+        },
+        {
+          "key": "comm/p3",
+          "page_number": 3,
+          "text": "I2C 总线只有 SDA 和 SCL 两根线，均为开漏输出，必须外接上拉电阻。每个从机有唯一地址，主机通过地址寻址，支持一主多从。",
+          "topics": {"i2c_spi": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "comm/p4",
+          "page_number": 4,
+          "text": "SPI 总线使用 SCLK、MOSI、MISO 和片选四根线，全双工传输，速率高于 I2C。时钟极性 CPOL 和相位 CPHA 有四种组合，主从双方必须配置一致。",
+          "topics": {"i2c_spi": 1.0},
+          "embedded": false
+        },
+        {
+          "key": "comm/p5",
+          "page_number": 5,
+          "text": "CAN 总线采用差分信号传输，抗干扰能力强。多节点同时发送时依靠标识符逐位仲裁，优先级高的报文赢得总线，不会破坏数据。错误帧和自动重发机制提高了可靠性。",
+          "topics": {"can_bus": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "comm/p6",
+          "page_number": 6,
+          "text": "CAN 控制器的验收过滤器决定接收哪些标识符的报文，屏蔽位模式可以成组接收。波特率由位时间分段配置，采样点位置影响通信可靠性。",
+          "topics": {"can_bus": 1.0},
+          "embedded": true
+        },
+        {
+          "key": "comm/p7",
+          "page_number": 7,
+          "text": "UART 点对点最简单，I2C 适合板内多器件低速互联，SPI 速率高但占用引脚多，CAN 适合多节点、强干扰的车载环境。选型要权衡速率、距离、节点数和成本。",
+          "topics": {"uart": 0.4, "i2c_spi": 0.4, "can_bus": 0.4},
+          "embedded": false
+        },
+        {
+          "key": "comm/p8",
+          "page_number": 8,
+          "text": "Modbus 是常见的应用层协议，通常跑在 UART 串口之上，采用主从问答方式读写保持寄存器和线圈，广泛用于工业仪表。",
+          "topics": {"uart": 0.6, "i2c_spi": 0.2},
+          "embedded": false
+        }
+      ]
+    }
+  ]
+}

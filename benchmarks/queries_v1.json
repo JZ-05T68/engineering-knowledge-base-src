@@ -1,0 +1,281 @@
+{
+  "query_set_id": "v0.5.1-frozen-queries-v1",
+  "frozen_at": "2026-08-17",
+  "corpus_id": "synthetic-engineering-v1",
+  "purpose": "v0.5.1 retrieval quality benchmark 冻结 query 集。relevance set 在运行任何 baseline 前人工判定并冻结，禁止根据跑出的结果回改。topics 是该 query 的 fixture 向量（latent-topic 权重），只用于离线机制验证，不代表真实模型语义质量。",
+  "categories": {
+    "A": "Exact terminology（精确术语查询）",
+    "B": "Semantic paraphrase（自然语言语义改写）",
+    "C": "Ambiguous engineering question（模糊工程问题）",
+    "D": "Cross-document retrieval（跨文档问题）",
+    "E": "False-positive / confusing terminology（易误召回）",
+    "F": "Negative / no-good-answer（资料中没有合适答案）",
+    "G": "Keyword strong / semantic unnecessary（检查 Hybrid 是否破坏本来正确的 Keyword 排名）",
+    "H": "Multi-relevant-page（同一问题多个合理页面）",
+    "I": "Distractor-heavy（大量词面相同但语义不相关的页面）",
+    "J": "Partial embedding coverage（相关页无 embedding，复现真实运行条件）"
+  },
+  "queries": [
+    {
+      "id": "A1",
+      "text": "定时器预分频器和自动重装载寄存器的作用",
+      "category": "A",
+      "topics": {"timer": 1.0},
+      "relevant_pages": ["stm32/p4", "stm32/p5"],
+      "distractor_pages": [],
+      "notes": "教材原词查询，keyword 应直接命中。"
+    },
+    {
+      "id": "A2",
+      "text": "GPIO_Mode_Out_PP 推挽输出配置",
+      "category": "A",
+      "topics": {"gpio": 1.0},
+      "relevant_pages": ["stm32/p2", "stm32/p1"],
+      "distractor_pages": [],
+      "notes": "精确库枚举名 + 术语。"
+    },
+    {
+      "id": "A3",
+      "text": "H桥 死区时间 直通",
+      "category": "A",
+      "topics": {"power_electronics": 1.0, "motor_drive": 0.4},
+      "relevant_pages": ["power/p2", "power/p1"],
+      "distractor_pages": [],
+      "notes": "power/p2 未嵌入（partial coverage 顺带覆盖）。"
+    },
+    {
+      "id": "A4",
+      "text": "I2C 上拉电阻 开漏 地址",
+      "category": "A",
+      "topics": {"i2c_spi": 1.0},
+      "relevant_pages": ["comm/p3"],
+      "distractor_pages": ["comm/p4"],
+      "notes": "comm/p4（SPI）词面同属 i2c_spi topic 但语义不同，观察排序。"
+    },
+    {
+      "id": "B1",
+      "text": "怎么让一个引脚点亮发光二极管",
+      "category": "B",
+      "topics": {"gpio": 1.0},
+      "relevant_pages": ["stm32/p2", "stm32/p1"],
+      "distractor_pages": [],
+      "notes": "避开 GPIO/推挽 原词；stm32/p2 文本含「点亮 LED」「发光二极管」，有部分词面重合。"
+    },
+    {
+      "id": "B2",
+      "text": "计数器到了设定值以后怎么通知处理器",
+      "category": "B",
+      "topics": {"timer": 0.7, "interrupt_nvic": 1.0},
+      "relevant_pages": ["stm32/p5"],
+      "distractor_pages": ["stm32/p4"],
+      "notes": "语义改写自 v0.5.0 Q4；词面与 stm32/p5 有「计数器」「处理」弱重合。"
+    },
+    {
+      "id": "B3",
+      "text": "误差一直存在消不掉怎么办",
+      "category": "B",
+      "topics": {"pid": 1.0, "control_tuning": 0.5},
+      "relevant_pages": ["pid/p3", "pid/p2"],
+      "distractor_pages": [],
+      "notes": "相关页 pid/p3 未嵌入：hybrid 无法向量召回，只能依赖 keyword 词面（误差/静差）。"
+    },
+    {
+      "id": "B4",
+      "text": "两个轮子转速不一样怎么走出弧线",
+      "category": "B",
+      "topics": {"kinematics": 1.0, "odometry": 0.3},
+      "relevant_pages": ["robot/p1", "robot/p2"],
+      "distractor_pages": [],
+      "notes": "robot/p1 未嵌入；词面与 robot/p1 有「转速」「弧线」重合。"
+    },
+    {
+      "id": "C1",
+      "text": "控制器输出一直来回抖动是什么原因",
+      "category": "C",
+      "topics": {"pid": 0.8, "control_tuning": 0.8},
+      "relevant_pages": ["pid/p4", "pid/p6"],
+      "distractor_pages": ["stm32/p3"],
+      "notes": "「抖动」词面会命中 stm32/p3 按键消抖（未嵌入），观察是否误召回。"
+    },
+    {
+      "id": "C2",
+      "text": "处理器一直在搬数据腾不出手怎么办",
+      "category": "C",
+      "topics": {"dma": 1.0},
+      "relevant_pages": ["stm32/p8"],
+      "distractor_pages": [],
+      "notes": "同 v0.5.0 Q3 类型；stm32/p8 已嵌入，hybrid 应获益。"
+    },
+    {
+      "id": "C3",
+      "text": "电机启动瞬间电流太大烧管子",
+      "category": "C",
+      "topics": {"current_sense": 1.0, "power_electronics": 0.5},
+      "relevant_pages": ["power/p6", "power/p5"],
+      "distractor_pages": [],
+      "notes": "power/p6（过流保护）未嵌入；power/p5（电流采样）已嵌入。"
+    },
+    {
+      "id": "C4",
+      "text": "车子跑直线跑着跑着就偏了",
+      "category": "C",
+      "topics": {"odometry": 1.0},
+      "relevant_pages": ["robot/p6", "robot/p7"],
+      "distractor_pages": [],
+      "notes": "robot/p6 已嵌入（偏航/累积误差）；robot/p7 未嵌入。"
+    },
+    {
+      "id": "D1",
+      "text": "编码器怎么测转速",
+      "category": "D",
+      "topics": {"encoder": 1.0, "odometry": 0.6},
+      "relevant_pages": ["robot/p5", "stm32/p6"],
+      "distractor_pages": [],
+      "notes": "跨文档：robot/p5（M 法/T 法）+ stm32/p6（编码器接口），两者均已嵌入。"
+    },
+    {
+      "id": "D2",
+      "text": "PWM 怎么控制电机快慢",
+      "category": "D",
+      "topics": {"pwm": 1.0, "motor_drive": 0.6},
+      "relevant_pages": ["power/p3", "stm32/p7"],
+      "distractor_pages": [],
+      "notes": "跨文档：power/p3（PWM 调速）+ stm32/p7（定时器 PWM），两者均已嵌入。"
+    },
+    {
+      "id": "D3",
+      "text": "串口通信的帧格式和波特率怎么配",
+      "category": "D",
+      "topics": {"uart": 1.0},
+      "relevant_pages": ["comm/p1", "stm32/p10"],
+      "distractor_pages": [],
+      "notes": "跨文档：协议手册 + MCU 外设手册。"
+    },
+    {
+      "id": "E1",
+      "text": "采样时间怎么设置",
+      "category": "E",
+      "topics": {"pid": 0.6, "control_tuning": 0.4},
+      "relevant_pages": ["pid/p8"],
+      "distractor_pages": ["power/p5"],
+      "notes": "「采样」词面同时命中 power/p5 电流采样（已嵌入，词面相似语义不同）；pid/p8 未嵌入。"
+    },
+    {
+      "id": "E2",
+      "text": "比例调大了会怎样",
+      "category": "E",
+      "topics": {"pid": 1.0},
+      "relevant_pages": ["pid/p2"],
+      "distractor_pages": ["robot/p8"],
+      "notes": "「比例」vs robot/p8「减速比」词面相近语义不同；两者均按 embedded 状态观察。"
+    },
+    {
+      "id": "E3",
+      "text": "多个节点同时发数据冲突了怎么办",
+      "category": "E",
+      "topics": {"can_bus": 1.0},
+      "relevant_pages": ["comm/p5"],
+      "distractor_pages": ["comm/p3"],
+      "notes": "仲裁是 CAN 特性；I2C 也有多主仲裁但本语料 comm/p3 未提仲裁，词面弱相关。"
+    },
+    {
+      "id": "F1",
+      "text": "如何配置 Kubernetes 集群的滚动更新",
+      "category": "F",
+      "topics": {"foreign_cloud": 1.0},
+      "relevant_pages": [],
+      "distractor_pages": [],
+      "notes": "语料中无任何相关内容。query 向量落在 foreign topic，与所有页余弦为 0：暴露无阈值召回行为。不得用 Top1 存在作为成功。"
+    },
+    {
+      "id": "F2",
+      "text": "三元锂电池充电截止电压是多少",
+      "category": "F",
+      "topics": {"foreign_battery": 1.0},
+      "relevant_pages": [],
+      "distractor_pages": ["power/p4", "power/p8"],
+      "notes": "语料无电池化学内容；「电压」词面可能命中功率电子页。不得用 Top1 存在作为成功。"
+    },
+    {
+      "id": "F3",
+      "text": "ROS2 的 action 通信怎么写",
+      "category": "F",
+      "topics": {"foreign_ros": 1.0},
+      "relevant_pages": [],
+      "distractor_pages": ["comm/p1", "comm/p7"],
+      "notes": "「通信」词面可能命中通信协议文档，但语料无 ROS 中间件内容。不得用 Top1 存在作为成功。"
+    },
+    {
+      "id": "G1",
+      "text": "DMA 直接存储器存取",
+      "category": "G",
+      "topics": {"dma": 1.0},
+      "relevant_pages": ["stm32/p8"],
+      "distractor_pages": [],
+      "notes": "keyword 应当精确置顶；检查 hybrid 不把 rank 1 拉低。"
+    },
+    {
+      "id": "G2",
+      "text": "Ziegler-Nichols 整定方法",
+      "category": "G",
+      "topics": {"control_tuning": 1.0, "pid": 0.5},
+      "relevant_pages": ["pid/p6"],
+      "distractor_pages": [],
+      "notes": "专有名词 keyword 强命中；检查 hybrid 无 regression。"
+    },
+    {
+      "id": "H1",
+      "text": "定时器从计数到产生中断的完整过程",
+      "category": "H",
+      "topics": {"timer": 1.0, "interrupt_nvic": 0.5},
+      "relevant_pages": ["stm32/p4", "stm32/p5"],
+      "distractor_pages": [],
+      "notes": "两个页面共同构成完整答案；评价看 relevant 集合整体覆盖，不要求唯一 Top1。"
+    },
+    {
+      "id": "H2",
+      "text": "PID 三个环节各自解决什么问题",
+      "category": "H",
+      "topics": {"pid": 1.0},
+      "relevant_pages": ["pid/p2", "pid/p3", "pid/p4"],
+      "distractor_pages": [],
+      "notes": "三个合理页面；pid/p3 未嵌入。评价看集合覆盖（Top5 内 relevant 命中数）。"
+    },
+    {
+      "id": "I1",
+      "text": "定时器",
+      "category": "I",
+      "topics": {"timer": 1.0},
+      "relevant_pages": ["stm32/p4"],
+      "distractor_pages": ["pid/p8", "stm32/p7"],
+      "notes": "单词查询；多页词面命中，stm32/p4 是概述页为最合理首选。评价只记行为，不设硬 PASS。"
+    },
+    {
+      "id": "I2",
+      "text": "通信协议有哪些区别",
+      "category": "I",
+      "topics": {"uart": 0.4, "i2c_spi": 0.4, "can_bus": 0.4},
+      "relevant_pages": ["comm/p7"],
+      "distractor_pages": ["comm/p1", "comm/p3", "comm/p4", "comm/p5"],
+      "notes": "整个 comm 文档词面都沾边，comm/p7（对比页，未嵌入）是唯一直接回答。"
+    },
+    {
+      "id": "J1",
+      "text": "按键消抖怎么做",
+      "category": "J",
+      "topics": {"gpio": 0.8, "interrupt_nvic": 0.3},
+      "relevant_pages": ["stm32/p3"],
+      "distractor_pages": [],
+      "notes": "相关页 stm32/p3 未嵌入：hybrid 向量侧必然 miss，keyword 必须独立扛住。"
+    },
+    {
+      "id": "J2",
+      "text": "外部中断怎么配置",
+      "category": "J",
+      "topics": {"interrupt_nvic": 1.0, "gpio": 0.3},
+      "relevant_pages": ["stm32/p9"],
+      "distractor_pages": ["stm32/p5"],
+      "notes": "相关页 stm32/p9 未嵌入；stm32/p5 已嵌入且含更新中断，观察向量侧是否把 p5 顶到 p9 之前。"
+    }
+  ]
+}
