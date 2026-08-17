@@ -439,6 +439,10 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
+从 GitHub 在全新 Windows 环境重建时，请按
+[Windows 恢复与环境重建](docs/windows-recovery.md) 完成 clone、虚拟环境、依赖、配置、
+启动和健康检查。GitHub 只恢复软件与配置方法，不恢复 `.env`、数据库、原始资料、日志或缓存。
+
 正式服务端点固定为 `127.0.0.1:8501`，不支持通过 `.env` 改写地址或端口；不要改为
 `0.0.0.0`、局域网地址、公网地址或其他端口。自动化测试通过显式依赖注入使用临时端口，
 不改变正式运行配置。
@@ -770,3 +774,6 @@ GitHub Release 为正式版本（非 draft、非 prerelease）。
 `git@github.com:JZ-05T68/engineering-knowledge-base-src.git`。各版本远程状态以 GitHub tag 和
 Release 的实时审计为准；v0.1.2 等历史版本的发布事实、备份记录和测试结论保留在上文、
 [CHANGELOG](CHANGELOG.md) 与对应历史文档中。
+
+仓库同步纪律与发布维护检查见
+[GitHub 仓库维护规则](docs/repository-maintenance.md)。
