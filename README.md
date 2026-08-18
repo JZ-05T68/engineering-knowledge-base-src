@@ -12,47 +12,48 @@ EKB 不是 PDF 摘要器、通用聊天机器人或云文档平台。它以本�
 
 ![EKB v0.5.0 首页概览](docs/assets/v0.5.0/home-overview.jpg)
 
-> 截图使用隔离的原创演示资料生成，不包含 production、staging、客户或私人数据。现有截图采集自
+> 截图使用隔离的原创演示资料生成，不包含生产环境、隔离测试环境、客户或私人数据。现有截图采集自
 > v0.5.0 实际界面；v0.5.1 延续该产品底座，并新增检索覆盖状态与弱证据提示。
 
-## v0.5.1 — Retrieval Stabilization
+## v0.5.1 — 检索稳定化
 
-v0.5.1 让检索行为更可观测、可复现、可诚实解释，但没有把实验参数直接写入 production，
+v0.5.1 让检索行为更可观测、可复现、可诚实解释，但没有把实验参数直接写入生产环境，
 也没有宣称检索质量已经完全解决：
 
-- 建立冻结的 retrieval benchmark 与可重复的 lexical、vector、hybrid 评估工作流；最终重跑
-  保持语料和查询不变，并与 Phase 1 baseline 完全一致。
-- 明确 Hybrid Search 的运行结果与 fallback 状态，关键词回退不再伪装成成功的向量路径。
-- 使用真实 embedding 校准检索假设，保留“绝对相似度阈值不足以可靠区分弱证据”的结论，
-  没有把实验 `vector_weight`、独立 vector `top_k` 或数值阈值宣传为 production 能力。
-- 在检索页只读显示 fresh、可索引页面的 embedding 覆盖状态及 missing / stale 数量；空文本页
+- 建立冻结的检索基准与可重复的关键词、向量、混合检索评估流程；最终重跑保持语料和查询不变，
+  并与第一阶段基线完全一致。
+- 明确混合检索的运行结果与回退状态，关键词回退不再伪装成成功的向量检索路径。
+- 使用真实向量嵌入校准检索假设，保留“绝对相似度阈值不足以可靠区分弱证据”的结论，
+  没有把实验 `vector_weight`、独立向量 `top_k` 或数值阈值宣传为生产能力。
+- 在检索页只读显示有效、可索引页面的向量嵌入覆盖状态及缺失、过期数量；空文本页
   不进入分母，显示覆盖率不会触发写入、付费调用或后台索引，补齐索引仍由用户显式操作。
-- 当 vector 路径可用但非空结果全部只有 lexical 证据时，显示确定性的弱证据提示；该提示是
+- 当向量检索路径可用，但非空结果全部只有关键词依据时，显示确定性的弱证据提示；该提示是
   诚实产品边界，不是相关性保证或“无答案”检测器。
 
-当前 production hybrid 架构仍是 lexical 与 vector 候选并集后的 **equal-weight RRF**，
-并保留关键词 fallback。v0.5.1 没有 production `vector_weight`、独立 vector `top_k`、
-数值 similarity eligibility threshold 或最终展示结果数截断。
+当前生产环境的混合检索会合并关键词召回与向量召回候选，并通过**等权 RRF** 完成排序融合，
+同时保留关键词回退。v0.5.1 的生产环境没有 `vector_weight`、独立向量 `top_k`、
+数值相似度准入阈值或最终展示结果数截断。
 
-已知边界保持为：索引覆盖缺口 `Production OPEN / PARTIALLY MITIGATED`；弱证据边界
-`PARTIALLY MITIGATED`；最终结果数边界 `Production OPEN / DEFERRED PRODUCT DECISION`。
+向量索引覆盖状态现在已经可见，但索引补全仍需用户显式操作；弱证据提示只是产品层面的诚实边界，
+不等同于相关性保证或“无答案”检测；混合检索的最终结果数量边界仍留待后续版本进一步确定。
+详细的内部处置状态可查阅已有发布与验证文档。
 详见 [v0.5.1 GitHub Release](https://github.com/JZ-05T68/engineering-knowledge-base-src/releases/tag/v0.5.1)
 与 [Phase 7 最终验证记录](docs/v0.5.1-phase7-final-validation.md)。
 
 ## 当前能力底座
 
 - 本地 PDF 导入、逐页 PNG、文本层提取、Markdown 整理、结构化笔记与来源回溯。
-- SQLite FTS5 / jieba 关键词检索，以及显式选择的可选 Hybrid Retrieval。
-- PAGE、TEXT_SELECTION、IMAGE_REGION 三类证据对象，人工确认后生成 citation-grounded
-  Prompt Package；生成过程本身不连接外部 AI。
-- 页面 embedding 持久化、SHA-256 freshness 复用、受控索引编排和付费调用边界。
-- production / staging 数据与端口隔离，默认 manual AI 模式和离线回退。
+- SQLite FTS5 / jieba 关键词检索，以及显式选择的可选混合检索。
+- `PAGE`、`TEXT_SELECTION`、`IMAGE_REGION` 三类证据对象，人工确认后生成带引用依据的
+  提示词包；生成过程本身不连接外部 AI。
+- 页面向量嵌入持久化、SHA-256 有效性复用、受控索引编排和付费调用边界。
+- 生产环境与隔离测试环境的数据、端口分离，默认使用 `manual` AI 模式和离线回退。
 
 | 页面阅读与整理 | 离线关键词检索 |
 |---|---|
 | ![双栏页面阅读器](docs/assets/v0.5.0/page-reader.jpg) | ![关键词检索结果](docs/assets/v0.5.0/keyword-search-results.jpg) |
 
-| Hybrid Retrieval 显式模式 | Evidence / Source 工作流 |
+| 混合检索显式模式 | 证据与来源工作流 |
 |---|---|
 | ![AI 混合检索模式](docs/assets/v0.5.0/hybrid-retrieval-mode.jpg) | ![证据来源工作流](docs/assets/v0.5.0/evidence-source-workflow.jpg) |
 
@@ -60,76 +61,76 @@ v0.5.1 让检索行为更可观测、可复现、可诚实解释，但没有把�
 |---|
 | ![文档管理](docs/assets/v0.5.0/document-management.jpg) |
 
-Hybrid 截图展示真实 v0.5.0 模式控件与产品门控；截图采集时保持 manual 模式，未发起付费调用。
-真实 Hybrid benchmark 结果见
+混合检索截图展示真实 v0.5.0 模式控件与产品门控；截图采集时保持 `manual` 模式，未发起付费调用。
+真实混合检索基准结果见
 [Phase 11D 检索证据](docs/v0.5.0-phase11d-retrieval-benchmark.md)。
 
-## AI Stack（可选）
+## 可选 AI 技术栈
 
 | 职责 | 当前默认配置 | 当前边界 |
 |---|---|---|
-| 主 LLM | `qwen3.7-plus` | provider foundation 与受控真实调用；不是应用启动依赖 |
+| 主 LLM | `qwen3.7-plus` | 供应商无关接口与受控真实调用；不是应用启动依赖 |
 | 高难度模型配置 | `qwen3.8-max` | 保留配置位，不承诺自动路由或通用问答能力 |
-| Embedding | `qwen3.7-text-embedding`，1024 维 | 当前索引粒度为 page-level |
-| Rerank | `qwen3-rerank` | 契约与配置已预留，运行时通道尚未接入 |
+| 向量嵌入 | `qwen3.7-text-embedding`，1024 维 | 当前索引粒度为页面级 |
+| 重排序 | `qwen3-rerank` | 契约与配置已预留，运行时通道尚未接入 |
 
 默认 `ai_mode="manual"`。只有用户显式配置 API Key、切换到 API 模式并触发受控操作时，
 才可能产生外部调用；没有 API Key 时，PDF、搜索、阅读、笔记、证据、删除恢复和备份继续工作。
 
-## Hybrid Retrieval
+## 混合检索
 
-当前 production 混合检索链路是：
+当前生产环境的混合检索链路是：
 
 1. 自然语言词面召回继续复用本地 `SearchService`、FTS5、jieba 与字段权重；
-2. 从 SQLite 中已有且 fresh 的 page-level embedding 执行持久向量召回；
-3. 对 lexical 与 vector 候选取并集，并使用 RRF 融合；
+2. 从 SQLite 中已有且有效的页面级向量嵌入执行持久向量召回；
+3. 合并关键词与向量候选，并使用等权 RRF 融合；
 4. 显示关键词匹配、语义召回或混合匹配等粗粒度来源标签；
 5. 任一筛选条件或非相关度排序会回退到关键词检索；AI 不可用时核心检索仍可使用。
 
-混合模式只在「无筛选 + 相关度排序」下启用。一次显式搜索至多触发一次 query embedding；
-URL/deep-link 恢复不会自动发起付费调用。当前不把 retrieval quality 宣称为“已经完全解决”，
+混合模式只在「无筛选 + 相关度排序」下启用。一次显式搜索至多触发一次查询向量嵌入；
+URL 或深层链接恢复不会自动发起付费调用。当前不把检索质量宣称为“已经完全解决”，
 也不以语义召回替代关键词检索。
 
-## Embedding Persistence 与成本边界
+## 向量嵌入持久化与成本边界
 
-- embedding 持久化在本地 SQLite `page_embeddings`，当前粒度是页面，不是 chunk。
-- `source_text_sha256`、模型、维度与配置版本共同决定 freshness；fresh 向量直接复用。
+- 向量嵌入持久化在本地 SQLite `page_embeddings`，当前粒度是页面，不是文本分块。
+- `source_text_sha256`、模型、维度与配置版本共同决定有效性；有效向量直接复用。
 - 缺失或过期页面只通过受控索引编排生成，批量大小与目标范围有明确限制。
-- production 不自动生成 embedding；真实付费索引限定在隔离 staging 流程并要求显式确认。
-- application runtime 正式策略为 `max_extra_attempts = 0`；没有递归重试或 Agent 循环。
+- 生产环境不自动生成向量嵌入；真实付费索引限定在隔离测试流程并要求显式确认。
+- 应用运行时的正式策略为 `max_extra_attempts = 0`；没有递归重试或智能体循环。
 
-## Runtime 与数据隔离
+## 运行环境与数据隔离
 
-| 实例 | 端点 | 数据根目录 | 用途 |
+| 实例 | 端点 | 数据目录 | 用途 |
 |---|---|---|---|
-| production | `127.0.0.1:8501` | `data/` | 正式本地知识资产 |
-| staging | `127.0.0.1:8502` | `staging-data/` | 隔离的受控 AI 验证 |
+| 生产环境 | `127.0.0.1:8501` | `data/` | 正式本地知识资产 |
+| 隔离测试环境 | `127.0.0.1:8502` | `staging-data/` | 受控 AI 验证 |
 
 两个实例的数据库、原始 PDF、页面图像、Markdown、日志、备份和 PID 路径完全分离，且均只绑定
-loopback。原始 PDF 与页面图像不会被自动覆盖或删除；真实付费调用有 staging guard、manual
-默认值和显式操作边界。
+本机回环地址。原始 PDF 与页面图像不会被自动覆盖或删除；真实付费调用受隔离环境保护、
+`manual` 默认值和显式操作边界约束。
 
-## Evidence-first Workflow
+## 证据优先工作流
 
 `PDF → 页面 → 检索 → 来源核验 → 证据篮 → 人工确认 → 引用提示词包`
 
-Prompt Package 只接纳 confirmed evidence，并在生成前重新验证文档、页码、来源图像与文本锚点。
-任一来源无法证明仍有效时 fail closed。用户可以把本地生成的包手动复制到外部 AI 工具；
+引用提示词包只接纳已确认的证据，并在生成前重新验证文档、页码、来源图像与文本锚点。
+任一来源无法证明仍有效时即拒绝生成。用户可以把本地生成的包手动复制到外部 AI 工具；
 EKB 本身不会因此自动发送资料。
 
-## v0.5.1 Validation
+## v0.5.1 验证结果
 
-- 正式 release commit：`82457ff9ea2c37ccd6f8a777eec4fe5cd5aa8ec8`；
+- 正式发布提交：`82457ff9ea2c37ccd6f8a777eec4fe5cd5aa8ec8`；
 - 全量 pytest：**1475 passed**（0 failed / 0 error）；
-- Ruff 与最终 `git diff --check`：clean；
-- frozen benchmark 语料与查询未改动，重跑结果与 Phase 1 baseline 完全一致；
-- production `127.0.0.1:8501` rollout：**PASSED**；
-- rollout：0 production DB writes、0 paid calls、0 embedding calls、0 indexing actions、
-  **0 regressions**。
+- Ruff 与最终 `git diff --check`：均通过；
+- 冻结检索基准的语料与查询未改动，重跑结果与第一阶段基线完全一致；
+- 生产环境 `127.0.0.1:8501` 部署验证：**通过**；
+- 部署验证期间：生产数据库写入 0 次、付费调用 0 次、向量嵌入调用 0 次、索引操作 0 次、
+  **回归问题 0 项**。
 
 这些数字是已经执行的 v0.5.1 正式验证事实，不是对所有工程领域、查询或机器性能的保证。
 详见 [v0.5.1 最终验证记录](docs/v0.5.1-phase7-final-validation.md)；v0.5.0 能力底座的完整
-production Gate 仍记录于 [v0.5.0 发布说明](docs/v0.5.0-release-notes.md)。
+生产环境发布门禁仍记录于 [v0.5.0 发布说明](docs/v0.5.0-release-notes.md)。
 
 ## 版本演进
 
@@ -150,7 +151,7 @@ v0.4.2 为引用提示词包增加新鲜度保护：已生成 Prompt 与当前�
 证据的实际输入绑定；问题、证据集合、确认状态、排序、备注、整页当前文本或
 来源有效性一旦变化，旧 Prompt 立即失效并被真正清除，改回原输入也不会复活。
 不进入 Prompt 的标签、项目、复核状态和未确认证据变化不会造成无意义失效。
-校验与生成共用同一 source validation 路径，来源失效继续 fail closed。
+校验与生成共用同一来源验证路径，来源失效时继续拒绝生成。
 数据库保持 schema v7，无迁移、无新增依赖。详见
 [v0.4.2 发布说明](docs/v0.4.2-release-notes.md)。
 
@@ -757,7 +758,7 @@ v0.5.0 正式恢复只接受 `0.5` 系列的当前或更早补丁版本，并要
 ## 当前限制
 
 - v0.2.2 起提供本地单页印刷体 OCR；仍不执行手写识别、公式 OCR、复杂表格结构识别或批量 OCR。
-- v0.5.1 延续可选的页面 embedding 持久化、向量召回与 Hybrid Retrieval，并增加覆盖状态可见性
+- v0.5.1 延续可选的页面向量嵌入持久化、向量召回与混合检索，并增加覆盖状态可见性
   与弱证据诚实提示；关键词检索继续作为
   离线基础与 AI 不可用时的回退，不宣称具备全面语义理解，也不以向量召回完全替代关键词检索。
 - 不执行大模型自动问答；只能手动复制证据包或受约束提示词。
@@ -790,10 +791,10 @@ v0.5.0 正式恢复只接受 `0.5` 系列的当前或更早补丁版本，并要
 
 ## 发布状态
 
-当前公开版本为 **v0.5.1 — Retrieval Stabilization**，发布日期为 2026-08-18。
-`v0.5.1` 是 annotated tag，指向正式 release commit
-`82457ff9ea2c37ccd6f8a777eec4fe5cd5aa8ec8`；GitHub Release 为正式版本（非 draft、
-非 prerelease）。
+当前公开版本为 **v0.5.1 — 检索稳定化**，发布日期为 2026-08-18。
+`v0.5.1` 是附注标签，指向正式发布提交
+`82457ff9ea2c37ccd6f8a777eec4fe5cd5aa8ec8`；GitHub Release 为正式版本（非草稿、
+非预发布版本）。
 
 当前源码仓库 `origin` 使用 SSH：
 `git@github.com:JZ-05T68/engineering-knowledge-base-src.git`。各版本远程状态以 GitHub tag 和
@@ -802,6 +803,8 @@ Release 的实时审计为准；v0.1.2 等历史版本的发布事实、备份�
 
 仓库同步纪律与发布维护检查见
 [GitHub 仓库维护规则](docs/repository-maintenance.md)。
+公开产品与演示内容见
+[EKB 展示仓库](https://github.com/JZ-05T68/engineering-knowledge-base)。
 
 `README.md` 与 `README_EN.md` 是同步维护的正式项目介绍；正式版本、能力、定位或展示内容变化时，
 中英文应同时更新。日语与韩语介绍按当前文档计划延后至 v1.2，本版本不建立占位文件。
