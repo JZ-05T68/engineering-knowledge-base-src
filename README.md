@@ -1,4 +1,6 @@
-# Engineering Knowledge Base v0.5.0
+[简体中文](README.md) | [English](README_EN.md)
+
+# Engineering Knowledge Base v0.5.1
 
 一个面向 Windows 的本地优先、单用户个人工程知识管理系统。它把用户主动导入的 PDF
 转化为可长期整理、检索、核验和复用的页面级知识资产：
@@ -10,9 +12,34 @@ EKB 不是 PDF 摘要器、通用聊天机器人或云文档平台。它以本�
 
 ![EKB v0.5.0 首页概览](docs/assets/v0.5.0/home-overview.jpg)
 
-> 截图使用隔离的原创演示资料生成，不包含 production、staging、客户或私人数据。
+> 截图使用隔离的原创演示资料生成，不包含 production、staging、客户或私人数据。现有截图采集自
+> v0.5.0 实际界面；v0.5.1 延续该产品底座，并新增检索覆盖状态与弱证据提示。
 
-## v0.5.0 Highlights
+## v0.5.1 — Retrieval Stabilization
+
+v0.5.1 让检索行为更可观测、可复现、可诚实解释，但没有把实验参数直接写入 production，
+也没有宣称检索质量已经完全解决：
+
+- 建立冻结的 retrieval benchmark 与可重复的 lexical、vector、hybrid 评估工作流；最终重跑
+  保持语料和查询不变，并与 Phase 1 baseline 完全一致。
+- 明确 Hybrid Search 的运行结果与 fallback 状态，关键词回退不再伪装成成功的向量路径。
+- 使用真实 embedding 校准检索假设，保留“绝对相似度阈值不足以可靠区分弱证据”的结论，
+  没有把实验 `vector_weight`、独立 vector `top_k` 或数值阈值宣传为 production 能力。
+- 在检索页只读显示 fresh、可索引页面的 embedding 覆盖状态及 missing / stale 数量；空文本页
+  不进入分母，显示覆盖率不会触发写入、付费调用或后台索引，补齐索引仍由用户显式操作。
+- 当 vector 路径可用但非空结果全部只有 lexical 证据时，显示确定性的弱证据提示；该提示是
+  诚实产品边界，不是相关性保证或“无答案”检测器。
+
+当前 production hybrid 架构仍是 lexical 与 vector 候选并集后的 **equal-weight RRF**，
+并保留关键词 fallback。v0.5.1 没有 production `vector_weight`、独立 vector `top_k`、
+数值 similarity eligibility threshold 或最终展示结果数截断。
+
+已知边界保持为：索引覆盖缺口 `Production OPEN / PARTIALLY MITIGATED`；弱证据边界
+`PARTIALLY MITIGATED`；最终结果数边界 `Production OPEN / DEFERRED PRODUCT DECISION`。
+详见 [v0.5.1 GitHub Release](https://github.com/JZ-05T68/engineering-knowledge-base-src/releases/tag/v0.5.1)
+与 [Phase 7 最终验证记录](docs/v0.5.1-phase7-final-validation.md)。
+
+## 当前能力底座
 
 - 本地 PDF 导入、逐页 PNG、文本层提取、Markdown 整理、结构化笔记与来源回溯。
 - SQLite FTS5 / jieba 关键词检索，以及显式选择的可选 Hybrid Retrieval。
@@ -39,7 +66,7 @@ Hybrid 截图展示真实 v0.5.0 模式控件与产品门控；截图采集时�
 
 ## AI Stack（可选）
 
-| 职责 | v0.5.0 默认配置 | 当前边界 |
+| 职责 | 当前默认配置 | 当前边界 |
 |---|---|---|
 | 主 LLM | `qwen3.7-plus` | provider foundation 与受控真实调用；不是应用启动依赖 |
 | 高难度模型配置 | `qwen3.8-max` | 保留配置位，不承诺自动路由或通用问答能力 |
@@ -51,7 +78,7 @@ Hybrid 截图展示真实 v0.5.0 模式控件与产品门控；截图采集时�
 
 ## Hybrid Retrieval
 
-v0.5.0 的混合检索链路是：
+当前 production 混合检索链路是：
 
 1. 自然语言词面召回继续复用本地 `SearchService`、FTS5、jieba 与字段权重；
 2. 从 SQLite 中已有且 fresh 的 page-level embedding 执行持久向量召回；
@@ -90,26 +117,23 @@ Prompt Package 只接纳 confirmed evidence，并在生成前重新验证文档�
 任一来源无法证明仍有效时 fail closed。用户可以把本地生成的包手动复制到外部 AI 工具；
 EKB 本身不会因此自动发送资料。
 
-## v0.5.0 Validation
+## v0.5.1 Validation
 
-完整 production Gate 对应的 runtime closure baseline 是
-`664d5ef03ee2d1944ebfe993430c4b18aa41805b`：
+- 正式 release commit：`82457ff9ea2c37ccd6f8a777eec4fe5cd5aa8ec8`；
+- 全量 pytest：**1475 passed**（0 failed / 0 error）；
+- Ruff 与最终 `git diff --check`：clean；
+- frozen benchmark 语料与查询未改动，重跑结果与 Phase 1 baseline 完全一致；
+- production `127.0.0.1:8501` rollout：**PASSED**；
+- rollout：0 production DB writes、0 paid calls、0 embedding calls、0 indexing actions、
+  **0 regressions**。
 
-- Gate 2B：17 / 17 PASS；
-- pytest：1399 / 1399 passed；
-- Ruff：clean；
-- `release_check.py --expect-service-stopped`：exit 0；
-- production `127.0.0.1:8501` health：HTTP 200；
-- production DB：schema v8、integrity ok、foreign key violations = 0、零测试污染；
-- Gate 4 人工验收：PASS，首页与 13 个页面无 exception。
-
-后续纯 README/docs/assets 发布提交只负责 GitHub 展示，不冒充重新执行过完整 production 人工 Gate。
-详见 [v0.5.0 发布说明](docs/v0.5.0-release-notes.md) 与
-[v0.5.x Roadmap](docs/v0.5.x-roadmap.md)。
+这些数字是已经执行的 v0.5.1 正式验证事实，不是对所有工程领域、查询或机器性能的保证。
+详见 [v0.5.1 最终验证记录](docs/v0.5.1-phase7-final-validation.md)；v0.5.0 能力底座的完整
+production Gate 仍记录于 [v0.5.0 发布说明](docs/v0.5.0-release-notes.md)。
 
 ## 版本演进
 
-以下章节保留各历史版本的真实范围与当时验证口径；它们不是当前 v0.5.0 能力说明。
+以下章节保留各历史版本的真实范围与当时验证口径；它们不是当前 v0.5.1 能力说明。
 
 ## v0.4.3 真实问题验证与 AI 就绪决策门
 
@@ -733,7 +757,8 @@ v0.5.0 正式恢复只接受 `0.5` 系列的当前或更早补丁版本，并要
 ## 当前限制
 
 - v0.2.2 起提供本地单页印刷体 OCR；仍不执行手写识别、公式 OCR、复杂表格结构识别或批量 OCR。
-- v0.5.0 已提供可选的页面 embedding 持久化、向量召回与 Hybrid Retrieval；关键词检索继续作为
+- v0.5.1 延续可选的页面 embedding 持久化、向量召回与 Hybrid Retrieval，并增加覆盖状态可见性
+  与弱证据诚实提示；关键词检索继续作为
   离线基础与 AI 不可用时的回退，不宣称具备全面语义理解，也不以向量召回完全替代关键词检索。
 - 不执行大模型自动问答；只能手动复制证据包或受约束提示词。
 - 不联网搜索资料，不抓取聊天记录或未获授权的第三方材料。
@@ -765,10 +790,10 @@ v0.5.0 正式恢复只接受 `0.5` 系列的当前或更早补丁版本，并要
 
 ## 发布状态
 
-当前公开版本为 **v0.5.0 — AI Foundation / Optional Hybrid Retrieval**，发布日期为
-2026-08-17。`v0.5.0` 是 annotated tag，指向最终 GitHub release presentation commit；
-完整 production Gate 的 runtime closure baseline `664d5ef...` 保留在其 ancestry 中，二者职责明确分离。
-GitHub Release 为正式版本（非 draft、非 prerelease）。
+当前公开版本为 **v0.5.1 — Retrieval Stabilization**，发布日期为 2026-08-18。
+`v0.5.1` 是 annotated tag，指向正式 release commit
+`82457ff9ea2c37ccd6f8a777eec4fe5cd5aa8ec8`；GitHub Release 为正式版本（非 draft、
+非 prerelease）。
 
 当前源码仓库 `origin` 使用 SSH：
 `git@github.com:JZ-05T68/engineering-knowledge-base-src.git`。各版本远程状态以 GitHub tag 和
@@ -777,3 +802,6 @@ Release 的实时审计为准；v0.1.2 等历史版本的发布事实、备份�
 
 仓库同步纪律与发布维护检查见
 [GitHub 仓库维护规则](docs/repository-maintenance.md)。
+
+`README.md` 与 `README_EN.md` 是同步维护的正式项目介绍；正式版本、能力、定位或展示内容变化时，
+中英文应同时更新。日语与韩语介绍按当前文档计划延后至 v1.2，本版本不建立占位文件。
