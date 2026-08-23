@@ -146,7 +146,7 @@ def test_migrate_v7_to_v8_preserves_data_and_adds_table(tmp_path: Path) -> None:
         ]
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert version == SCHEMA_VERSION == 8
+    assert version == SCHEMA_VERSION == 9
     assert documents == [("液压手册", "hyd.pdf", HASH_A)]
     assert pages == [(1, 1, "reviewed"), (2, 2, "pending")]
     assert notes == [("page", 1, "第一页笔记")]
@@ -162,7 +162,7 @@ def test_migrate_v7_to_v8_preserves_data_and_adds_table(tmp_path: Path) -> None:
 
 def test_fresh_database_has_v8_structure(tmp_path: Path) -> None:
     database = Database(tmp_path / "knowledge.db")
-    assert database.SCHEMA_VERSION == 8
+    assert database.SCHEMA_VERSION == 9
     with sqlite3.connect(database.database_path) as connection:
         assert _table_columns(connection, "page_embeddings") == EXPECTED_COLUMNS
         versions = [
@@ -171,7 +171,7 @@ def test_fresh_database_has_v8_structure(tmp_path: Path) -> None:
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
         ]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
 
 
 def test_migration_is_idempotent(tmp_path: Path) -> None:
@@ -191,7 +191,7 @@ def test_migration_is_idempotent(tmp_path: Path) -> None:
         embedding_count = connection.execute(
             "SELECT COUNT(*) FROM page_embeddings"
         ).fetchone()[0]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert embedding_count == 0
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
 

@@ -877,3 +877,217 @@ class PageEmbedding:
     vector: tuple[float, ...]
     created_at: datetime
     updated_at: datetime
+
+
+class KnowledgeObjectKind(StrEnum):
+    """The six knowledge-object types frozen for v0.5.2.
+
+    These are durable business semantics persisted in the database — never
+    colors, never icons, never UI presentation details.
+    """
+
+    CONCEPT = "concept"
+    FACT = "fact"
+    PRINCIPLE = "principle"
+    EXPERIENCE = "experience"
+    PROBLEM = "problem"
+    DECISION = "decision"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the local UI."""
+        return {
+            self.CONCEPT: "概念",
+            self.FACT: "事实",
+            self.PRINCIPLE: "原理",
+            self.EXPERIENCE: "经验",
+            self.PROBLEM: "问题",
+            self.DECISION: "决策",
+        }[self]
+
+
+class KnowledgeObjectStatus(StrEnum):
+    """Lifecycle state of one knowledge object (schema v9, v0.5.2)."""
+
+    DRAFT = "draft"
+    REVIEWED = "reviewed"
+    ARCHIVED = "archived"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the local UI."""
+        return {
+            self.DRAFT: "草稿",
+            self.REVIEWED: "已复核",
+            self.ARCHIVED: "已归档",
+        }[self]
+
+
+class KnowledgeObjectSourceType(StrEnum):
+    """Which local entity one knowledge-object source link points to."""
+
+    DOCUMENT = "document"
+    PAGE = "page"
+    NOTE = "note"
+    EVIDENCE = "evidence"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in source lists."""
+        return {
+            self.DOCUMENT: "文档",
+            self.PAGE: "页面",
+            self.NOTE: "结构化笔记",
+            self.EVIDENCE: "证据条目",
+        }[self]
+
+
+class KnowledgeRelationType(StrEnum):
+    """Typed, directed relationships between two knowledge objects."""
+
+    RELATES_TO = "relates_to"
+    DERIVED_FROM = "derived_from"
+    SUPPORTS = "supports"
+    CONTRADICTS = "contradicts"
+    EXAMPLE_OF = "example_of"
+    REQUIRES = "requires"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in relation lists."""
+        return {
+            self.RELATES_TO: "相关",
+            self.DERIVED_FROM: "派生自",
+            self.SUPPORTS: "支持",
+            self.CONTRADICTS: "相矛盾",
+            self.EXAMPLE_OF: "是…的实例",
+            self.REQUIRES: "依赖",
+        }[self]
+
+
+class KnowledgeMemoryEntryKind(StrEnum):
+    """The four memory entry kinds frozen for v0.5.2.
+
+    ``KNOWLEDGE_CHANGE`` is written automatically by the knowledge-object
+    service as an append-only log; the other three are user-authored.
+    """
+
+    PROBLEM_SOLVING = "problem_solving"
+    EXPERIENCE = "experience"
+    DECISION = "decision"
+    KNOWLEDGE_CHANGE = "knowledge_change"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in memory lists."""
+        return {
+            self.PROBLEM_SOLVING: "问题解决",
+            self.EXPERIENCE: "经验",
+            self.DECISION: "决策",
+            self.KNOWLEDGE_CHANGE: "知识变更",
+        }[self]
+
+
+class KnowledgeSourceStatus(StrEnum):
+    """Existence status of one knowledge-object source link.
+
+    Only existence is checked for source links: unlike note anchors there is
+    no stored snapshot to compare, so a missing target is ``MISSING`` and
+    anything resolvable is ``VALID``.
+    """
+
+    VALID = "valid"
+    MISSING = "missing"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown beside source links."""
+        return {
+            self.VALID: "来源有效",
+            self.MISSING: "来源不存在",
+        }[self]
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeObject:
+    """One durable, source-linked knowledge asset (schema v9, v0.5.2)."""
+
+    id: int
+    kind: KnowledgeObjectKind
+    title: str
+    content: str
+    importance: NoteImportance
+    status: KnowledgeObjectStatus
+    created_at: datetime
+    updated_at: datetime
+    reviewed_at: datetime | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeObjectSource:
+    """One source-traceability link from a knowledge object to a local entity.
+
+    ``source_type`` and ``source_id`` address one of ``documents``,
+    ``pages``, ``notes`` or ``evidence_items``. SQLite cannot declare a
+    polymorphic foreign key, so target existence is validated by the service
+    layer on write and re-checked on read.
+    """
+
+    id: int
+    knowledge_object_id: int
+    source_type: KnowledgeObjectSourceType
+    source_id: int
+    source_note: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeObjectSourceView:
+    """A source link plus its freshly recomputed existence status."""
+
+    source: KnowledgeObjectSource
+    status: KnowledgeSourceStatus
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRelation:
+    """One typed, directed relation between two knowledge objects."""
+
+    id: int
+    source_ko_id: int
+    target_ko_id: int
+    relation_type: KnowledgeRelationType
+    description: str
+    created_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeMemoryEntry:
+    """One durable memory entry (user-authored or auto knowledge change)."""
+
+    id: int
+    kind: KnowledgeMemoryEntryKind
+    title: str
+    content: str
+    root_cause: str
+    lesson: str
+    knowledge_object_id: int | None
+    document_id: int | None
+    page_id: int | None
+    created_at: datetime
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeObjectView:
+    """One knowledge object with its source links and relations attached.
+
+    ``outgoing_relations`` are relations where this object is the source;
+    ``incoming_relations`` are relations pointing at it. Read-only view built
+    by the service; never persisted directly.
+    """
+
+    knowledge_object: KnowledgeObject
+    sources: tuple[KnowledgeObjectSourceView, ...]
+    outgoing_relations: tuple[KnowledgeRelation, ...]
+    incoming_relations: tuple[KnowledgeRelation, ...]

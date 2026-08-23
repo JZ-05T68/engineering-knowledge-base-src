@@ -461,6 +461,6 @@ def test_schema_v4_remains_idempotent_without_v006_migration(tmp_path: Path) -> 
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
 
-    assert database.SCHEMA_VERSION == reopened.SCHEMA_VERSION == 8
-    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert database.SCHEMA_VERSION == reopened.SCHEMA_VERSION == 9
+    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert integrity == "ok" and foreign_keys == []

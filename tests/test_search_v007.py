@@ -557,6 +557,6 @@ def test_schema_v4_database_starts_without_migration(tmp_path: Path) -> None:
         ).fetchall()
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         foreign_keys = connection.execute("PRAGMA foreign_key_check").fetchall()
-    assert first.SCHEMA_VERSION == second.SCHEMA_VERSION == 8
-    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8]
+    assert first.SCHEMA_VERSION == second.SCHEMA_VERSION == 9
+    assert [row[0] for row in versions] == [1, 2, 3, 4, 5, 6, 7, 8, 9]
     assert integrity == "ok" and foreign_keys == []

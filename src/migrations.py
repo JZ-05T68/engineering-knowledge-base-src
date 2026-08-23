@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 
 class MigrationError(RuntimeError):
@@ -74,6 +74,8 @@ def migrate_database(database_path: Path) -> Path | None:
             _apply_version_seven(connection)
         if current_version < 8:
             _apply_version_eight(connection)
+        if current_version < 9:
+            _apply_version_nine(connection)
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -852,6 +854,161 @@ def _apply_version_eight(connection: sqlite3.Connection) -> None:
             raise MigrationError("schema v8 迁移改变了现有文档、页面或 FTS 数据")
         connection.commit()
         LOGGER.info("数据库已迁移到 schema v8")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _apply_version_nine(connection: sqlite3.Connection) -> None:
+    """Add the v0.5.2 knowledge-foundation tables without touching existing data.
+
+    Four additive tables, no rebuild of any existing table:
+
+    - ``knowledge_objects``: the durable, source-linked knowledge asset;
+    - ``knowledge_object_sources``: polymorphic source-traceability links
+      (target existence is enforced by the service layer, not a foreign key);
+    - ``knowledge_relations``: typed directed links between objects;
+    - ``knowledge_memory_entries``: user-authored memory plus the automatic
+      append-only ``knowledge_change`` log.
+
+    All foreign keys that can be declared in SQLite are declared; document and
+    page links use ``ON DELETE SET NULL`` so deleting source material never
+    destroys memory entries. The core fingerprint still covers only the v1-v8
+    tables, so this migration must be a pure addition.
+    """
+
+    fingerprint = _core_data_fingerprint(connection)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE knowledge_objects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN (
+                    'concept', 'fact', 'principle', 'experience',
+                    'problem', 'decision'
+                )),
+                title TEXT NOT NULL CHECK (
+                    length(trim(title)) BETWEEN 1 AND 200
+                ),
+                content TEXT NOT NULL CHECK (
+                    length(content) BETWEEN 1 AND 20000
+                ),
+                importance TEXT NOT NULL DEFAULT 'normal'
+                    CHECK (importance IN ('primary', 'secondary', 'normal')),
+                status TEXT NOT NULL DEFAULT 'draft'
+                    CHECK (status IN ('draft', 'reviewed', 'archived')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                reviewed_at TEXT
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_kind "
+            "ON knowledge_objects(kind, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_importance "
+            "ON knowledge_objects(importance, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_status "
+            "ON knowledge_objects(status, updated_at DESC)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE knowledge_object_sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                knowledge_object_id INTEGER NOT NULL
+                    REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+                source_type TEXT NOT NULL CHECK (
+                    source_type IN ('document', 'page', 'note', 'evidence')
+                ),
+                source_id INTEGER NOT NULL,
+                source_note TEXT NOT NULL DEFAULT ''
+                    CHECK (length(source_note) <= 500),
+                created_at TEXT NOT NULL,
+                UNIQUE (knowledge_object_id, source_type, source_id)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_object_sources_target "
+            "ON knowledge_object_sources(source_type, source_id)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE knowledge_relations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_ko_id INTEGER NOT NULL
+                    REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+                target_ko_id INTEGER NOT NULL
+                    REFERENCES knowledge_objects(id) ON DELETE CASCADE,
+                relation_type TEXT NOT NULL CHECK (relation_type IN (
+                    'relates_to', 'derived_from', 'supports',
+                    'contradicts', 'example_of', 'requires'
+                )),
+                description TEXT NOT NULL DEFAULT ''
+                    CHECK (length(description) <= 1000),
+                created_at TEXT NOT NULL,
+                UNIQUE (source_ko_id, target_ko_id, relation_type),
+                CHECK (source_ko_id <> target_ko_id)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_relations_source "
+            "ON knowledge_relations(source_ko_id, relation_type)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_relations_target "
+            "ON knowledge_relations(target_ko_id, relation_type)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE knowledge_memory_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN (
+                    'problem_solving', 'experience', 'decision',
+                    'knowledge_change'
+                )),
+                title TEXT NOT NULL CHECK (
+                    length(trim(title)) BETWEEN 1 AND 200
+                ),
+                content TEXT NOT NULL DEFAULT ''
+                    CHECK (length(content) <= 20000),
+                root_cause TEXT NOT NULL DEFAULT ''
+                    CHECK (length(root_cause) <= 4000),
+                lesson TEXT NOT NULL DEFAULT ''
+                    CHECK (length(lesson) <= 4000),
+                knowledge_object_id INTEGER
+                    REFERENCES knowledge_objects(id) ON DELETE SET NULL,
+                document_id INTEGER
+                    REFERENCES documents(id) ON DELETE SET NULL,
+                page_id INTEGER
+                    REFERENCES pages(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_kind "
+            "ON knowledge_memory_entries(kind, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_ko "
+            "ON knowledge_memory_entries(knowledge_object_id, updated_at DESC)"
+        )
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (9, ?)",
+            (_utc_now(),),
+        )
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v9 迁移改变了现有文档、页面或 FTS 数据")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v9")
     except Exception:
         connection.rollback()
         raise
