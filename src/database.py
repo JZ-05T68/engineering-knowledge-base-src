@@ -21,6 +21,16 @@ from src.models import (
     Document,
     ImportRecord,
     ImportStatus,
+    KnowledgeMemoryEntry,
+    KnowledgeMemoryEntryKind,
+    KnowledgeObject,
+    KnowledgeObjectKind,
+    KnowledgeObjectSource,
+    KnowledgeObjectSourceType,
+    KnowledgeObjectStatus,
+    KnowledgeRelation,
+    KnowledgeRelationType,
+    NoteImportance,
     Page,
     PageEmbedding,
     PageStatus,
@@ -1594,6 +1604,590 @@ class Database:
             ).fetchall()
         return tuple(_page_embedding_from_row(row) for row in rows)
 
+    # Knowledge objects (schema v9) ---------------------------------------
+    def create_knowledge_object(
+        self,
+        *,
+        kind: KnowledgeObjectKind | str,
+        title: str,
+        content: str,
+        importance: NoteImportance | str = NoteImportance.NORMAL,
+        status: KnowledgeObjectStatus | str = KnowledgeObjectStatus.DRAFT,
+    ) -> KnowledgeObject:
+        """Persist one knowledge object with validated enum and length fields."""
+
+        normalized_kind = KnowledgeObjectKind(kind)
+        normalized_importance = NoteImportance(importance)
+        normalized_status = KnowledgeObjectStatus(status)
+        normalized_title = title.strip()
+        normalized_content = content.strip()
+        if not normalized_title:
+            raise ValueError("知识对象标题不能为空")
+        if len(normalized_title) > 200:
+            raise ValueError("知识对象标题不能超过 200 个字符")
+        if not normalized_content:
+            raise ValueError("知识对象内容不能为空")
+        if len(normalized_content) > 20000:
+            raise ValueError("知识对象内容不能超过 20000 个字符")
+        timestamp = _utc_now()
+        reviewed_at = (
+            timestamp if normalized_status is KnowledgeObjectStatus.REVIEWED else None
+        )
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO knowledge_objects(
+                    kind, title, content, importance, status,
+                    created_at, updated_at, reviewed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_kind.value,
+                    normalized_title,
+                    normalized_content,
+                    normalized_importance.value,
+                    normalized_status.value,
+                    timestamp,
+                    timestamp,
+                    reviewed_at,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM knowledge_objects WHERE id = ?", (cursor.lastrowid,)
+            ).fetchone()
+        return _knowledge_object_from_row(row)
+
+    def get_knowledge_object(self, knowledge_object_id: int) -> KnowledgeObject | None:
+        """Return one knowledge object by primary key, or ``None`` when absent."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            ).fetchone()
+        return _knowledge_object_from_row(row) if row is not None else None
+
+    def update_knowledge_object(
+        self,
+        knowledge_object_id: int,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        importance: NoteImportance | str | None = None,
+        status: KnowledgeObjectStatus | str | None = None,
+    ) -> KnowledgeObject:
+        """Update selected knowledge-object fields in one transaction.
+
+        Moving into ``reviewed`` stamps ``reviewed_at``; leaving it clears the
+        stamp. ``updated_at`` always advances, using the same microsecond
+        alternation trick as ``update_page`` so rapid successive edits are
+        observable.
+        """
+
+        assignments: list[str] = []
+        values: list[object] = []
+        if title is not None:
+            normalized_title = title.strip()
+            if not normalized_title:
+                raise ValueError("知识对象标题不能为空")
+            if len(normalized_title) > 200:
+                raise ValueError("知识对象标题不能超过 200 个字符")
+            assignments.append("title = ?")
+            values.append(normalized_title)
+        if content is not None:
+            normalized_content = content.strip()
+            if not normalized_content:
+                raise ValueError("知识对象内容不能为空")
+            if len(normalized_content) > 20000:
+                raise ValueError("知识对象内容不能超过 20000 个字符")
+            assignments.append("content = ?")
+            values.append(normalized_content)
+        if importance is not None:
+            assignments.append("importance = ?")
+            values.append(NoteImportance(importance).value)
+        if status is not None:
+            normalized_status = KnowledgeObjectStatus(status)
+            assignments.extend(("status = ?", "reviewed_at = ?"))
+            values.extend(
+                (
+                    normalized_status.value,
+                    _utc_now() if normalized_status is KnowledgeObjectStatus.REVIEWED else None,
+                )
+            )
+        if not assignments:
+            knowledge_object = self.get_knowledge_object(knowledge_object_id)
+            if knowledge_object is None:
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+            return knowledge_object
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        assignments.append(
+            "updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END"
+        )
+        values.extend((timestamp, alternate_timestamp, timestamp, knowledge_object_id))
+        with self._connection() as connection:
+            cursor = connection.execute(
+                f"UPDATE knowledge_objects SET {', '.join(assignments)} WHERE id = ?",
+                values,
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            ).fetchone()
+        return _knowledge_object_from_row(row)
+
+    def list_knowledge_objects(
+        self,
+        *,
+        kind: KnowledgeObjectKind | str | None = None,
+        importance: NoteImportance | str | None = None,
+        status: KnowledgeObjectStatus | str | None = None,
+        query: str = "",
+        sort_by: str = "updated_desc",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[KnowledgeObject]:
+        """List knowledge objects with stable filters, keyword search and sorting."""
+
+        self._validate_knowledge_pagination(limit, offset)
+        order_by = {
+            "updated_desc": "updated_at DESC, id DESC",
+            "created_desc": "created_at DESC, id DESC",
+            "title_asc": "title COLLATE NOCASE ASC, id ASC",
+        }.get(sort_by, "updated_at DESC, id DESC")
+        where, parameters = self._knowledge_object_where(
+            kind=kind, importance=importance, status=status, query=query
+        )
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM knowledge_objects {where} "
+                f"ORDER BY {order_by} LIMIT ? OFFSET ?",
+                (*parameters, limit, offset),
+            ).fetchall()
+        return [_knowledge_object_from_row(row) for row in rows]
+
+    def count_knowledge_objects(
+        self,
+        *,
+        kind: KnowledgeObjectKind | str | None = None,
+        importance: NoteImportance | str | None = None,
+        status: KnowledgeObjectStatus | str | None = None,
+        query: str = "",
+    ) -> int:
+        """Count knowledge objects with exactly the same filters as the list."""
+
+        where, parameters = self._knowledge_object_where(
+            kind=kind, importance=importance, status=status, query=query
+        )
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM knowledge_objects {where}", parameters
+                ).fetchone()[0]
+            )
+
+    def delete_knowledge_object(self, knowledge_object_id: int) -> None:
+        """Delete one knowledge object plus its sources and relations.
+
+        ``knowledge_memory_entries`` survive with ``knowledge_object_id`` set
+        to NULL (``ON DELETE SET NULL``). Never touches any source material.
+        """
+
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+
+    @staticmethod
+    def _knowledge_object_where(
+        *,
+        kind: KnowledgeObjectKind | str | None,
+        importance: NoteImportance | str | None,
+        status: KnowledgeObjectStatus | str | None,
+        query: str,
+    ) -> tuple[str, list[object]]:
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if kind is not None:
+            conditions.append("kind = ?")
+            parameters.append(KnowledgeObjectKind(kind).value)
+        if importance is not None:
+            conditions.append("importance = ?")
+            parameters.append(NoteImportance(importance).value)
+        if status is not None:
+            conditions.append("status = ?")
+            parameters.append(KnowledgeObjectStatus(status).value)
+        normalized_query = query.strip()
+        if normalized_query:
+            pattern = _like_pattern(normalized_query)
+            conditions.append("(title LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')")
+            parameters.extend((pattern, pattern))
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        return where, parameters
+
+    @staticmethod
+    def _validate_knowledge_pagination(limit: int, offset: int) -> None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("limit 必须是 1～500 的整数")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset 必须是非负整数")
+
+    # Knowledge object sources (schema v9) --------------------------------
+    def add_knowledge_object_source(
+        self,
+        *,
+        knowledge_object_id: int,
+        source_type: KnowledgeObjectSourceType | str,
+        source_id: int,
+        source_note: str = "",
+    ) -> KnowledgeObjectSource:
+        """Link one knowledge object to one local source entity."""
+
+        normalized_type = KnowledgeObjectSourceType(source_type)
+        _validate_positive_id(knowledge_object_id, "知识对象 ID")
+        _validate_positive_id(source_id, "来源 ID")
+        if len(source_note) > 500:
+            raise ValueError("来源说明不能超过 500 个字符")
+        timestamp = _utc_now()
+        try:
+            with self._connection() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO knowledge_object_sources(
+                        knowledge_object_id, source_type, source_id,
+                        source_note, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        knowledge_object_id,
+                        normalized_type.value,
+                        source_id,
+                        source_note.strip(),
+                        timestamp,
+                    ),
+                )
+                row = connection.execute(
+                    "SELECT * FROM knowledge_object_sources WHERE id = ?",
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except sqlite3.IntegrityError as exc:
+            if "FOREIGN KEY" in str(exc):
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}") from exc
+            raise DatabaseError("该来源已经关联到该知识对象") from exc
+        return _knowledge_object_source_from_row(row)
+
+    def get_knowledge_object_source(self, source_id: int) -> KnowledgeObjectSource | None:
+        """Return one source link by primary key, or ``None`` when absent."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM knowledge_object_sources WHERE id = ?", (source_id,)
+            ).fetchone()
+        return _knowledge_object_source_from_row(row) if row is not None else None
+
+    def list_knowledge_object_sources(
+        self, knowledge_object_id: int
+    ) -> list[KnowledgeObjectSource]:
+        """List every source link of one knowledge object in creation order."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM knowledge_object_sources
+                WHERE knowledge_object_id = ? ORDER BY id
+                """,
+                (knowledge_object_id,),
+            ).fetchall()
+        return [_knowledge_object_source_from_row(row) for row in rows]
+
+    def remove_knowledge_object_source(self, source_id: int) -> None:
+        """Remove one source link; the source material itself is never touched."""
+
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM knowledge_object_sources WHERE id = ?", (source_id,)
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象来源不存在：{source_id}")
+
+    # Knowledge relations (schema v9) -------------------------------------
+    def add_knowledge_relation(
+        self,
+        *,
+        source_ko_id: int,
+        target_ko_id: int,
+        relation_type: KnowledgeRelationType | str,
+        description: str = "",
+    ) -> KnowledgeRelation:
+        """Create one typed directed relation between two knowledge objects."""
+
+        normalized_type = KnowledgeRelationType(relation_type)
+        _validate_positive_id(source_ko_id, "起点知识对象 ID")
+        _validate_positive_id(target_ko_id, "终点知识对象 ID")
+        if source_ko_id == target_ko_id:
+            raise ValueError("知识对象不能关联到自身")
+        if len(description) > 1000:
+            raise ValueError("关系说明不能超过 1000 个字符")
+        timestamp = _utc_now()
+        try:
+            with self._connection() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO knowledge_relations(
+                        source_ko_id, target_ko_id, relation_type,
+                        description, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        source_ko_id,
+                        target_ko_id,
+                        normalized_type.value,
+                        description.strip(),
+                        timestamp,
+                    ),
+                )
+                row = connection.execute(
+                    "SELECT * FROM knowledge_relations WHERE id = ?",
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except sqlite3.IntegrityError as exc:
+            if "FOREIGN KEY" in str(exc):
+                raise RecordNotFoundError("关联的知识对象不存在") from exc
+            raise DatabaseError("该知识关系已经存在") from exc
+        return _knowledge_relation_from_row(row)
+
+    def get_knowledge_relation(self, relation_id: int) -> KnowledgeRelation | None:
+        """Return one relation by primary key, or ``None`` when absent."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM knowledge_relations WHERE id = ?", (relation_id,)
+            ).fetchone()
+        return _knowledge_relation_from_row(row) if row is not None else None
+
+    def list_knowledge_relations(
+        self, knowledge_object_id: int
+    ) -> list[KnowledgeRelation]:
+        """List every relation touching one knowledge object (both directions)."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM knowledge_relations
+                WHERE source_ko_id = ? OR target_ko_id = ?
+                ORDER BY id
+                """,
+                (knowledge_object_id, knowledge_object_id),
+            ).fetchall()
+        return [_knowledge_relation_from_row(row) for row in rows]
+
+    def remove_knowledge_relation(self, relation_id: int) -> None:
+        """Delete one relation row; the knowledge objects themselves remain."""
+
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM knowledge_relations WHERE id = ?", (relation_id,)
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识关系不存在：{relation_id}")
+
+    # Knowledge memory entries (schema v9) --------------------------------
+    def create_knowledge_memory_entry(
+        self,
+        *,
+        kind: KnowledgeMemoryEntryKind | str,
+        title: str,
+        content: str = "",
+        root_cause: str = "",
+        lesson: str = "",
+        knowledge_object_id: int | None = None,
+        document_id: int | None = None,
+        page_id: int | None = None,
+    ) -> KnowledgeMemoryEntry:
+        """Persist one memory entry with optional knowledge/source links."""
+
+        normalized_kind = KnowledgeMemoryEntryKind(kind)
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise ValueError("记忆标题不能为空")
+        if len(normalized_title) > 200:
+            raise ValueError("记忆标题不能超过 200 个字符")
+        if len(content) > 20000:
+            raise ValueError("记忆内容不能超过 20000 个字符")
+        if len(root_cause) > 4000:
+            raise ValueError("最终原因不能超过 4000 个字符")
+        if len(lesson) > 4000:
+            raise ValueError("经验教训不能超过 4000 个字符")
+        knowledge_object_id = _optional_positive_id(knowledge_object_id, "知识对象 ID")
+        document_id = _optional_positive_id(document_id, "文档 ID")
+        page_id = _optional_positive_id(page_id, "页面 ID")
+        timestamp = _utc_now()
+        try:
+            with self._connection() as connection:
+                cursor = connection.execute(
+                    """
+                    INSERT INTO knowledge_memory_entries(
+                        kind, title, content, root_cause, lesson,
+                        knowledge_object_id, document_id, page_id,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        normalized_kind.value,
+                        normalized_title,
+                        content.strip(),
+                        root_cause.strip(),
+                        lesson.strip(),
+                        knowledge_object_id,
+                        document_id,
+                        page_id,
+                        timestamp,
+                        timestamp,
+                    ),
+                )
+                row = connection.execute(
+                    "SELECT * FROM knowledge_memory_entries WHERE id = ?",
+                    (cursor.lastrowid,),
+                ).fetchone()
+        except sqlite3.IntegrityError as exc:
+            raise DatabaseError("保存记忆条目失败，请检查关联的知识对象或页面") from exc
+        return _knowledge_memory_entry_from_row(row)
+
+    def get_knowledge_memory_entry(
+        self, entry_id: int
+    ) -> KnowledgeMemoryEntry | None:
+        """Return one memory entry by primary key, or ``None`` when absent."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM knowledge_memory_entries WHERE id = ?", (entry_id,)
+            ).fetchone()
+        return _knowledge_memory_entry_from_row(row) if row is not None else None
+
+    def update_knowledge_memory_entry(
+        self,
+        entry_id: int,
+        *,
+        title: str | None = None,
+        content: str | None = None,
+        root_cause: str | None = None,
+        lesson: str | None = None,
+    ) -> KnowledgeMemoryEntry:
+        """Update selected memory-entry text fields in one transaction."""
+
+        assignments: list[str] = []
+        values: list[object] = []
+        if title is not None:
+            normalized_title = title.strip()
+            if not normalized_title:
+                raise ValueError("记忆标题不能为空")
+            if len(normalized_title) > 200:
+                raise ValueError("记忆标题不能超过 200 个字符")
+            assignments.append("title = ?")
+            values.append(normalized_title)
+        for field, value, max_length in (
+            ("content", content, 20000),
+            ("root_cause", root_cause, 4000),
+            ("lesson", lesson, 4000),
+        ):
+            if value is not None:
+                if len(value) > max_length:
+                    raise ValueError(f"{field} 超过最大长度")
+                assignments.append(f"{field} = ?")
+                values.append(value.strip())
+        if not assignments:
+            entry = self.get_knowledge_memory_entry(entry_id)
+            if entry is None:
+                raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
+            return entry
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        assignments.append(
+            "updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END"
+        )
+        values.extend((timestamp, alternate_timestamp, timestamp, entry_id))
+        with self._connection() as connection:
+            cursor = connection.execute(
+                f"UPDATE knowledge_memory_entries SET {', '.join(assignments)} "
+                "WHERE id = ?",
+                values,
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_memory_entries WHERE id = ?", (entry_id,)
+            ).fetchone()
+        return _knowledge_memory_entry_from_row(row)
+
+    def list_knowledge_memory_entries(
+        self,
+        *,
+        kind: KnowledgeMemoryEntryKind | str | None = None,
+        knowledge_object_id: int | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[KnowledgeMemoryEntry]:
+        """List memory entries with stable filters, newest update first."""
+
+        self._validate_knowledge_pagination(limit, offset)
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if kind is not None:
+            conditions.append("kind = ?")
+            parameters.append(KnowledgeMemoryEntryKind(kind).value)
+        if knowledge_object_id is not None:
+            conditions.append("knowledge_object_id = ?")
+            parameters.append(knowledge_object_id)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM knowledge_memory_entries {where} "
+                "ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?",
+                (*parameters, limit, offset),
+            ).fetchall()
+        return [_knowledge_memory_entry_from_row(row) for row in rows]
+
+    def count_knowledge_memory_entries(
+        self,
+        *,
+        kind: KnowledgeMemoryEntryKind | str | None = None,
+        knowledge_object_id: int | None = None,
+    ) -> int:
+        """Count memory entries with exactly the same filters as the list."""
+
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if kind is not None:
+            conditions.append("kind = ?")
+            parameters.append(KnowledgeMemoryEntryKind(kind).value)
+        if knowledge_object_id is not None:
+            conditions.append("knowledge_object_id = ?")
+            parameters.append(knowledge_object_id)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    f"SELECT COUNT(*) FROM knowledge_memory_entries {where}",
+                    parameters,
+                ).fetchone()[0]
+            )
+
+    def delete_knowledge_memory_entry(self, entry_id: int) -> None:
+        """Delete one memory entry; linked source material is never touched."""
+
+        with self._connection() as connection:
+            cursor = connection.execute(
+                "DELETE FROM knowledge_memory_entries WHERE id = ?", (entry_id,)
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
+
 
 def _utc_now() -> str:
     return datetime.now(UTC).isoformat(timespec="microseconds")
@@ -2080,6 +2674,74 @@ def _like_pattern(term: str) -> str:
 
 def _positive_ids(values: Sequence[int]) -> tuple[int, ...]:
     return tuple(dict.fromkeys(int(value) for value in values if int(value) > 0))
+
+
+def _validate_positive_id(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise ValueError(f"{label} 必须是正整数：{value!r}")
+    return value
+
+
+def _optional_positive_id(value: object, label: str) -> int | None:
+    if value is None:
+        return None
+    return _validate_positive_id(value, label)
+
+
+def _optional_int(value: object) -> int | None:
+    return int(value) if value is not None else None  # type: ignore[arg-type]
+
+
+def _knowledge_object_from_row(row: sqlite3.Row) -> KnowledgeObject:
+    return KnowledgeObject(
+        id=int(row["id"]),
+        kind=KnowledgeObjectKind(row["kind"]),
+        title=str(row["title"]),
+        content=str(row["content"]),
+        importance=NoteImportance(row["importance"]),
+        status=KnowledgeObjectStatus(row["status"]),
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
+        updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
+        reviewed_at=_parse_datetime(row["reviewed_at"]),
+    )
+
+
+def _knowledge_object_source_from_row(row: sqlite3.Row) -> KnowledgeObjectSource:
+    return KnowledgeObjectSource(
+        id=int(row["id"]),
+        knowledge_object_id=int(row["knowledge_object_id"]),
+        source_type=KnowledgeObjectSourceType(row["source_type"]),
+        source_id=int(row["source_id"]),
+        source_note=str(row["source_note"]),
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
+    )
+
+
+def _knowledge_relation_from_row(row: sqlite3.Row) -> KnowledgeRelation:
+    return KnowledgeRelation(
+        id=int(row["id"]),
+        source_ko_id=int(row["source_ko_id"]),
+        target_ko_id=int(row["target_ko_id"]),
+        relation_type=KnowledgeRelationType(row["relation_type"]),
+        description=str(row["description"]),
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
+    )
+
+
+def _knowledge_memory_entry_from_row(row: sqlite3.Row) -> KnowledgeMemoryEntry:
+    return KnowledgeMemoryEntry(
+        id=int(row["id"]),
+        kind=KnowledgeMemoryEntryKind(row["kind"]),
+        title=str(row["title"]),
+        content=str(row["content"]),
+        root_cause=str(row["root_cause"]),
+        lesson=str(row["lesson"]),
+        knowledge_object_id=_optional_int(row["knowledge_object_id"]),
+        document_id=_optional_int(row["document_id"]),
+        page_id=_optional_int(row["page_id"]),
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
+        updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
+    )
 
 
 __all__ = [
