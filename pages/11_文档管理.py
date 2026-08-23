@@ -14,7 +14,7 @@ from src.runtime import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="文档管理｜工程知识库 v0.5.0", page_icon="🗂️", layout="wide")
+st.set_page_config(page_title="文档管理｜工程知识库 v0.5.2", page_icon="🗂️", layout="wide")
 st.title("文档管理")
 st.caption("查看全部已导入文档，并对选定文档执行影响整份文档的管理操作。")
 

@@ -32,7 +32,7 @@ from src.runtime import (
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(
-    page_title="系统维护｜工程知识库 v0.5.0",
+    page_title="系统维护｜工程知识库 v0.5.2",
     page_icon="🛡️",
     layout="wide",
 )

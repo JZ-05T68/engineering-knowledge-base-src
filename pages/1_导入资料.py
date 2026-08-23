@@ -40,7 +40,7 @@ def _consume_review_request() -> None:
     )
 
 
-st.set_page_config(page_title="导入资料｜工程知识库 v0.5.0", page_icon="📥", layout="wide")
+st.set_page_config(page_title="导入资料｜工程知识库 v0.5.2", page_icon="📥", layout="wide")
 _consume_review_request()
 st.title("导入资料")
 st.caption("PDF 原件、逐页 PNG、文本和导入记录都保存在本机。")
