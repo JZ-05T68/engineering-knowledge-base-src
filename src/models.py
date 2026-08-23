@@ -703,10 +703,12 @@ class DocumentDeletionPreview:
     """Read-only impact summary of deleting one imported document.
 
     Counts cover exactly the rows removed by the schema v5 cascades plus the
-    FTS cleanup trigger. ``import_record_count`` is reported separately
-    because those rows survive with ``document_id`` set to NULL
-    (``ON DELETE SET NULL``). Projects and tags are shared entities and are
-    never part of a deletion; files of other documents are never listed.
+    FTS cleanup trigger, and since v0.5.2 the polymorphic knowledge-object
+    source links explicitly removed before the cascading delete.
+    ``import_record_count`` is reported separately because those rows survive
+    with ``document_id`` set to NULL (``ON DELETE SET NULL``). Projects and
+    tags are shared entities and are never part of a deletion; files of other
+    documents are never listed.
     """
 
     document_id: int
@@ -725,6 +727,7 @@ class DocumentDeletionPreview:
     missing_files: tuple[Path, ...]
     path_anomalies: tuple[str, ...]
     aggregation_impact: DocumentAggregationImpact = DocumentAggregationImpact()
+    knowledge_object_source_count: int = 0
 
     @property
     def note_count(self) -> int:

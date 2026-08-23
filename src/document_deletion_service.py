@@ -136,6 +136,31 @@ class DocumentDeletionService:
                     (document_id,),
                 ).fetchone()[0]
             )
+            knowledge_object_source_count = int(
+                connection.execute(
+                    f"""
+                    SELECT COUNT(*) FROM knowledge_object_sources
+                    WHERE (source_type = 'document' AND source_id = ?)
+                       OR (source_type = 'page' AND source_id IN ({placeholders}))
+                       OR (source_type = 'note' AND source_id IN (
+                               SELECT id FROM notes
+                               WHERE document_id = ? OR page_id IN ({placeholders})
+                           ))
+                       OR (source_type = 'evidence' AND source_id IN (
+                               SELECT id FROM evidence_items
+                               WHERE document_id = ? OR page_id IN ({placeholders})
+                           ))
+                    """,
+                    (
+                        document_id,
+                        *page_ids,
+                        document_id,
+                        *page_ids,
+                        document_id,
+                        *page_ids,
+                    ),
+                ).fetchone()[0]
+            )
 
         files, missing_files, path_anomalies, total_size = self._collect_files(
             document_id=document_id,
@@ -160,6 +185,7 @@ class DocumentDeletionService:
             search_record_count=search_count,
             association_count=association_count,
             import_record_count=import_record_count,
+            knowledge_object_source_count=knowledge_object_source_count,
             files=files,
             total_size_bytes=total_size,
             missing_files=missing_files,
@@ -336,6 +362,48 @@ class DocumentDeletionService:
                 ).fetchall()
             ]
             placeholders = ",".join("?" for _ in page_ids) or "NULL"
+            # v0.5.2: knowledge-object source links are polymorphic and have
+            # no declared SQLite foreign key. Remove them explicitly inside
+            # the same transaction so a document deletion can never leave
+            # dangling KO sources behind.
+            connection.execute(
+                "DELETE FROM knowledge_object_sources "
+                "WHERE source_type = 'document' AND source_id = ?",
+                (document_id,),
+            )
+            if page_ids:
+                connection.execute(
+                    "DELETE FROM knowledge_object_sources "
+                    f"WHERE source_type = 'page' AND source_id IN ({placeholders})",
+                    page_ids,
+                )
+                connection.execute(
+                    "DELETE FROM knowledge_object_sources WHERE source_type = 'note' "
+                    "AND source_id IN ("
+                    "SELECT id FROM notes WHERE document_id = ? "
+                    f"OR page_id IN ({placeholders}))",
+                    (document_id, *page_ids),
+                )
+                connection.execute(
+                    "DELETE FROM knowledge_object_sources "
+                    "WHERE source_type = 'evidence' AND source_id IN ("
+                    "SELECT id FROM evidence_items WHERE document_id = ? "
+                    f"OR page_id IN ({placeholders}))",
+                    (document_id, *page_ids),
+                )
+            else:
+                connection.execute(
+                    "DELETE FROM knowledge_object_sources WHERE source_type = 'note' "
+                    "AND source_id IN ("
+                    "SELECT id FROM notes WHERE document_id = ?)",
+                    (document_id,),
+                )
+                connection.execute(
+                    "DELETE FROM knowledge_object_sources "
+                    "WHERE source_type = 'evidence' AND source_id IN ("
+                    "SELECT id FROM evidence_items WHERE document_id = ?)",
+                    (document_id,),
+                )
             cursor = connection.execute(
                 "DELETE FROM documents WHERE id = ?", (document_id,)
             )
@@ -389,6 +457,13 @@ class DocumentDeletionService:
                     f"SELECT COUNT(*) FROM page_embeddings "
                     f"WHERE page_id IN ({placeholders})",
                     page_ids,
+                ),
+                (
+                    "知识对象来源残留",
+                    "SELECT COUNT(*) FROM knowledge_object_sources "
+                    f"WHERE (source_type = 'document' AND source_id = ?) "
+                    f"OR (source_type = 'page' AND source_id IN ({placeholders}))",
+                    (document_id, *page_ids),
                 ),
                 # Import records survive with document_id set to NULL
                 # (ON DELETE SET NULL); none may keep referencing the document.

@@ -28,6 +28,8 @@ from src.diagnostic_service import DiagnosticService
 from src.document_deletion_service import DocumentDeletionService
 from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
+from src.knowledge_memory_service import KnowledgeMemoryService
+from src.knowledge_object_service import KnowledgeObjectService
 from src.models import QuarantineReconciliation
 from src.pdf_service import PdfService
 from src.rapidocr_engine import RapidOcrEngine
@@ -278,6 +280,20 @@ def application_evidence_basket_service() -> EvidenceBasketService:
     """Return the process-wide durable evidence basket service."""
 
     return EvidenceBasketService(application_database())
+
+
+@lru_cache(maxsize=1)
+def application_knowledge_object_service() -> KnowledgeObjectService:
+    """Return the process-wide knowledge-object service (schema v9)."""
+
+    return KnowledgeObjectService(application_database())
+
+
+@lru_cache(maxsize=1)
+def application_knowledge_memory_service() -> KnowledgeMemoryService:
+    """Return the process-wide knowledge-memory service (schema v9)."""
+
+    return KnowledgeMemoryService(application_database())
 
 
 def application_page_batch_service() -> PageBatchService:

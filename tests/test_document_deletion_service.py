@@ -788,3 +788,44 @@ def test_delete_uses_execution_time_state(tmp_path: Path) -> None:
     assert not new_markdown_path.exists()
     assert _foreign_key_violations(database) == []
     assert not any(_quarantine_root(env["data_dir"]).iterdir())
+
+
+def test_delete_removes_knowledge_object_sources_without_deleting_objects(
+    tmp_path: Path,
+) -> None:
+    """v0.5.2: polymorphic KO sources are cleaned up before the cascading delete."""
+
+    env = _build_full_library(tmp_path)
+    database = env["database"]
+    document = env["document"]
+    page = env["pages"][0]
+    note_view = NoteService(database).create_page_note(page.id, "知识来源笔记")
+    evidence_item = EvidenceBasketService(database).add_item(
+        document_id=document.id, page_id=page.id, evidence_text="第二条证据文本"
+    )
+    ko = database.create_knowledge_object(kind="fact", title="知识对象", content="内容")
+    for source_type, source_id in (
+        ("document", document.id),
+        ("page", page.id),
+        ("note", note_view.note.id),
+        ("evidence", evidence_item.id),
+    ):
+        database.add_knowledge_object_source(
+            knowledge_object_id=ko.id, source_type=source_type, source_id=source_id
+        )
+
+    preview = env["service"].preview_document_deletion(document.id)
+    assert preview.knowledge_object_source_count == 4
+
+    result = env["service"].delete_document(document.id, expected_title=document.title)
+
+    assert result.deleted is True
+    assert database.get_document(document.id) is None
+    with sqlite3.connect(database.database_path) as connection:
+        remaining_sources = connection.execute(
+            "SELECT COUNT(*) FROM knowledge_object_sources"
+        ).fetchone()[0]
+    assert remaining_sources == 0
+    # The knowledge object itself survives; only its dangling sources are gone.
+    assert database.get_knowledge_object(ko.id) is not None
+    assert _foreign_key_violations(database) == []
