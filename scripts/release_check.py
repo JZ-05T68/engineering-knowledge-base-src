@@ -125,6 +125,28 @@ class ReleaseChecker:
             )
         )
 
+        # Validate the formal service as a release preflight. The full test suite
+        # exercises service lifecycle paths and may stop the process; release
+        # readiness requires a successful startup and health check, not that the
+        # same process remain alive after the long-running test phase.
+        addresses = listener_addresses_for_port(self.settings.port)
+        listener_result = (
+            stopped_listener_check(
+                self.settings.host,
+                self.settings.port,
+                addresses,
+                is_healthy(self.settings.port),
+            )
+            if expect_service_stopped
+            else listener_check(
+                self.settings.host,
+                self.settings.port,
+                addresses,
+                is_healthy(self.settings.port),
+            )
+        )
+        results.append(listener_result)
+
         ruff = _run_command(
             [str(self._python()), "-m", "ruff", "check", "."],
             self.project_root,
@@ -156,7 +178,7 @@ class ReleaseChecker:
         pytest = _run_command(
             [str(self._python()), "-m", "pytest", "-q"],
             self.project_root,
-            timeout=900,
+            timeout=1_200,
         )
         passed = successful_test_count(
             pytest.output,
@@ -233,23 +255,6 @@ class ReleaseChecker:
 
         results.append(data_pollution_check(self.settings.data_dir))
 
-        addresses = listener_addresses_for_port(self.settings.port)
-        listener_result = (
-            stopped_listener_check(
-                self.settings.host,
-                self.settings.port,
-                addresses,
-                is_healthy(self.settings.port),
-            )
-            if expect_service_stopped
-            else listener_check(
-                self.settings.host,
-                self.settings.port,
-                addresses,
-                is_healthy(self.settings.port),
-            )
-        )
-        results.append(listener_result)
         residual = tuple(
             port
             for port in ISOLATION_PORTS

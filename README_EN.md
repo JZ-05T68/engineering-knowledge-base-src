@@ -1,6 +1,6 @@
-[简体中文](README.md) | [English](README_EN.md)
-
 # Engineering Knowledge Base v0.5.2
+
+[简体中文](README.md) | [English](README_EN.md)
 
 **Engineering Knowledge Base (EKB)**
 
