@@ -2,36 +2,76 @@
 
 ## v0.5.2 — Knowledge Foundation
 
-发布日期：2026-08-23。
+发布日期：2026-08-25。
 
-从“知识检索”向“知识资产化”迈出第一步：让知识留下来。
+EKB 从以页面资料和证据为中心的本地知识库，扩展为可沉淀、验证和检索个人长期经验的
+Knowledge Foundation。RAG 和外部 AI 不再作为产品第一定位；本地知识资产、来源完整性与
+可验证复用成为当前版本主线。
 
 ### 变更
 
-- 开发版本推进至 0.5.2；数据库 schema 升级至 v9（纯增量，迁移前自动备份）。
-- 新增四张知识基础表：`knowledge_objects`（六类知识对象：概念/事实/原理/
-  经验/问题/决策，含重要程度与草稿/已复核/已归档状态）、
-  `knowledge_object_sources`（文档/页面/笔记/证据四类来源追踪）、
-  `knowledge_relations`（六种类型化有向关系，自环与重复由数据库约束拒绝）、
-  `knowledge_memory_entries`（问题解决/经验/决策/知识变更四类记忆）。
-- 新增知识对象服务：已复核状态强制要求至少一个有效来源；来源链接实时校验
-  存在性；知识对象删除只级联来源与关系，绝不触碰原始材料。
-- 新增知识记忆服务：手动记录问题解决过程、经验与决策；知识对象的创建、
-  更新、来源变更与关系建立自动追加 append-only 知识变更日志。
-- 新增引用提示词构建器：基于知识对象及其来源生成 citation-grounded 外部 AI
-  提示词包，草稿对象明确标注未经复核。
-- 文档删除服务扩展：预览与执行阶段显式清理指向该文档及其页面/笔记/证据的
-  知识对象来源，防止多态引用悬挂；删除预览新增 `knowledge_object_source_count`。
-- 新增页面：`14_知识对象.py`、`15_知识记忆.py`；全部功能离线可用，不读取
-  API Key，不调用任何 AI 服务。
-- 无用户系统、无云同步；本地优先原则保持不变。
+- 应用版本推进至 0.5.2；数据库以纯增量迁移升级到 **schema v11**，迁移前自动备份，
+  迁移过程继续使用事务、核心数据指纹、完整性检查和外键检查保护既有资料。
+- **Knowledge Foundation**：建立知识对象、类型化关系、知识记忆、稳定标识、生命周期、
+  supersedes 关系与追加式 `knowledge_object_revisions` 历史。知识对象覆盖概念、事实、
+  原理、经验、问题和决策；个人知识记忆覆盖问题解决、经验和决策。
+- **Source Fingerprint / Knowledge Integrity**：知识对象可连接本地文档、页面、笔记或证据；
+  来源捕获规范化 SHA-256 指纹，读取时区分有效、变化、缺失、损坏或 legacy unknown，
+  不把过期来源静默当作可靠事实。来源重采需要显式操作，读取路径不产生隐藏写入。
+- **Revision 与生命周期**：知识对象内容、来源与关系演进保留可审计修订；归档、替代、
+  重新指向、重新激活和删除路径遵守 fail-closed 不变量，绝不因知识对象操作删除原始资料。
+- **FTS v11 Retrieval**：为知识对象和知识记忆建立独立 SQLite FTS5 表、同步触发器、
+  legacy 回填与确定性 rebuild；正常写路径同步索引，迁移不改变既有页面 FTS 数据。
+- **Knowledge Object / Memory Search**：新增本地知识检索服务，在知识对象与知识记忆两个
+  结果组中执行操作符安全的 FTS5 检索；短语、中文分词、OR 召回和结果边界由冻结契约约束。
+- **Provenance-aware retrieval**：页面检索与知识检索保持不同结果模型；知识对象展示
+  document/page/note/evidence 来源锚点，知识记忆展示 knowledge object/document/project
+  锚点，用户可以返回本地来源核验。
+- 检索资料页增加显式知识范围与知识结果卡片；既有页面检索 URL、筛选、关键词回退、
+  证据和阅读流程保持兼容。
+- 引用提示词构建器继续基于知识对象及其来源生成 citation-grounded 外部 AI 提示词包，
+  草稿、来源状态和生命周期边界明确标注。
+- 全部 Knowledge Foundation 与 FTS v11 核心能力离线可用；无账号、无云同步、无后台
+  自动经验学习，Personal Context Agent 尚未实现。
 
 ### 验证
 
-- `ruff check .` 通过；新增 schema9 迁移/约束、数据访问、服务、提示词构建器、
-  删除扩展与 AppTest UI 测试全部通过。
+- Full pytest：**1646 passed in 975.32s**。
+- Retrieval benchmark：**45 passed**。
+- Focused regression：**279 passed**。
+- `python -m ruff check .`：PASS；`git diff --check`：clean。
+- 正式数据库 `data/database/knowledge.db`：327680 bytes；SHA-256
+  `6a3ab3542c6865007c1fab3c739228f97d2120b1527dbb6cdefa26834e8b9c91`。
+- CLOSED 运行验收：`127.0.0.1:8501`，health HTTP 200。
 - 既有 v0.5.0/v0.5.1 功能未改动：PDF 导入、搜索、阅读、笔记、证据、
   删除/恢复、备份路径保持原样。
+
+### 已知边界
+
+- 当前仍为本地单用户系统，无云同步、无多用户权限体系。
+- Personal Context Agent、自动经验学习和 Personal Experience System 属于未来 roadmap，
+  不是 v0.5.2 已完成功能。
+- 可选混合检索不宣称全面语义理解，也不替代来源核验和人工判断。
+
+## v0.5.1 — Retrieval Stabilization
+
+发布日期：2026-08-18。
+
+### 变更
+
+- 建立冻结的 lexical/vector/hybrid 检索基准与可重复评估流程。
+- 显式区分 Hybrid Search 成功路径与关键词 fallback，不把回退伪装成向量检索成功。
+- 增加只读 embedding 覆盖状态，以及向量路径可用但结果只有关键词依据时的弱证据提示。
+- 保持生产环境等权 RRF、显式手动索引和本地优先边界；没有引入未经证据支持的数值阈值、
+  自动后台索引或最终结果数行为变更。
+
+### 验证
+
+- Full pytest：1475 passed；Ruff 与 `git diff --check` 通过。
+- 冻结 benchmark 重跑与第一阶段基线一致。
+- `127.0.0.1:8501` production rollout PASS；部署验证期间 0 production DB writes、
+  0 paid calls、0 embedding calls、0 indexing actions、0 regressions。
+- 详见 `docs/v0.5.1-phase7-final-validation.md`。
 
 ## v0.5.0 — AI Foundation / Optional AI Hybrid Search
 

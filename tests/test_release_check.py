@@ -31,7 +31,7 @@ from src.config import OfficialEndpointError, Settings
 
 
 def test_release_gate_targets_v050() -> None:
-    assert EXPECTED_VERSION == "0.5.0"
+    assert EXPECTED_VERSION == "0.5.2"
 
 
 def test_all_pass_report_returns_zero_and_clear_summary() -> None:
