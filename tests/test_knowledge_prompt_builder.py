@@ -1,4 +1,4 @@
-"""Tests for the v0.5.2 knowledge prompt builder."""
+"""Tests for the v0.5.2 knowledge prompt builder (Phase 2B)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,15 @@ import pytest
 
 from src.knowledge_prompt_builder import KnowledgePromptBuilder, KnowledgePromptError
 from src.models import (
+    KnowledgeAuthorship,
+    KnowledgeConfirmationStatus,
+    KnowledgeEpistemicBasis,
+    KnowledgeLifecycle,
     KnowledgeObject,
     KnowledgeObjectKind,
     KnowledgeObjectSource,
     KnowledgeObjectSourceType,
     KnowledgeObjectSourceView,
-    KnowledgeObjectStatus,
     KnowledgeObjectView,
     KnowledgeSourceStatus,
     NoteImportance,
@@ -27,18 +30,31 @@ def _object(
     ko_id: int = 1,
     title: str = "PID 参数经验",
     content: str = "采样频率必须与 PID 参数匹配。",
-    status: KnowledgeObjectStatus = KnowledgeObjectStatus.REVIEWED,
+    confirmation_status: KnowledgeConfirmationStatus = KnowledgeConfirmationStatus.CONFIRMED,
+    confirmed_revision: int = 1,
+    current_revision: int = 1,
+    lifecycle: KnowledgeLifecycle = KnowledgeLifecycle.ACTIVE,
 ) -> KnowledgeObject:
     return KnowledgeObject(
         id=ko_id,
         kind=KnowledgeObjectKind.EXPERIENCE,
+        authorship=KnowledgeAuthorship.USER,
+        epistemic_basis=KnowledgeEpistemicBasis.PERSONAL_EXPERIENCE,
         title=title,
         content=content,
         importance=NoteImportance.PRIMARY,
-        status=status,
+        lifecycle=lifecycle,
+        superseded_by_ko_id=None,
+        confirmation_status=confirmation_status,
+        confirmed_at=TS if confirmation_status is KnowledgeConfirmationStatus.CONFIRMED else None,
+        confirmed_revision=(
+            confirmed_revision
+            if confirmation_status is KnowledgeConfirmationStatus.CONFIRMED
+            else None
+        ),
+        current_revision=current_revision,
         created_at=TS,
         updated_at=TS,
-        reviewed_at=TS if status is KnowledgeObjectStatus.REVIEWED else None,
     )
 
 
@@ -61,18 +77,23 @@ def _source(
 def _view(
     *,
     sources: tuple[KnowledgeObjectSourceView, ...] = (),
-    status: KnowledgeObjectStatus = KnowledgeObjectStatus.REVIEWED,
+    confirmation_status: KnowledgeConfirmationStatus = KnowledgeConfirmationStatus.CONFIRMED,
+    current_revision: int = 1,
+    lifecycle: KnowledgeLifecycle = KnowledgeLifecycle.ACTIVE,
 ) -> KnowledgeObjectView:
     return KnowledgeObjectView(
-        knowledge_object=_object(status=status),
+        knowledge_object=_object(
+            confirmation_status=confirmation_status,
+            current_revision=current_revision,
+            lifecycle=lifecycle,
+        ),
         sources=sources,
         outgoing_relations=(),
         incoming_relations=(),
     )
 
 
-def test_build_contains_grounding_rules_question_and_object(
-) -> None:
+def test_build_contains_grounding_rules_question_and_object() -> None:
     source = _source()
     view = KnowledgeObjectView(
         knowledge_object=_object(),
@@ -97,6 +118,8 @@ def test_build_contains_grounding_rules_question_and_object(
     assert "来源：" in prompt
     assert "页面 1（关键页）" in prompt
     assert "页面文本：采样频率影响抖动。" in prompt
+    assert "确认状态：已确认" in prompt
+    assert "形成依据：个人经历" in prompt
 
 
 def test_build_empty_views_rejected() -> None:
@@ -109,12 +132,27 @@ def test_build_default_question_when_blank() -> None:
     assert "请概括知识片段中的相关信息。" in prompt
 
 
-def test_draft_object_carries_warning() -> None:
+def test_unconfirmed_object_carries_warning() -> None:
     prompt = KnowledgePromptBuilder().build(
-        "问题", [_view(status=KnowledgeObjectStatus.DRAFT)]
+        "问题", [_view(confirmation_status=KnowledgeConfirmationStatus.UNCONFIRMED)]
     )
-    assert "草稿" in prompt
+    assert "尚未经用户确认" in prompt
     assert "不应视为已确认事实" in prompt
+
+
+def test_stale_confirmation_carries_warning() -> None:
+    prompt = KnowledgePromptBuilder().build(
+        "问题",
+        [_view(confirmation_status=KnowledgeConfirmationStatus.CONFIRMED, current_revision=3)],
+    )
+    assert "确认之后又被修改" in prompt
+
+
+def test_non_active_object_carries_history_notice() -> None:
+    prompt = KnowledgePromptBuilder().build(
+        "问题", [_view(lifecycle=KnowledgeLifecycle.ARCHIVED)]
+    )
+    assert "仅作历史参考" in prompt
 
 
 def test_missing_source_text_notice() -> None:

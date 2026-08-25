@@ -18,10 +18,36 @@ import pytest
 
 import scripts.ai_real_hybrid_fusion_probe as probe
 from src.ai.hybrid_search import HybridSearchOutcome, HybridSearchResult
+from src.config import Settings
 from src.models import PageStatus, SearchResult
 
 APPROVED_QUERY: str = '"定时器"'
 RRF_K: int = 60
+
+
+@pytest.fixture(autouse=True)
+def _isolate_probe_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The dry-run path opens a real database; it must never touch production."""
+
+    database_path = tmp_path / "probe" / "data" / "database" / "knowledge.db"
+    settings = Settings(
+        _env_file=None,
+        data_dir=database_path.parent.parent,
+        raw_dir=database_path.parent.parent / "raw",
+        pages_dir=database_path.parent.parent / "pages",
+        markdown_dir=database_path.parent.parent / "markdown",
+        database_dir=database_path.parent,
+        database_path=database_path,
+        backups_dir=tmp_path / "backups",
+        logs_dir=tmp_path / "logs",
+        log_path=tmp_path / "logs" / "probe-test.log",
+        runtime_dir=tmp_path / "runtime",
+        pid_path=tmp_path / "runtime" / "probe-test.pid.json",
+    )
+    monkeypatch.setattr(probe, "get_settings", lambda: settings)
+    monkeypatch.setattr(probe, "staging_settings", lambda: settings)
 
 
 def _search_result(page_id: int) -> SearchResult:

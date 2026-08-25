@@ -30,6 +30,7 @@ from src.document_service import DocumentService
 from src.evidence_basket_service import EvidenceBasketService
 from src.knowledge_memory_service import KnowledgeMemoryService
 from src.knowledge_object_service import KnowledgeObjectService
+from src.knowledge_search_service import KnowledgeSearchService
 from src.models import QuarantineReconciliation
 from src.pdf_service import PdfService
 from src.rapidocr_engine import RapidOcrEngine
@@ -294,6 +295,18 @@ def application_knowledge_memory_service() -> KnowledgeMemoryService:
     """Return the process-wide knowledge-memory service (schema v9)."""
 
     return KnowledgeMemoryService(application_database())
+
+
+@lru_cache(maxsize=1)
+def application_knowledge_search_service() -> KnowledgeSearchService:
+    """Return the process-wide offline knowledge search service (Phase 3D).
+
+    Knowledge-scope search is strictly offline: no AI provider, no network and
+    no embedding path. The service is resolved lazily by the search page so a
+    page-scope search never constructs it.
+    """
+
+    return KnowledgeSearchService(application_database())
 
 
 def application_page_batch_service() -> PageBatchService:

@@ -126,7 +126,7 @@ def test_normal_backup_captures_database_assets_hashes_and_all_metadata(
     assert validation.database_summary.integrity_check == "ok"
     assert validation.database_summary.foreign_key_violations == 0
     assert validation.database_summary.evidence == 1
-    assert result.manifest["schema_version"] == 9
+    assert result.manifest["schema_version"] == 11
     assert result.manifest["statistics"] == {
         "documents": 1,
         "pages": 1,
@@ -308,7 +308,7 @@ def test_schema_v5_backup_is_rejected_clearly_and_safely(tmp_path: Path) -> None
     assert not validation.valid
     assert validation.errors
     assert "schema v5 不兼容" in validation.errors[0]
-    assert "当前仅支持 v9" in validation.errors[0]
+    assert "当前仅支持 v11" in validation.errors[0]
     after_fingerprint = {
         path.relative_to(legacy).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(legacy.rglob("*"))
@@ -339,7 +339,7 @@ def test_patch_upgrade_can_restore_older_same_minor_backup(tmp_path: Path) -> No
 
     result = target.restore_backup(backup, service_is_running=lambda: False)
 
-    assert result.database_summary.schema_version == 9
+    assert result.database_summary.schema_version == 11
     assert (target.raw_dir / "manual.pdf").read_bytes() == b"v0.1.1"
     assert result.pre_restore_backup is not None
 

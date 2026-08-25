@@ -166,7 +166,7 @@ def test_staging_migration_does_not_touch_production(tmp_path: Path) -> None:
         staging_version = connection.execute(
             "SELECT MAX(version) FROM schema_migrations"
         ).fetchone()[0]
-    assert staging_version == before[2] == 9
+    assert staging_version == before[2] == 11
 
 
 def test_staging_backup_stays_in_staging_backups_dir(tmp_path: Path) -> None:
@@ -228,7 +228,7 @@ def test_index_script_staging_uses_staging_settings(
     assert "instance: staging" in out
     assert "total pages: 0" in out  # staging 空库
     # production 未被触碰
-    assert _production_counts(production.database_path) == (1, 1, 9)
+    assert _production_counts(production.database_path) == (1, 1, 11)
 
 
 def test_index_script_default_uses_production_settings(

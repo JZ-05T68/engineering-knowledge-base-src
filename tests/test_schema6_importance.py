@@ -284,7 +284,7 @@ def test_remigration_is_noop_and_preference_stays_single(tmp_path: Path) -> None
             "SELECT COUNT(*) FROM note_display_preferences"
         ).fetchone()[0]
         note_count = connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     assert preference_rows == 1
     assert note_count == 4
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1

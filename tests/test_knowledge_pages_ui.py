@@ -1,4 +1,4 @@
-"""AppTest UI tests for the v0.5.2 knowledge pages."""
+"""AppTest UI tests for the v0.5.2 knowledge pages (Phase 2B)."""
 
 from __future__ import annotations
 
@@ -11,9 +11,9 @@ from src.database import Database
 from src.knowledge_memory_service import KnowledgeMemoryService
 from src.knowledge_object_service import KnowledgeObjectService
 from src.models import (
+    KnowledgeEpistemicBasis,
     KnowledgeMemoryEntryKind,
     KnowledgeObjectKind,
-    KnowledgeObjectStatus,
     NoteImportance,
 )
 
@@ -68,8 +68,18 @@ def test_object_page_loads_empty(tmp_path: Path, monkeypatch) -> None:
 def test_object_page_lists_and_filters(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     service = KnowledgeObjectService(database)
-    service.create(kind="concept", title="概念甲", content="内容甲")
-    service.create(kind="experience", title="经验乙", content="内容乙")
+    service.create(
+        kind="concept",
+        title="概念甲",
+        content="内容甲",
+        epistemic_basis=KnowledgeEpistemicBasis.PERSONAL_JUDGMENT,
+    )
+    service.create(
+        kind="experience",
+        title="经验乙",
+        content="内容乙",
+        epistemic_basis=KnowledgeEpistemicBasis.PERSONAL_EXPERIENCE,
+    )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
         runtime, "application_knowledge_object_service", lambda: service
@@ -96,38 +106,47 @@ def test_object_create_form_writes_database(tmp_path: Path, monkeypatch) -> None
     app.text_input(key="ko_new_title").set_value("新概念")
     app.text_area(key="ko_new_content").set_value("新内容")
     app.selectbox(key="ko_new_importance").set_value(NoteImportance.PRIMARY)
-    app.selectbox(key="ko_new_status").set_value(KnowledgeObjectStatus.DRAFT)
+    app.selectbox(key="ko_new_basis").set_value(KnowledgeEpistemicBasis.PERSONAL_JUDGMENT)
     app.button(key="ko_create").click().run()
 
     assert not app.exception
     assert database.count_knowledge_objects() == 1
     created = database.list_knowledge_objects()[0]
     assert created.title == "新概念"
+    assert created.epistemic_basis is KnowledgeEpistemicBasis.PERSONAL_JUDGMENT
     assert any("已创建知识对象" in value for value in [s.value for s in app.success])
 
 
-def test_object_review_without_source_shows_error(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_object_confirm_action_marks_confirmed(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     service = KnowledgeObjectService(database)
-    view = service.create(kind="concept", title="草稿概念", content="内容")
+    view = service.create(
+        kind="concept",
+        title="草稿概念",
+        content="内容",
+        epistemic_basis=KnowledgeEpistemicBasis.PERSONAL_JUDGMENT,
+    )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
         runtime, "application_knowledge_object_service", lambda: service
     )
 
     app = AppTest.from_file(KNOWLEDGE_OBJECT_PAGE).run(timeout=30)
-    app.button(key=f"ko_review_{view.knowledge_object.id}").click().run()
+    app.button(key=f"ko_confirm_{view.knowledge_object.id}").click().run()
 
     assert not app.exception
-    assert any("有效来源" in error.value for error in app.error)
+    assert service.get(view.knowledge_object.id).confirmation_status.value == "confirmed"
 
 
 def test_object_delete_action_removes_object(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     service = KnowledgeObjectService(database)
-    view = service.create(kind="fact", title="待删除", content="内容")
+    view = service.create(
+        kind="fact",
+        title="待删除",
+        content="内容",
+        epistemic_basis=KnowledgeEpistemicBasis.DIRECT_OBSERVATION,
+    )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
         runtime, "application_knowledge_object_service", lambda: service
@@ -144,7 +163,12 @@ def test_object_source_link_action(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     _, page_id = _seed_document_and_page(database)
     service = KnowledgeObjectService(database)
-    view = service.create(kind="fact", title="来源测试", content="内容")
+    view = service.create(
+        kind="fact",
+        title="来源测试",
+        content="内容",
+        epistemic_basis=KnowledgeEpistemicBasis.SOURCE_DERIVED,
+    )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
         runtime, "application_knowledge_object_service", lambda: service
@@ -160,9 +184,7 @@ def test_object_source_link_action(tmp_path: Path, monkeypatch) -> None:
     assert sources[0].source_id == page_id
 
 
-def test_memory_page_lists_entries_and_knowledge_change(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_memory_page_lists_entries(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     memory_service = KnowledgeMemoryService(database)
     memory_service.create_entry(
@@ -172,8 +194,6 @@ def test_memory_page_lists_entries_and_knowledge_change(
         root_cause="编码器中断配置错误。",
         lesson="高速控制系统优先检查时序问题。",
     )
-    knowledge_service = KnowledgeObjectService(database)
-    knowledge_service.create(kind="concept", title="概念", content="内容")
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
         runtime, "application_knowledge_memory_service", lambda: memory_service
@@ -186,7 +206,6 @@ def test_memory_page_lists_entries_and_knowledge_change(
     assert any("STM32 电机控制异常" in value for value in markdown)
     assert any("编码器中断配置错误" in value for value in markdown)
     assert any("经验教训" in value for value in markdown)
-    assert any("系统自动记录" in value for value in markdown)
 
 
 def test_memory_page_create_entry(tmp_path: Path, monkeypatch) -> None:

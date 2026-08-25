@@ -1,4 +1,4 @@
-"""Service tests for the v0.5.2 knowledge-memory domain rules."""
+"""Service tests for the v0.5.2 Phase 2B knowledge-memory domain rules."""
 
 from __future__ import annotations
 
@@ -12,7 +12,11 @@ from src.knowledge_memory_service import (
     KnowledgeMemoryService,
     KnowledgeMemoryValidationError,
 )
-from src.models import KnowledgeMemoryEntryKind
+from src.models import (
+    KnowledgeEpistemicBasis,
+    KnowledgeMemoryEntryKind,
+    KnowledgeMemoryStatus,
+)
 
 
 @pytest.fixture()
@@ -35,6 +39,7 @@ def test_create_list_update_delete_entry(service: KnowledgeMemoryService) -> Non
     )
 
     assert service.get(entry.id) is not None
+    assert entry.status is KnowledgeMemoryStatus.ACTIVE
     assert [item.id for item in service.list()] == [entry.id]
     assert service.count() == 1
     assert service.count(kind="experience") == 0
@@ -42,16 +47,19 @@ def test_create_list_update_delete_entry(service: KnowledgeMemoryService) -> Non
     updated = service.update_entry(entry.id, lesson="优先检查中断与时序。")
     assert updated.lesson == "优先检查中断与时序。"
 
+    archived = service.set_status(entry.id, status="archived")
+    assert archived.status is KnowledgeMemoryStatus.ARCHIVED
+    assert service.count(status="active") == 0
+    assert service.count(status="archived") == 1
+
     service.delete_entry(entry.id)
     assert service.get(entry.id) is None
     with pytest.raises(KnowledgeMemoryEntryNotFoundError):
         service.delete_entry(entry.id)
 
 
-def test_knowledge_change_kind_cannot_be_created_manually(
-    service: KnowledgeMemoryService,
-) -> None:
-    with pytest.raises(KnowledgeMemoryValidationError, match="自动生成"):
+def test_knowledge_change_kind_cannot_be_created(service: KnowledgeMemoryService) -> None:
+    with pytest.raises(KnowledgeMemoryValidationError, match="记忆类型"):
         service.create_entry(kind="knowledge_change", title="手动变更")
 
 
@@ -69,3 +77,26 @@ def test_missing_links_rejected_with_clear_errors(
 def test_update_missing_entry_raises(service: KnowledgeMemoryService) -> None:
     with pytest.raises(KnowledgeMemoryEntryNotFoundError):
         service.update_entry(999, title="不存在")
+
+
+def test_memory_link_survives_knowledge_object_delete(
+    service: KnowledgeMemoryService, database: Database
+) -> None:
+    from src.knowledge_object_service import KnowledgeObjectService
+
+    ko_service = KnowledgeObjectService(database)
+    view = ko_service.create(
+        kind="problem",
+        title="问题",
+        content="内容",
+        epistemic_basis=KnowledgeEpistemicBasis.PROBLEM_DEFINITION,
+    )
+    entry = service.create_entry(
+        kind="experience", title="经验", knowledge_object_id=view.knowledge_object.id
+    )
+
+    ko_service.delete(view.knowledge_object.id)
+
+    survived = service.get(entry.id)
+    assert survived is not None
+    assert survived.knowledge_object_id is None

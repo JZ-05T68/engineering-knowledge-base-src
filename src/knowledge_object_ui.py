@@ -1,10 +1,14 @@
-"""Streamlit UI helpers for the v0.5.2 knowledge-object page.
+"""Streamlit UI helpers for the v0.5.2 knowledge-object page (Phase 2B).
 
 The page turns the knowledge-object service into a local, offline working
-surface: create, filter, review, link sources, build typed relations, and
-generate a citation-grounded prompt package for external AI tools. Every write
-goes through :class:`KnowledgeObjectService`; the page never calls any AI
-provider and never touches original PDFs, page images, notes or evidence rows.
+surface: create, filter, confirm, archive, link sources, build typed
+relations, and generate a citation-grounded prompt package for external AI
+tools. Every write goes through :class:`KnowledgeObjectService`; the page never
+calls any AI provider and never touches original PDFs, page images, notes or
+evidence rows.
+
+This is a mechanical compatibility pass for schema v10. Final UI design
+(source picker, supersession guidance, revision history) lands in Phase 5.
 """
 
 from __future__ import annotations
@@ -22,11 +26,11 @@ from src.knowledge_object_service import (
 )
 from src.knowledge_prompt_builder import KnowledgePromptBuilder
 from src.models import (
+    KnowledgeEpistemicBasis,
+    KnowledgeLifecycle,
     KnowledgeObjectKind,
     KnowledgeObjectSourceType,
-    KnowledgeObjectStatus,
     KnowledgeRelationType,
-    KnowledgeSourceStatus,
     NoteImportance,
 )
 
@@ -36,7 +40,12 @@ PAGE_SIZE = 20
 
 _KIND_OPTIONS = [None, *KnowledgeObjectKind]
 _IMPORTANCE_OPTIONS = [None, *NoteImportance]
-_STATUS_OPTIONS = [None, *KnowledgeObjectStatus]
+_LIFECYCLE_OPTIONS = [None, *KnowledgeLifecycle]
+_BASIS_OPTIONS = [
+    basis
+    for basis in KnowledgeEpistemicBasis
+    if basis is not KnowledgeEpistemicBasis.UNKNOWN_LEGACY
+]
 _RELATION_OPTIONS = list(KnowledgeRelationType)
 _SOURCE_TYPE_OPTIONS = list(KnowledgeObjectSourceType)
 
@@ -51,7 +60,7 @@ def render_knowledge_object_page(
     objects = service.list(
         kind=filters["kind"],
         importance=filters["importance"],
-        status=filters["status"],
+        lifecycle=filters["lifecycle"],
         query=filters["query"],
         sort_by=filters["sort_by"],
         limit=PAGE_SIZE,
@@ -60,7 +69,7 @@ def render_knowledge_object_page(
     total = service.count(
         kind=filters["kind"],
         importance=filters["importance"],
-        status=filters["status"],
+        lifecycle=filters["lifecycle"],
         query=filters["query"],
     )
     if total == 0:
@@ -90,12 +99,13 @@ def _render_create_form(service: KnowledgeObjectService) -> None:
             format_func=lambda value: value.label,
             key="ko_new_importance",
         )
-        status = st.selectbox(
-            "状态",
-            options=list(KnowledgeObjectStatus),
+        basis = st.selectbox(
+            "形成依据",
+            options=_BASIS_OPTIONS,
             format_func=lambda value: value.label,
-            key="ko_new_status",
+            key="ko_new_basis",
         )
+        st.caption("新对象以“现行 / 未确认”状态创建，作者固定为“用户”。")
         if st.button("创建知识对象", key="ko_create", type="primary"):
             try:
                 created = service.create(
@@ -103,7 +113,7 @@ def _render_create_form(service: KnowledgeObjectService) -> None:
                     title=title,
                     content=content,
                     importance=importance,
-                    status=status,
+                    epistemic_basis=basis,
                 )
             except (KnowledgeObjectValidationError, ValueError) as exc:
                 st.error(f"创建失败：{exc}")
@@ -132,11 +142,11 @@ def _render_filters(service: KnowledgeObjectService) -> dict:
         format_func=lambda value: "全部" if value is None else value.label,
         key="ko_filter_importance",
     )
-    status = columns[2].selectbox(
-        "状态",
-        options=_STATUS_OPTIONS,
+    lifecycle = columns[2].selectbox(
+        "生命周期",
+        options=_LIFECYCLE_OPTIONS,
         format_func=lambda value: "全部" if value is None else value.label,
-        key="ko_filter_status",
+        key="ko_filter_lifecycle",
     )
     query = columns[3].text_input(
         "关键词过滤", key="ko_filter_query", placeholder="匹配标题或内容"
@@ -154,7 +164,7 @@ def _render_filters(service: KnowledgeObjectService) -> dict:
     return {
         "kind": kind,
         "importance": importance,
-        "status": status,
+        "lifecycle": lifecycle,
         "query": query,
         "sort_by": sort_by,
     }
@@ -177,6 +187,17 @@ def _render_pagination(total: int) -> None:
         st.rerun()
 
 
+def _confirmation_badge(knowledge_object) -> str:
+    if knowledge_object.confirmation_is_current:
+        return f"已确认（第 {knowledge_object.confirmed_revision} 版）"
+    if knowledge_object.confirmation_is_stale:
+        return (
+            f"确认基于旧版（第 {knowledge_object.confirmed_revision} 版，"
+            f"当前第 {knowledge_object.current_revision} 版）"
+        )
+    return "未确认"
+
+
 def _render_object_card(
     service: KnowledgeObjectService,
     database: Database,
@@ -185,12 +206,16 @@ def _render_object_card(
     with st.container(border=True):
         st.markdown(
             f"**{knowledge_object.title}**　`{knowledge_object.kind.label}`　"
-            f"`{knowledge_object.importance.label}`　`{knowledge_object.status.label}`"
+            f"`{knowledge_object.importance.label}`　"
+            f"`{knowledge_object.lifecycle.label}`"
         )
         st.caption(
-            f"ID {knowledge_object.id} · "
+            f"ID {knowledge_object.id} · {knowledge_object.epistemic_basis.label} · "
+            f"{_confirmation_badge(knowledge_object)} · "
             f"更新于 {knowledge_object.updated_at:%Y-%m-%d %H:%M}"
         )
+        if knowledge_object.superseded_by_ko_id is not None:
+            st.caption(f"已替代 → 知识对象 {knowledge_object.superseded_by_ko_id}")
         with st.expander("详情 / 编辑", expanded=False):
             try:
                 view = service.get_view(knowledge_object.id)
@@ -200,7 +225,7 @@ def _render_object_card(
             st.markdown(view.knowledge_object.content)
             _render_sources(service, view)
             _render_relations(service, view)
-            _render_review_actions(service, view)
+            _render_state_actions(service, view)
             _render_delete_action(service, view)
             _render_prompt_builder(service, view)
 
@@ -210,9 +235,7 @@ def _render_sources(service: KnowledgeObjectService, view) -> None:
     if view.sources:
         for source_view in view.sources:
             source = source_view.source
-            status_label = (
-                "来源有效" if source_view.status is KnowledgeSourceStatus.VALID else "来源不存在"
-            )
+            status_label = source_view.status.label
             columns = st.columns([5, 1])
             columns[0].caption(
                 f"{source.source_type.label} {source.source_id}"
@@ -229,7 +252,7 @@ def _render_sources(service: KnowledgeObjectService, view) -> None:
                 else:
                     st.rerun()
     else:
-        st.caption("尚无来源。已复核状态要求至少一个有效来源。")
+        st.caption("尚无来源。")
     with st.expander("添加来源", expanded=False):
         source_type = st.selectbox(
             "来源类型",
@@ -307,21 +330,29 @@ def _render_relations(service: KnowledgeObjectService, view) -> None:
                 st.rerun()
 
 
-def _render_review_actions(service: KnowledgeObjectService, view) -> None:
-    status = view.knowledge_object.status
-    if status is KnowledgeObjectStatus.DRAFT:
-        if st.button("标记为已复核", key=f"ko_review_{view.knowledge_object.id}"):
-            try:
-                service.update(view.knowledge_object.id, status="reviewed")
-            except KnowledgeObjectValidationError as exc:
-                st.error(str(exc))
-            else:
-                st.rerun()
-    elif status is KnowledgeObjectStatus.REVIEWED and st.button(
-        "归档", key=f"ko_archive_{view.knowledge_object.id}"
-    ):
-        service.update(view.knowledge_object.id, status="archived")
-        st.rerun()
+def _render_state_actions(service: KnowledgeObjectService, view) -> None:
+    knowledge_object = view.knowledge_object
+    st.markdown("#### 状态操作")
+    if knowledge_object.confirmation_is_current:
+        if st.button("取消确认", key=f"ko_unconfirm_{knowledge_object.id}"):
+            service.unconfirm(knowledge_object.id)
+            st.rerun()
+    else:
+        if st.button("确认当前内容", key=f"ko_confirm_{knowledge_object.id}"):
+            service.confirm(knowledge_object.id)
+            st.rerun()
+    if knowledge_object.lifecycle is KnowledgeLifecycle.ACTIVE:
+        if st.button("归档", key=f"ko_archive_{knowledge_object.id}"):
+            service.archive(knowledge_object.id)
+            st.rerun()
+    elif knowledge_object.lifecycle is KnowledgeLifecycle.ARCHIVED:
+        if st.button("重新启用", key=f"ko_unarchive_{knowledge_object.id}"):
+            service.unarchive(knowledge_object.id)
+            st.rerun()
+    elif knowledge_object.lifecycle is KnowledgeLifecycle.SUPERSEDED:
+        if st.button("重新启用（解除替代）", key=f"ko_reactivate_{knowledge_object.id}"):
+            service.reactivate(knowledge_object.id)
+            st.rerun()
 
 
 def _render_delete_action(service: KnowledgeObjectService, view) -> None:
@@ -330,9 +361,13 @@ def _render_delete_action(service: KnowledgeObjectService, view) -> None:
         key=f"ko_delete_{view.knowledge_object.id}",
         help="只删除知识对象及其来源和关系，不删除任何原始材料",
     ):
-        service.delete(view.knowledge_object.id)
-        st.session_state["ko_flash"] = "知识对象已删除。"
-        st.rerun()
+        try:
+            service.delete(view.knowledge_object.id)
+        except KnowledgeObjectValidationError as exc:
+            st.error(str(exc))
+        else:
+            st.session_state["ko_flash"] = "知识对象已删除。"
+            st.rerun()
 
 
 def _render_prompt_builder(service: KnowledgeObjectService, view) -> None:

@@ -13,6 +13,7 @@ from src.models import (
     SearchField,
     SearchFilters,
     SearchMode,
+    SearchScope,
     SearchSort,
     SearchViewMode,
 )
@@ -24,6 +25,7 @@ _TRUE_VALUES = {"1", "true", "yes", "on"}
 _STATE_KEYS = {
     "q",
     "search_query",
+    "scope",
     "documents",
     "document_ids",
     "document",
@@ -71,6 +73,7 @@ class SearchPageState:
     expanded_document_id: int | None = None
     preview_page_id: int | None = None
     focus_result: int | None = None
+    scope: SearchScope = SearchScope.PAGE
 
     def with_first_page(self, **changes: object) -> SearchPageState:
         """Return a changed state whose result pagination restarts at page one."""
@@ -120,6 +123,10 @@ def parse_search_state(params: QueryParams | Mapping[str, object]) -> SearchPage
         mode = SearchMode(_first(params, "mode") or SearchMode.KEYWORD.value)
     except ValueError:
         mode = SearchMode.KEYWORD
+    try:
+        scope = SearchScope(_first(params, "scope") or SearchScope.PAGE.value)
+    except ValueError:
+        scope = SearchScope.PAGE
     expanded_document_id = _positive_int(_first(params, "expanded_document"))
     preview_page_id = _positive_int(_first(params, "preview_page"))
     focus_result = _bounded_optional_int(
@@ -145,6 +152,7 @@ def parse_search_state(params: QueryParams | Mapping[str, object]) -> SearchPage
         expanded_document_id=expanded_document_id,
         preview_page_id=preview_page_id,
         focus_result=focus_result,
+        scope=scope,
     )
 
 
@@ -167,6 +175,8 @@ def search_state_query_params(state: SearchPageState) -> dict[str, str]:
         params["has_note"] = "1"
     if filters.evidence_basket_id is not None:
         params["basket"] = str(filters.evidence_basket_id)
+    if state.scope is not SearchScope.PAGE:
+        params["scope"] = state.scope.value
     if state.mode is not SearchMode.KEYWORD:
         params["mode"] = state.mode.value
     if state.sort is not SearchSort.RELEVANCE:

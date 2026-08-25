@@ -139,6 +139,27 @@ class SearchViewMode(StrEnum):
         }[self]
 
 
+class SearchScope(StrEnum):
+    """Which corpus one search state targets (Phase 3D).
+
+    ``PAGE`` is the legacy default and is deliberately omitted from URL
+    serialization, so every pre-3D URL keeps its exact page-scope meaning.
+    ``KNOWLEDGE`` targets the offline personal-knowledge FTS scope.
+    """
+
+    PAGE = "page"
+    KNOWLEDGE = "knowledge"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown by the scope switcher."""
+
+        return {
+            self.PAGE: "页面资料",
+            self.KNOWLEDGE: "个人知识",
+        }[self]
+
+
 class EvidenceTextKind(StrEnum):
     """Trust classification for text stored in an evidence item."""
 
@@ -909,20 +930,86 @@ class KnowledgeObjectKind(StrEnum):
         }[self]
 
 
-class KnowledgeObjectStatus(StrEnum):
-    """Lifecycle state of one knowledge object (schema v9, v0.5.2)."""
+class KnowledgeLifecycle(StrEnum):
+    """Lifecycle state of one knowledge object (schema v10, Phase 2B)."""
 
-    DRAFT = "draft"
-    REVIEWED = "reviewed"
+    ACTIVE = "active"
+    SUPERSEDED = "superseded"
     ARCHIVED = "archived"
 
     @property
     def label(self) -> str:
         """Return the Chinese label shown in the local UI."""
         return {
-            self.DRAFT: "草稿",
-            self.REVIEWED: "已复核",
+            self.ACTIVE: "现行",
+            self.SUPERSEDED: "已替代",
             self.ARCHIVED: "已归档",
+        }[self]
+
+
+class KnowledgeConfirmationStatus(StrEnum):
+    """User confirmation state of the object's content (schema v10)."""
+
+    UNCONFIRMED = "unconfirmed"
+    CONFIRMED = "confirmed"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the local UI."""
+        return {
+            self.UNCONFIRMED: "未确认",
+            self.CONFIRMED: "已确认",
+        }[self]
+
+
+class KnowledgeAuthorship(StrEnum):
+    """Who is accountable for the final content of a knowledge object.
+
+    The single-user local system only writes ``USER`` in v0.5.2. ``AI`` is a
+    reserved future value kept in the enum so the database CHECK constraint
+    never needs a table rebuild; the service layer rejects AI-authored writes.
+    """
+
+    USER = "user"
+    AI = "ai"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the local UI."""
+        return {
+            self.USER: "用户",
+            self.AI: "AI",
+        }[self]
+
+
+class KnowledgeEpistemicBasis(StrEnum):
+    """Mutually exclusive epistemic ground of one knowledge object.
+
+    The presence of source links never derives this value: ``source_derived``
+    is a user declaration, and a personal judgment may still carry evidence
+    links. ``unknown_legacy`` is reserved for migrated v9 rows whose ground
+    cannot be reconstructed honestly.
+    """
+
+    SOURCE_DERIVED = "source_derived"
+    PERSONAL_EXPERIENCE = "personal_experience"
+    PERSONAL_JUDGMENT = "personal_judgment"
+    DIRECT_OBSERVATION = "direct_observation"
+    DECISION_RECORD = "decision_record"
+    PROBLEM_DEFINITION = "problem_definition"
+    UNKNOWN_LEGACY = "unknown_legacy"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the local UI."""
+        return {
+            self.SOURCE_DERIVED: "来源提炼",
+            self.PERSONAL_EXPERIENCE: "个人经历",
+            self.PERSONAL_JUDGMENT: "个人判断",
+            self.DIRECT_OBSERVATION: "直接观察",
+            self.DECISION_RECORD: "决策记录",
+            self.PROBLEM_DEFINITION: "问题定义",
+            self.UNKNOWN_LEGACY: "历史数据（依据未知）",
         }[self]
 
 
@@ -969,16 +1056,15 @@ class KnowledgeRelationType(StrEnum):
 
 
 class KnowledgeMemoryEntryKind(StrEnum):
-    """The four memory entry kinds frozen for v0.5.2.
+    """The three user-authored personal-memory kinds (schema v10).
 
-    ``KNOWLEDGE_CHANGE`` is written automatically by the knowledge-object
-    service as an append-only log; the other three are user-authored.
+    System change records are no longer stored in this table; they live in the
+    append-only ``knowledge_object_revisions`` table instead (ADR-05).
     """
 
     PROBLEM_SOLVING = "problem_solving"
     EXPERIENCE = "experience"
     DECISION = "decision"
-    KNOWLEDGE_CHANGE = "knowledge_change"
 
     @property
     def label(self) -> str:
@@ -987,43 +1073,176 @@ class KnowledgeMemoryEntryKind(StrEnum):
             self.PROBLEM_SOLVING: "问题解决",
             self.EXPERIENCE: "经验",
             self.DECISION: "决策",
-            self.KNOWLEDGE_CHANGE: "知识变更",
+        }[self]
+
+
+class KnowledgeMemoryStatus(StrEnum):
+    """Lifecycle state of one personal memory entry (schema v10)."""
+
+    ACTIVE = "active"
+    ARCHIVED = "archived"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in memory lists."""
+        return {
+            self.ACTIVE: "现行",
+            self.ARCHIVED: "已归档",
+        }[self]
+
+
+class KnowledgeRevisionEventType(StrEnum):
+    """Event types stored in the append-only knowledge revision table."""
+
+    LEGACY_BASELINE = "legacy_baseline"
+    LEGACY_EVENT = "legacy_event"
+    CREATED = "created"
+    CONTENT_UPDATED = "content_updated"
+    CONFIRMATION_CHANGED = "confirmation_changed"
+    LIFECYCLE_CHANGED = "lifecycle_changed"
+    SUPERSESSION_CHANGED = "supersession_changed"
+    SOURCE_LINKED = "source_linked"
+    SOURCE_UNLINKED = "source_unlinked"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in revision lists."""
+        return {
+            self.LEGACY_BASELINE: "迁移基线",
+            self.LEGACY_EVENT: "历史变更（迁移）",
+            self.CREATED: "创建",
+            self.CONTENT_UPDATED: "内容更新",
+            self.CONFIRMATION_CHANGED: "确认变更",
+            self.LIFECYCLE_CHANGED: "生命周期变更",
+            self.SUPERSESSION_CHANGED: "替代关系变更",
+            self.SOURCE_LINKED: "关联来源",
+            self.SOURCE_UNLINKED: "解除来源",
         }[self]
 
 
 class KnowledgeSourceStatus(StrEnum):
-    """Existence status of one knowledge-object source link.
+    """Read-time status of one knowledge-object source link (ADR-03).
 
-    Only existence is checked for source links: unlike note anchors there is
-    no stored snapshot to compare, so a missing target is ``MISSING`` and
-    anything resolvable is ``VALID``.
+    ``VALID``/``CHANGED``/``MISSING``/``UNKNOWN`` are computed on every read by
+    comparing the freshly recomputed canonical fingerprint with the snapshot
+    stored on the link. The read path never writes back.
     """
 
     VALID = "valid"
+    CHANGED = "changed"
     MISSING = "missing"
+    UNKNOWN = "unknown"
 
     @property
     def label(self) -> str:
         """Return the Chinese label shown beside source links."""
         return {
             self.VALID: "来源有效",
+            self.CHANGED: "来源已变化",
             self.MISSING: "来源不存在",
+            self.UNKNOWN: "来源状态未知",
         }[self]
+
+
+class KnowledgeSourceAggregateState(StrEnum):
+    """Object-level aggregate of all source links (ADR-03 truth table)."""
+
+    UNSOURCED = "unsourced"
+    VALID = "valid"
+    PARTIALLY_VALID = "partially_valid"
+    CHANGED = "changed"
+    MISSING = "missing"
+    UNKNOWN = "unknown"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.UNSOURCED: "无来源",
+            self.VALID: "来源有效",
+            self.PARTIALLY_VALID: "来源部分有效",
+            self.CHANGED: "来源已变化",
+            self.MISSING: "来源缺失",
+            self.UNKNOWN: "来源状态未知",
+        }[self]
+
+
+def aggregate_source_state(
+    valid: int, changed: int, missing: int, unknown: int
+) -> KnowledgeSourceAggregateState:
+    """Apply the six deterministic ADR-03 aggregate rules."""
+
+    if valid + changed + missing + unknown == 0:
+        return KnowledgeSourceAggregateState.UNSOURCED
+    if valid > 0 and changed + missing + unknown == 0:
+        return KnowledgeSourceAggregateState.VALID
+    if valid > 0:
+        return KnowledgeSourceAggregateState.PARTIALLY_VALID
+    if changed > 0:
+        return KnowledgeSourceAggregateState.CHANGED
+    if missing > 0:
+        return KnowledgeSourceAggregateState.MISSING
+    return KnowledgeSourceAggregateState.UNKNOWN
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeSourceAggregate:
+    """Read-time aggregate health of all sources of one knowledge object."""
+
+    state: KnowledgeSourceAggregateState
+    valid_count: int
+    changed_count: int
+    missing_count: int
+    unknown_count: int
+    evidence_unconfirmed_count: int
+
+    @property
+    def evidence_sufficient(self) -> bool:
+        """Derived boolean: aggregate VALID and every evidence source confirmed."""
+
+        return (
+            self.state is KnowledgeSourceAggregateState.VALID
+            and self.evidence_unconfirmed_count == 0
+        )
 
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeObject:
-    """One durable, source-linked knowledge asset (schema v9, v0.5.2)."""
+    """One durable, source-linked knowledge asset (schema v10, Phase 2B)."""
 
     id: int
     kind: KnowledgeObjectKind
+    authorship: KnowledgeAuthorship
+    epistemic_basis: KnowledgeEpistemicBasis
     title: str
     content: str
     importance: NoteImportance
-    status: KnowledgeObjectStatus
+    lifecycle: KnowledgeLifecycle
+    superseded_by_ko_id: int | None
+    confirmation_status: KnowledgeConfirmationStatus
+    confirmed_at: datetime | None
+    confirmed_revision: int | None
+    current_revision: int
     created_at: datetime
     updated_at: datetime
-    reviewed_at: datetime | None = None
+
+    @property
+    def confirmation_is_current(self) -> bool:
+        """Whether the user confirmation still covers the latest revision."""
+
+        return (
+            self.confirmation_status is KnowledgeConfirmationStatus.CONFIRMED
+            and self.confirmed_revision == self.current_revision
+        )
+
+    @property
+    def confirmation_is_stale(self) -> bool:
+        """Whether content changed after the user last confirmed it."""
+
+        return (
+            self.confirmation_status is KnowledgeConfirmationStatus.CONFIRMED
+            and self.confirmed_revision is not None
+            and self.confirmed_revision < self.current_revision
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -1041,12 +1260,15 @@ class KnowledgeObjectSource:
     source_type: KnowledgeObjectSourceType
     source_id: int
     source_note: str
-    created_at: datetime
+    source_fingerprint: str | None = None
+    fingerprint_version: int = 1
+    captured_at: datetime | None = None
+    created_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeObjectSourceView:
-    """A source link plus its freshly recomputed existence status."""
+    """A source link plus its freshly recomputed fingerprint status."""
 
     source: KnowledgeObjectSource
     status: KnowledgeSourceStatus
@@ -1066,7 +1288,7 @@ class KnowledgeRelation:
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeMemoryEntry:
-    """One durable memory entry (user-authored or auto knowledge change)."""
+    """One user-authored personal memory entry (schema v10)."""
 
     id: int
     kind: KnowledgeMemoryEntryKind
@@ -1077,8 +1299,80 @@ class KnowledgeMemoryEntry:
     knowledge_object_id: int | None
     document_id: int | None
     page_id: int | None
+    status: KnowledgeMemoryStatus
     created_at: datetime
     updated_at: datetime
+
+
+class KnowledgeSearchResultType(StrEnum):
+    """Which knowledge entity produced one offline knowledge-search result."""
+
+    KNOWLEDGE_OBJECT = "knowledge_object"
+    KNOWLEDGE_MEMORY = "knowledge_memory"
+
+    @property
+    def label(self) -> str:
+        """Return the Chinese label shown in the search UI."""
+        return {
+            self.KNOWLEDGE_OBJECT: "知识对象",
+            self.KNOWLEDGE_MEMORY: "知识记忆",
+        }[self]
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeSearchResult:
+    """One citation-ready result from the offline knowledge search (Phase 3C).
+
+    Deliberately independent from the page-scope ``SearchResult``: knowledge
+    recall uses FTS5 MATCH while page recall uses the LIKE gate, and the two
+    scopes carry different provenance anchors. The fields here are the stable
+    anchor surface for Phase 4 export and Phase 5 Prompt Builder / agent
+    citation; no page-search semantics are reused or modified.
+    """
+
+    result_type: KnowledgeSearchResultType
+    id: int
+    stable_id: str
+    title: str
+    content: str
+    snippet: str = ""
+    status: str = ""
+    status_label: str = ""
+    kind: str = ""
+    kind_label: str = ""
+    updated_at: datetime | None = None
+    knowledge_object_id: int | None = None
+    document_id: int | None = None
+    page_id: int | None = None
+    source_anchors: tuple[tuple[str, int], ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeRevision:
+    """One append-only knowledge object revision event (schema v10)."""
+
+    id: int
+    knowledge_object_id: int | None
+    object_local_id_snapshot: int | None
+    object_stable_id_snapshot: str | None
+    object_title_snapshot: str
+    object_kind_snapshot: str
+    revision_number: int
+    event_type: KnowledgeRevisionEventType
+    before_title: str | None
+    after_title: str | None
+    before_content: str | None
+    after_content: str | None
+    before_lifecycle: str | None
+    after_lifecycle: str | None
+    before_confirmation: str | None
+    after_confirmation: str | None
+    superseded_by_before: int | None
+    superseded_by_after: int | None
+    source_ref: str | None
+    payload_version: int
+    detail: str
+    created_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -1094,3 +1388,43 @@ class KnowledgeObjectView:
     sources: tuple[KnowledgeObjectSourceView, ...]
     outgoing_relations: tuple[KnowledgeRelation, ...]
     incoming_relations: tuple[KnowledgeRelation, ...]
+
+
+KNOWLEDGE_OBJECT_STABLE_TYPE = "knowledge_object"
+KNOWLEDGE_MEMORY_STABLE_TYPE = "knowledge_memory"
+KNOWLEDGE_RELATION_STABLE_TYPE = "knowledge_relation"
+KNOWLEDGE_SOURCE_STABLE_TYPE = "knowledge_source"
+KNOWLEDGE_REVISION_STABLE_TYPE = "knowledge_revision"
+
+_KNOWN_STABLE_TYPES = frozenset(
+    {
+        KNOWLEDGE_OBJECT_STABLE_TYPE,
+        KNOWLEDGE_MEMORY_STABLE_TYPE,
+        KNOWLEDGE_RELATION_STABLE_TYPE,
+        KNOWLEDGE_SOURCE_STABLE_TYPE,
+        KNOWLEDGE_REVISION_STABLE_TYPE,
+    }
+)
+
+
+def build_stable_id(kb_uuid: str, object_type: str, local_id: int) -> str:
+    """Return the canonical stable ID ``<kb_uuid>:<object_type>:<local_id>``.
+
+    Pure function shared by the database layer, services, UI and the future
+    export pipeline. ``object_type`` must be one of the ``*_STABLE_TYPE``
+    constants above; ``local_id`` is the integer primary key inside this
+    knowledge base and must be a positive integer. The function reads no
+    network or machine identity: every input is supplied by the caller.
+    """
+
+    if object_type not in _KNOWN_STABLE_TYPES:
+        raise ValueError(f"非法稳定 ID 对象类型：{object_type}")
+    if isinstance(local_id, bool):
+        raise ValueError("local_id 必须是正整数，不能是布尔值")
+    try:
+        local_id_int = int(local_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("local_id 必须是正整数") from exc
+    if local_id_int < 1:
+        raise ValueError("local_id 必须是正整数")
+    return f"{kb_uuid}:{object_type}:{local_id_int}"

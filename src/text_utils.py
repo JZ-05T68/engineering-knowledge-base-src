@@ -135,6 +135,53 @@ def extract_search_terms(
     return tuple(terms)
 
 
+def extract_fts_search_terms(
+    query: str,
+    *,
+    max_terms: int = 16,
+    max_term_chars: int = 128,
+) -> tuple[str, ...]:
+    """Return deduplicated FTS5 tokens for knowledge-scope FTS recall.
+
+    Unlike :func:`extract_search_terms`, a continuous CJK group is **never**
+    kept whole: the knowledge shadow columns are jieba token sequences, so a
+    whole-group literal would not exist in the FTS index. Every searchable
+    group is therefore segmented with ``jieba.cut_for_search`` and each token
+    is cleaned (lowercase, ``_FTS_OPERATORS`` removed, deduplicated, bounded)
+    exactly like the page-search term path. Page-search semantics are not
+    changed: ``extract_search_terms`` is untouched.
+    """
+
+    if not isinstance(query, str) or max_terms < 1 or max_term_chars < 1:
+        return ()
+    normalized = unicodedata.normalize("NFKC", query).strip()
+    if not normalized:
+        return ()
+
+    terms: list[str] = []
+    seen: set[str] = set()
+
+    def append(value: str) -> bool:
+        term = value.casefold().strip("_")[:max_term_chars]
+        if not term or term in _FTS_OPERATORS or term in seen:
+            return False
+        seen.add(term)
+        terms.append(term)
+        return len(terms) >= max_terms
+
+    for group_match in _SEARCHABLE_GROUP.finditer(normalized):
+        group = group_match.group(0)
+        for jieba_token in jieba.cut_for_search(group):
+            for token_match in _SEARCHABLE_GROUP.finditer(jieba_token):
+                if append(token_match.group(0)):
+                    break
+            if len(terms) >= max_terms:
+                break
+        if len(terms) >= max_terms:
+            break
+    return tuple(terms)
+
+
 def to_plain_text(value: str) -> str:
     """Remove common Markdown presentation markers without interpreting HTML."""
 
@@ -214,6 +261,7 @@ def highlight_html(text: str, terms: Sequence[str]) -> str:
 __all__ = [
     "build_context_excerpt",
     "build_context_excerpts",
+    "extract_fts_search_terms",
     "extract_search_terms",
     "highlight_html",
     "literal_match_spans",

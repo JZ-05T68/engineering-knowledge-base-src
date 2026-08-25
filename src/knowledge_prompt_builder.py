@@ -7,8 +7,10 @@ I/O and never calls any AI provider; source texts are supplied by the caller
 
 Grounding policy reuses :data:`src.prompt_builder.GROUNDING_RULES` and adds
 knowledge-specific rules: knowledge-object content is user-organized knowledge
-and must be checked against its sources, and draft objects are explicitly not
-confirmed facts.
+and must be checked against its sources, unconfirmed objects are explicitly
+not confirmed facts, and confirmation that became stale after a content edit
+is reported as such. The fingerprint state machine (Phase 2C) will extend the
+source annotations; this Phase 2B version keeps the honest baseline.
 """
 
 from __future__ import annotations
@@ -17,8 +19,9 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime
 
 from src.models import (
+    KnowledgeConfirmationStatus,
+    KnowledgeLifecycle,
     KnowledgeObjectSource,
-    KnowledgeObjectStatus,
     KnowledgeObjectView,
 )
 from src.prompt_builder import DEFAULT_QUESTION, GROUNDING_RULES
@@ -28,11 +31,17 @@ MAX_SOURCE_TEXT_CHARS = 20_000
 _KNOWLEDGE_EXTRA_RULES = (
     "6. “知识对象”的内容是用户长期整理的知识，可能包含个人判断；"
     "每个事实性结论都应优先依据其“来源”核验，无法核验时明确说明。\n"
-    "7. 状态为“草稿”的知识对象仅供参考，不应视为已确认的事实。"
+    "7. 状态为“未确认”的知识对象仅供参考，不应视为已确认的事实；"
+    "确认基于旧版的知识对象，其正文在确认后又被修改过，引用时需注明。"
 )
 
-_DRAFT_WARNING = (
-    "复核提示：本知识对象仍为草稿，内容尚未人工复核，不应视为已确认事实。"
+_UNCONFIRMED_WARNING = (
+    "复核提示：本知识对象尚未经用户确认，不应视为已确认事实。"
+)
+
+_STALE_CONFIRMATION_WARNING = (
+    "复核提示：本知识对象的正文在用户确认之后又被修改过，"
+    "当前内容尚未重新确认，引用时需注明。"
 )
 
 _MISSING_SOURCE_NOTICE = "（没有可用的有效来源）"
@@ -95,11 +104,32 @@ class KnowledgePromptBuilder:
             f"[知识对象 {number}]",
             f"标题：{knowledge_object.title}",
             f"类型：{knowledge_object.kind.label}",
+            f"形成依据：{knowledge_object.epistemic_basis.label}",
             f"重要程度：{knowledge_object.importance.label}",
-            f"状态：{knowledge_object.status.label}（{knowledge_object.status.value}）",
+            f"生命周期：{knowledge_object.lifecycle.label}（{knowledge_object.lifecycle.value}）",
+            (
+                f"确认状态：已确认（第 {knowledge_object.confirmed_revision} 版，"
+                f"当前第 {knowledge_object.current_revision} 版）"
+                if knowledge_object.confirmation_is_current
+                else (
+                    f"确认状态：确认基于旧版（第 {knowledge_object.confirmed_revision} 版，"
+                    f"当前第 {knowledge_object.current_revision} 版）"
+                    if knowledge_object.confirmation_is_stale
+                    else "确认状态：未确认"
+                )
+            ),
         ]
-        if knowledge_object.status is KnowledgeObjectStatus.DRAFT:
-            lines.extend(["", f"> {_DRAFT_WARNING}"])
+        if knowledge_object.confirmation_status is KnowledgeConfirmationStatus.UNCONFIRMED:
+            lines.extend(["", f"> {_UNCONFIRMED_WARNING}"])
+        elif knowledge_object.confirmation_is_stale:
+            lines.extend(["", f"> {_STALE_CONFIRMATION_WARNING}"])
+        if knowledge_object.lifecycle is not KnowledgeLifecycle.ACTIVE:
+            lines.append(
+                f"> 注意：该对象生命周期为“{knowledge_object.lifecycle.label}”，"
+                "仅作历史参考。"
+            )
+        if knowledge_object.superseded_by_ko_id is not None:
+            lines.append(f"> 该对象已被知识对象 {knowledge_object.superseded_by_ko_id} 替代。")
         lines.extend(["", "内容：", knowledge_object.content.strip(), "", "来源："])
         if not view.sources:
             lines.append(_MISSING_SOURCE_NOTICE)

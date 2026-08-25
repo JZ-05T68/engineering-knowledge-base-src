@@ -7,9 +7,29 @@ import sqlite3
 from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
+from uuid import uuid4
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 11
+
+# 仅用于 Phase 2B-V 失败注入验证；生产运行时恒为 None，永不触发。
+_V10_INJECTION_POINT: str | None = None
+# 仅用于 Phase 3B 失败注入验证；生产运行时恒为 None，永不触发。
+_V11_INJECTION_POINT: str | None = None
+
+
+def _inject_v10_failure(point: str) -> None:
+    """Raise inside ``_apply_version_ten`` when ``point`` matches the test hook."""
+
+    if _V10_INJECTION_POINT == point:
+        raise MigrationError(f"v10 迁移失败注入点：{point}")
+
+
+def _inject_v11_failure(point: str) -> None:
+    """Raise inside ``_apply_version_eleven`` when ``point`` matches the test hook."""
+
+    if _V11_INJECTION_POINT == point:
+        raise MigrationError(f"v11 迁移失败注入点：{point}")
 
 
 class MigrationError(RuntimeError):
@@ -76,6 +96,11 @@ def migrate_database(database_path: Path) -> Path | None:
             _apply_version_eight(connection)
         if current_version < 9:
             _apply_version_nine(connection)
+        if current_version < 10:
+            _apply_version_ten(connection)
+        if current_version < 11:
+            _apply_version_eleven(connection)
+            current_version = 11
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -1012,6 +1037,678 @@ def _apply_version_nine(connection: sqlite3.Connection) -> None:
     except Exception:
         connection.rollback()
         raise
+
+
+def _apply_version_ten(connection: sqlite3.Connection) -> None:
+    """Rebuild the knowledge schema onto the v0.5.2 Phase 2B orthogonal model.
+
+    v10 changes (ADR-01/02/04/05/07 of the Phase 2A-R1 decision document):
+
+    - ``knowledge_base_meta``: single-row table with a locally generated UUID v4
+      used to build stable IDs (``<kb_uuid>:<object_type>:<local_id>``);
+    - ``knowledge_objects`` is rebuilt: the compressed ``status``/``reviewed_at``
+      pair is replaced by orthogonal ``lifecycle``/``confirmation_*`` fields plus
+      ``authorship``/``epistemic_basis``/``current_revision`` and the
+      ``superseded_by_ko_id`` successor pointer (ON DELETE RESTRICT). Migrated
+      rows keep ``authorship='user'`` and ``epistemic_basis='unknown_legacy'`` —
+      no origin inference is performed on legacy data;
+    - ``knowledge_object_sources`` gains fingerprint columns; legacy rows keep
+      ``source_fingerprint=NULL`` (the fingerprint state machine is Phase 2C);
+    - ``knowledge_memory_entries`` is rebuilt to hold user-authored memory only
+      (``knowledge_change`` kind removed, ``status`` added);
+    - ``knowledge_object_revisions`` is created as an append-only history table
+      with stable identity snapshots and no foreign key, so deleting a
+      knowledge object never modifies a revision row. Every legacy
+      ``knowledge_change`` row is migrated as a ``legacy_event`` (no fabricated
+      before/after) and every v9 object receives one ``legacy_baseline``
+      revision representing its full content at migration time.
+    """
+
+    fingerprint = _core_data_fingerprint(connection)
+    migration_timestamp = _utc_now()
+    kb_uuid = str(uuid4())
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE knowledge_base_meta (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
+                kb_uuid TEXT NOT NULL UNIQUE CHECK (length(kb_uuid) = 36),
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO knowledge_base_meta(id, kb_uuid, created_at) VALUES (1, ?, ?)",
+            (kb_uuid, migration_timestamp),
+        )
+        _inject_v10_failure("v10_meta")
+
+        connection.execute(
+            """
+            CREATE TABLE knowledge_objects_v10 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN (
+                    'concept', 'fact', 'principle', 'experience',
+                    'problem', 'decision'
+                )),
+                authorship TEXT NOT NULL DEFAULT 'user'
+                    CHECK (authorship IN ('user', 'ai')),
+                epistemic_basis TEXT NOT NULL DEFAULT 'unknown_legacy'
+                    CHECK (epistemic_basis IN (
+                        'source_derived', 'personal_experience',
+                        'personal_judgment', 'direct_observation',
+                        'decision_record', 'problem_definition',
+                        'unknown_legacy'
+                    )),
+                title TEXT NOT NULL CHECK (
+                    length(trim(title)) BETWEEN 1 AND 200
+                ),
+                content TEXT NOT NULL CHECK (
+                    length(content) BETWEEN 1 AND 20000
+                ),
+                importance TEXT NOT NULL DEFAULT 'normal'
+                    CHECK (importance IN ('primary', 'secondary', 'normal')),
+                lifecycle TEXT NOT NULL DEFAULT 'active'
+                    CHECK (lifecycle IN ('active', 'superseded', 'archived')),
+                superseded_by_ko_id INTEGER
+                    REFERENCES knowledge_objects_v10(id) ON DELETE RESTRICT,
+                confirmation_status TEXT NOT NULL DEFAULT 'unconfirmed'
+                    CHECK (confirmation_status IN ('unconfirmed', 'confirmed')),
+                confirmed_at TEXT,
+                confirmed_revision INTEGER,
+                current_revision INTEGER NOT NULL DEFAULT 1
+                    CHECK (current_revision >= 1),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                CHECK (
+                    confirmation_status = 'confirmed'
+                    AND confirmed_at IS NOT NULL
+                    AND confirmed_revision IS NOT NULL
+                OR
+                    confirmation_status = 'unconfirmed'
+                    AND confirmed_at IS NULL
+                ),
+                CHECK (
+                    confirmed_revision IS NULL
+                    OR confirmed_revision <= current_revision
+                ),
+                CHECK (
+                    lifecycle IN ('active', 'archived')
+                    AND superseded_by_ko_id IS NULL
+                OR
+                    lifecycle = 'superseded'
+                    AND superseded_by_ko_id IS NOT NULL
+                )
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO knowledge_objects_v10 (
+                id, kind, authorship, epistemic_basis, title, content, importance,
+                lifecycle, superseded_by_ko_id, confirmation_status, confirmed_at,
+                confirmed_revision, current_revision, created_at, updated_at
+            )
+            SELECT
+                id, kind, 'user', 'unknown_legacy', title, content, importance,
+                CASE status WHEN 'archived' THEN 'archived' ELSE 'active' END,
+                NULL,
+                CASE status WHEN 'reviewed' THEN 'confirmed' ELSE 'unconfirmed' END,
+                reviewed_at,
+                CASE status WHEN 'reviewed' THEN (
+                    SELECT COUNT(*) FROM knowledge_memory_entries
+                    WHERE kind = 'knowledge_change'
+                      AND knowledge_object_id = knowledge_objects.id
+                ) + 1 ELSE NULL END,
+                (
+                    SELECT COUNT(*) FROM knowledge_memory_entries
+                    WHERE kind = 'knowledge_change'
+                      AND knowledge_object_id = knowledge_objects.id
+                ) + 1,
+                created_at, updated_at
+            FROM knowledge_objects
+            """
+        )
+        _inject_v10_failure("v10_objects_copy")
+        _inject_v10_failure("v10_before_drop_rename")
+        connection.execute("DROP TABLE knowledge_objects")
+        connection.execute("ALTER TABLE knowledge_objects_v10 RENAME TO knowledge_objects")
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_kind "
+            "ON knowledge_objects(kind, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_importance "
+            "ON knowledge_objects(importance, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_lifecycle "
+            "ON knowledge_objects(lifecycle, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_objects_superseded_by "
+            "ON knowledge_objects(superseded_by_ko_id)"
+        )
+
+        connection.execute(
+            """
+            CREATE TABLE knowledge_object_revisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                knowledge_object_id INTEGER,
+                object_local_id_snapshot INTEGER,
+                object_stable_id_snapshot TEXT,
+                object_title_snapshot TEXT NOT NULL,
+                object_kind_snapshot TEXT NOT NULL,
+                revision_number INTEGER NOT NULL,
+                event_type TEXT NOT NULL CHECK (event_type IN (
+                    'legacy_baseline', 'legacy_event', 'created',
+                    'content_updated', 'confirmation_changed',
+                    'lifecycle_changed', 'supersession_changed',
+                    'source_linked', 'source_unlinked'
+                )),
+                before_title TEXT,
+                after_title TEXT,
+                before_content TEXT,
+                after_content TEXT,
+                before_lifecycle TEXT,
+                after_lifecycle TEXT,
+                before_confirmation TEXT,
+                after_confirmation TEXT,
+                superseded_by_before INTEGER,
+                superseded_by_after INTEGER,
+                source_ref TEXT,
+                payload_version INTEGER NOT NULL DEFAULT 1
+                    CHECK (payload_version >= 1),
+                detail TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                UNIQUE (knowledge_object_id, revision_number)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_object_revisions_object "
+            "ON knowledge_object_revisions(knowledge_object_id, revision_number)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_object_revisions_stable "
+            "ON knowledge_object_revisions(object_stable_id_snapshot)"
+        )
+
+        object_rows = connection.execute(
+            "SELECT id, kind, title, content, lifecycle, confirmation_status "
+            "FROM knowledge_objects ORDER BY id"
+        ).fetchall()
+        for object_row in object_rows:
+            object_id = int(object_row["id"])
+            stable_id = f"{kb_uuid}:knowledge_object:{object_id}"
+            legacy_rows = connection.execute(
+                "SELECT id, title, content, created_at FROM knowledge_memory_entries "
+                "WHERE kind = 'knowledge_change' AND knowledge_object_id = ? "
+                "ORDER BY created_at ASC, id ASC",
+                (object_id,),
+            ).fetchall()
+            for number, legacy_row in enumerate(legacy_rows, start=1):
+                connection.execute(
+                    """
+                    INSERT INTO knowledge_object_revisions (
+                        knowledge_object_id, object_local_id_snapshot,
+                        object_stable_id_snapshot, object_title_snapshot,
+                        object_kind_snapshot, revision_number, event_type,
+                        detail, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, 'legacy_event', ?, ?)
+                    """,
+                    (
+                        object_id,
+                        object_id,
+                        stable_id,
+                        str(object_row["title"]),
+                        str(object_row["kind"]),
+                        number,
+                        f"{legacy_row['title']}\n{legacy_row['content']}",
+                        str(legacy_row["created_at"]),
+                    ),
+                )
+                _inject_v10_failure("v10_legacy_events")
+            baseline_number = len(legacy_rows) + 1
+            connection.execute(
+                """
+                INSERT INTO knowledge_object_revisions (
+                    knowledge_object_id, object_local_id_snapshot,
+                    object_stable_id_snapshot, object_title_snapshot,
+                    object_kind_snapshot, revision_number, event_type,
+                    after_title, after_content, after_lifecycle,
+                    after_confirmation, detail, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, 'legacy_baseline', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    object_id,
+                    object_id,
+                    stable_id,
+                    str(object_row["title"]),
+                    str(object_row["kind"]),
+                    baseline_number,
+                    str(object_row["title"]),
+                    str(object_row["content"]),
+                    str(object_row["lifecycle"]),
+                    str(object_row["confirmation_status"]),
+                    "迁移基线：v9→v10 迁移时点完整内容快照",
+                    migration_timestamp,
+                ),
+            )
+            _inject_v10_failure("v10_baselines")
+        orphan_rows = connection.execute(
+            "SELECT id, title, content, created_at FROM knowledge_memory_entries "
+            "WHERE kind = 'knowledge_change' AND knowledge_object_id IS NULL "
+            "ORDER BY created_at ASC, id ASC"
+        ).fetchall()
+        for orphan_row in orphan_rows:
+            connection.execute(
+                """
+                INSERT INTO knowledge_object_revisions (
+                    object_title_snapshot, object_kind_snapshot,
+                    revision_number, event_type, detail, created_at
+                ) VALUES (?, 'unknown', 0, 'legacy_event', ?, ?)
+                """,
+                (
+                    _legacy_change_title_snapshot(str(orphan_row["title"])),
+                    f"{orphan_row['title']}\n{orphan_row['content']}",
+                    str(orphan_row["created_at"]),
+                ),
+            )
+
+        connection.execute(
+            """
+            CREATE TABLE knowledge_memory_entries_v10 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN (
+                    'problem_solving', 'experience', 'decision'
+                )),
+                title TEXT NOT NULL CHECK (
+                    length(trim(title)) BETWEEN 1 AND 200
+                ),
+                content TEXT NOT NULL DEFAULT ''
+                    CHECK (length(content) <= 20000),
+                root_cause TEXT NOT NULL DEFAULT ''
+                    CHECK (length(root_cause) <= 4000),
+                lesson TEXT NOT NULL DEFAULT ''
+                    CHECK (length(lesson) <= 4000),
+                knowledge_object_id INTEGER
+                    REFERENCES knowledge_objects(id) ON DELETE SET NULL,
+                document_id INTEGER
+                    REFERENCES documents(id) ON DELETE SET NULL,
+                page_id INTEGER
+                    REFERENCES pages(id) ON DELETE SET NULL,
+                status TEXT NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'archived')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO knowledge_memory_entries_v10 (
+                id, kind, title, content, root_cause, lesson,
+                knowledge_object_id, document_id, page_id, status,
+                created_at, updated_at
+            )
+            SELECT
+                id, kind, title, content, root_cause, lesson,
+                knowledge_object_id, document_id, page_id, 'active',
+                created_at, updated_at
+            FROM knowledge_memory_entries
+            WHERE kind IN ('problem_solving', 'experience', 'decision')
+            """
+        )
+        _inject_v10_failure("v10_memory_copy")
+        connection.execute("DROP TABLE knowledge_memory_entries")
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries_v10 RENAME TO knowledge_memory_entries"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_kind "
+            "ON knowledge_memory_entries(kind, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_ko "
+            "ON knowledge_memory_entries(knowledge_object_id, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_status "
+            "ON knowledge_memory_entries(status, updated_at DESC)"
+        )
+
+        connection.execute(
+            "ALTER TABLE knowledge_object_sources ADD COLUMN source_fingerprint TEXT"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_object_sources "
+            "ADD COLUMN fingerprint_version INTEGER NOT NULL DEFAULT 1"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_object_sources "
+            f"ADD COLUMN captured_at TEXT NOT NULL DEFAULT '{migration_timestamp}'"
+        )
+
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (10, ?)",
+            (migration_timestamp,),
+        )
+        _inject_v10_failure("v10_version_record")
+        if _core_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v10 迁移改变了现有文档、页面或 FTS 数据")
+        _inject_v10_failure("v10_before_commit")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v10")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _apply_version_eleven(connection: sqlite3.Connection) -> None:
+    """Add the v0.5.2 knowledge FTS layer without touching existing data.
+
+    v11 changes (Phase 3 retrieval contract, ADR-06 supplement):
+
+    - ``knowledge_objects`` and ``knowledge_memory_entries`` gain tokenized
+      shadow columns through ``ALTER TABLE ADD COLUMN`` only — the existing
+      tables are never dropped or rebuilt;
+    - every legacy row is backfilled with the exact page-FTS canonical
+      tokenization (``src.database._tokenize_for_fts``, imported lazily to
+      avoid a top-level circular import), so the tokenizer stays a single
+      source of truth and page retrieval semantics are untouched;
+    - two external-content FTS5 tables and their six sync triggers are
+      created, then rebuilt from the shadow columns;
+    - ``knowledge_object_revisions`` never gets an FTS index.
+    """
+
+    fingerprint = _knowledge_data_fingerprint(connection)
+    migration_timestamp = _utc_now()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            "ALTER TABLE knowledge_objects "
+            "ADD COLUMN search_title TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_objects "
+            "ADD COLUMN search_content TEXT NOT NULL DEFAULT ''"
+        )
+        _inject_v11_failure("v11_ko_columns")
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN search_title TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN search_content TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN search_root_cause TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN search_lesson TEXT NOT NULL DEFAULT ''"
+        )
+        _inject_v11_failure("v11_memory_columns")
+
+        _backfill_knowledge_shadow_columns(connection)
+        _inject_v11_failure("v11_ko_backfill")
+        _backfill_memory_shadow_columns(connection)
+        _inject_v11_failure("v11_memory_backfill")
+
+        connection.execute(
+            """
+            CREATE VIRTUAL TABLE knowledge_object_search USING fts5(
+                search_title,
+                search_content,
+                content='knowledge_objects',
+                content_rowid='id',
+                tokenize='unicode61 remove_diacritics 2'
+            )
+            """
+        )
+        _inject_v11_failure("v11_ko_fts")
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_objects_fts_insert
+            AFTER INSERT ON knowledge_objects BEGIN
+                INSERT INTO knowledge_object_search(rowid, search_title, search_content)
+                VALUES (new.id, new.search_title, new.search_content);
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_objects_fts_delete
+            AFTER DELETE ON knowledge_objects BEGIN
+                INSERT INTO knowledge_object_search(
+                    knowledge_object_search, rowid, search_title, search_content
+                ) VALUES (
+                    'delete', old.id, old.search_title, old.search_content
+                );
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_objects_fts_update
+            AFTER UPDATE ON knowledge_objects BEGIN
+                INSERT INTO knowledge_object_search(
+                    knowledge_object_search, rowid, search_title, search_content
+                ) VALUES (
+                    'delete', old.id, old.search_title, old.search_content
+                );
+                INSERT INTO knowledge_object_search(rowid, search_title, search_content)
+                VALUES (new.id, new.search_title, new.search_content);
+            END
+            """
+        )
+        _inject_v11_failure("v11_ko_triggers")
+        connection.execute(
+            """
+            CREATE VIRTUAL TABLE knowledge_memory_search USING fts5(
+                search_title,
+                search_content,
+                search_root_cause,
+                search_lesson,
+                content='knowledge_memory_entries',
+                content_rowid='id',
+                tokenize='unicode61 remove_diacritics 2'
+            )
+            """
+        )
+        _inject_v11_failure("v11_memory_fts")
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_memory_fts_insert
+            AFTER INSERT ON knowledge_memory_entries BEGIN
+                INSERT INTO knowledge_memory_search(
+                    rowid, search_title, search_content, search_root_cause, search_lesson
+                ) VALUES (
+                    new.id, new.search_title, new.search_content,
+                    new.search_root_cause, new.search_lesson
+                );
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_memory_fts_delete
+            AFTER DELETE ON knowledge_memory_entries BEGIN
+                INSERT INTO knowledge_memory_search(
+                    knowledge_memory_search, rowid, search_title, search_content,
+                    search_root_cause, search_lesson
+                ) VALUES (
+                    'delete', old.id, old.search_title, old.search_content,
+                    old.search_root_cause, old.search_lesson
+                );
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_memory_fts_update
+            AFTER UPDATE ON knowledge_memory_entries BEGIN
+                INSERT INTO knowledge_memory_search(
+                    knowledge_memory_search, rowid, search_title, search_content,
+                    search_root_cause, search_lesson
+                ) VALUES (
+                    'delete', old.id, old.search_title, old.search_content,
+                    old.search_root_cause, old.search_lesson
+                );
+                INSERT INTO knowledge_memory_search(
+                    rowid, search_title, search_content, search_root_cause, search_lesson
+                ) VALUES (
+                    new.id, new.search_title, new.search_content,
+                    new.search_root_cause, new.search_lesson
+                );
+            END
+            """
+        )
+        _inject_v11_failure("v11_memory_triggers")
+
+        connection.execute(
+            "INSERT INTO knowledge_object_search(knowledge_object_search) VALUES ('rebuild')"
+        )
+        connection.execute(
+            "INSERT INTO knowledge_memory_search(knowledge_memory_search) VALUES ('rebuild')"
+        )
+        _inject_v11_failure("v11_rebuild")
+
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (11, ?)",
+            (migration_timestamp,),
+        )
+        _inject_v11_failure("v11_version_record")
+        if _knowledge_data_fingerprint(connection) != fingerprint:
+            raise MigrationError("schema v11 迁移改变了现有知识对象、记忆、来源、关系或修订数据")
+        _inject_v11_failure("v11_before_commit")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v11")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _backfill_knowledge_shadow_columns(connection: sqlite3.Connection) -> None:
+    """Tokenize every existing knowledge object into its v11 shadow columns."""
+
+    # Deferred import keeps the canonical page-FTS tokenizer a single source of
+    # truth while avoiding a top-level circular import (src.database imports
+    # this module). No page-retrieval semantics are changed.
+    from src.database import _tokenize_for_fts  # noqa: PLC0415
+
+    rows = connection.execute(
+        "SELECT id, title, content FROM knowledge_objects ORDER BY id"
+    ).fetchall()
+    for row in rows:
+        connection.execute(
+            "UPDATE knowledge_objects SET search_title = ?, search_content = ? WHERE id = ?",
+            (
+                _tokenize_for_fts(str(row[1])),
+                _tokenize_for_fts(str(row[2])),
+                int(row[0]),
+            ),
+        )
+
+
+def _backfill_memory_shadow_columns(connection: sqlite3.Connection) -> None:
+    """Tokenize every existing memory entry into its v11 shadow columns."""
+
+    # Deferred import mirrors ``_backfill_knowledge_shadow_columns``.
+    from src.database import _tokenize_for_fts  # noqa: PLC0415
+
+    rows = connection.execute(
+        "SELECT id, title, content, root_cause, lesson "
+        "FROM knowledge_memory_entries ORDER BY id"
+    ).fetchall()
+    for row in rows:
+        connection.execute(
+            """
+            UPDATE knowledge_memory_entries SET
+                search_title = ?, search_content = ?,
+                search_root_cause = ?, search_lesson = ?
+            WHERE id = ?
+            """,
+            (
+                _tokenize_for_fts(str(row[1])),
+                _tokenize_for_fts(str(row[2])),
+                _tokenize_for_fts(str(row[3])),
+                _tokenize_for_fts(str(row[4])),
+                int(row[0]),
+            ),
+        )
+
+
+def _knowledge_data_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:
+    """Return raw Knowledge Foundation invariants that v11 must preserve.
+
+    Shadow columns are deliberately excluded: they are v11-derived fields and
+    their backfill must never be mistaken for raw-data mutation. Row tuples
+    are compared exactly, which is stronger than a content hash.
+    """
+
+    knowledge_object_ids = tuple(
+        int(row[0])
+        for row in connection.execute(
+            "SELECT id FROM knowledge_objects ORDER BY id"
+        ).fetchall()
+    )
+    knowledge_object_rows = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT id, kind, authorship, epistemic_basis, title, content,"
+            " importance, lifecycle, superseded_by_ko_id, confirmation_status,"
+            " confirmed_at, confirmed_revision, current_revision, created_at,"
+            " updated_at FROM knowledge_objects ORDER BY id"
+        ).fetchall()
+    )
+    memory_ids = tuple(
+        int(row[0])
+        for row in connection.execute(
+            "SELECT id FROM knowledge_memory_entries ORDER BY id"
+        ).fetchall()
+    )
+    memory_rows = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT id, kind, title, content, root_cause, lesson,"
+            " knowledge_object_id, document_id, page_id, status, created_at,"
+            " updated_at FROM knowledge_memory_entries ORDER BY id"
+        ).fetchall()
+    )
+    source_count = int(
+        connection.execute("SELECT COUNT(*) FROM knowledge_object_sources").fetchone()[0]
+    )
+    relation_count = int(
+        connection.execute("SELECT COUNT(*) FROM knowledge_relations").fetchone()[0]
+    )
+    revision_rows = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT * FROM knowledge_object_revisions ORDER BY id"
+        ).fetchall()
+    )
+    return (
+        knowledge_object_ids,
+        knowledge_object_rows,
+        memory_ids,
+        memory_rows,
+        source_count,
+        relation_count,
+        revision_rows,
+    )
+
+
+def _legacy_change_title_snapshot(title: str) -> str:
+    """Extract the object-title portion from a legacy ``知识XX：标题`` log title."""
+
+    if "：" in title:
+        return title.rsplit("：", 1)[1].strip() or title
+    return title
 
 
 def _evidence_item_ids(connection: sqlite3.Connection) -> tuple[int, ...]:

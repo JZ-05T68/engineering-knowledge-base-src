@@ -1,9 +1,9 @@
-"""Streamlit UI helpers for the v0.5.2 knowledge-memory page.
+"""Streamlit UI helpers for the v0.5.2 knowledge-memory page (Phase 2B).
 
-The page is a read-mostly memory surface: user-authored problem-solving /
-experience / decision entries can be created and deleted here, while the
-automatic ``knowledge_change`` log is listed read-only. Entries may link to a
-knowledge object, a document and a page; links are validated by the service.
+The page is a personal-memory surface: user-authored problem-solving /
+experience / decision entries can be created, edited, archived and deleted.
+System change records live in ``knowledge_object_revisions`` and are never
+shown here (Phase 5 will add a dedicated revision history view).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from src.knowledge_memory_service import (
     KnowledgeMemoryService,
     KnowledgeMemoryValidationError,
 )
-from src.models import KnowledgeMemoryEntryKind
+from src.models import KnowledgeMemoryEntryKind, KnowledgeMemoryStatus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -29,19 +29,28 @@ _USER_KINDS = (
     KnowledgeMemoryEntryKind.DECISION,
 )
 
+_STATUS_OPTIONS = [None, *KnowledgeMemoryStatus]
+
 
 def render_knowledge_memory_page(service: KnowledgeMemoryService) -> None:
     """Render the knowledge-memory browsing and entry-creation surface."""
 
     _render_create_form(service)
-    kind = st.selectbox(
+    filter_columns = st.columns([2, 2])
+    kind = filter_columns[0].selectbox(
         "类型",
-        options=[None, *KnowledgeMemoryEntryKind],
+        options=[None, *_USER_KINDS],
         format_func=lambda value: "全部" if value is None else value.label,
         key="km_filter_kind",
     )
-    entries = service.list(kind=kind, limit=PAGE_SIZE)
-    total = service.count(kind=kind)
+    status = filter_columns[1].selectbox(
+        "状态",
+        options=_STATUS_OPTIONS,
+        format_func=lambda value: "全部" if value is None else value.label,
+        key="km_filter_status",
+    )
+    entries = service.list(kind=kind, status=status, limit=PAGE_SIZE)
+    total = service.count(kind=kind, status=status)
     if total == 0:
         st.info(
             "还没有记忆条目。记录问题解决过程、经验和决策，让知识真正留下来。"
@@ -113,10 +122,8 @@ def _render_create_form(service: KnowledgeMemoryService) -> None:
 
 def _render_entry(service: KnowledgeMemoryService, entry) -> None:
     with st.container(border=True):
-        editable = entry.kind is not KnowledgeMemoryEntryKind.KNOWLEDGE_CHANGE
         st.markdown(
-            f"**{entry.title}**　`{entry.kind.label}`"
-            + ("" if editable else "　`系统自动记录`")
+            f"**{entry.title}**　`{entry.kind.label}`　`{entry.status.label}`"
         )
         st.caption(f"ID {entry.id} · 更新于 {entry.updated_at:%Y-%m-%d %H:%M}")
         if entry.content.strip():
@@ -134,7 +141,16 @@ def _render_entry(service: KnowledgeMemoryService, entry) -> None:
             link_parts.append(f"页面 {entry.page_id}")
         if link_parts:
             st.caption("关联：" + "、".join(link_parts))
-        if editable and st.button("删除记忆条目", key=f"km_delete_{entry.id}"):
+        action_columns = st.columns([1, 1])
+        if entry.status is KnowledgeMemoryStatus.ACTIVE:
+            if action_columns[0].button("归档", key=f"km_archive_{entry.id}"):
+                service.set_status(entry.id, status="archived")
+                st.rerun()
+        else:
+            if action_columns[0].button("重新启用", key=f"km_unarchive_{entry.id}"):
+                service.set_status(entry.id, status="active")
+                st.rerun()
+        if action_columns[1].button("删除记忆条目", key=f"km_delete_{entry.id}"):
             try:
                 service.delete_entry(entry.id)
             except KnowledgeMemoryEntryNotFoundError as exc:

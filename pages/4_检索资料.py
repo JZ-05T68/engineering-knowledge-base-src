@@ -20,12 +20,14 @@ from src.evidence_basket_service import (
     EvidenceBasketError,
 )
 from src.evidence_service import EvidencePackageBuilder
+from src.knowledge_search_ui import render_knowledge_result_card
 from src.models import (
     PageStatus,
     SearchField,
     SearchFilters,
     SearchMode,
     SearchResult,
+    SearchScope,
     SearchSort,
     SearchViewMode,
 )
@@ -36,6 +38,7 @@ from src.runtime import (
     application_database,
     application_evidence_basket_service,
     application_hybrid_search_service,
+    application_knowledge_search_service,
     application_page_batch_service,
 )
 from src.search_history import search_history_reload_html
@@ -103,6 +106,7 @@ def _state_signature(state: SearchPageState) -> tuple[object, ...]:
     filters = state.filters
     return (
         state.query,
+        state.scope,
         filters.document_ids,
         filters.project_ids,
         filters.tag_ids,
@@ -134,6 +138,7 @@ def _search_projection(state: SearchPageState) -> tuple[object, ...]:
     filters = state.filters
     return (
         state.query,
+        state.scope,
         filters.document_ids,
         filters.project_ids,
         filters.tag_ids,
@@ -163,14 +168,41 @@ def _set_widget_state(state: SearchPageState) -> None:
     st.session_state["search_in_basket"] = filters.evidence_basket_id is not None
     st.session_state["search_sort_value"] = state.sort.value
     st.session_state["search_mode_value"] = state.mode.value
+    st.session_state["search_scope_value"] = state.scope.value
     st.session_state["search_limit"] = state.limit
     st.session_state["search_filters_open"] = state.filters_open
     st.session_state["search_view_mode"] = state.view_mode.value
 
 
+def _run_knowledge_search(state: SearchPageState) -> None:
+    """Execute the offline personal-knowledge search and store its result set.
+
+    The service is resolved lazily here (not at page import), mirroring the
+    hybrid boundary: a page-scope search never constructs the knowledge search
+    service. Results live under ``knowledge_scope_results`` so the page-scope
+    ``knowledge_results`` key keeps its exact legacy meaning.
+    """
+
+    try:
+        results = application_knowledge_search_service().search(
+            state.query, limit=state.limit
+        )
+    except Exception as exc:
+        LOGGER.exception("个人知识检索失败：query=%r", state.query)
+        st.session_state["search_error"] = f"检索失败：{exc}"
+        st.session_state["knowledge_scope_results"] = []
+    else:
+        st.session_state.pop("search_error", None)
+        st.session_state["knowledge_scope_results"] = list(results)
+        st.session_state["search_executed_projection"] = _search_projection(state)
+
+
 def _search_with_state(state: SearchPageState) -> None:
     """Execute the active state and keep v0.0.5 session keys compatible."""
 
+    if state.scope is SearchScope.KNOWLEDGE:
+        _run_knowledge_search(state)
+        return
     st.session_state["knowledge_query"] = state.query
     st.session_state["knowledge_filters"] = state.filters
     st.session_state["knowledge_sort"] = state.sort.value
@@ -284,6 +316,54 @@ def _activate_state(
         st.rerun()
 
 
+def _knowledge_state_from_widgets(active: SearchPageState) -> SearchPageState:
+    """Build a knowledge-scope state from the shared query widget."""
+
+    return SearchPageState(
+        query=str(st.session_state["search_query_input"])[:500],
+        scope=SearchScope.KNOWLEDGE,
+        limit=active.limit,
+        result_page=1,
+    )
+
+
+def _render_knowledge_scope(state: SearchPageState) -> None:
+    """Render the personal-knowledge search scope (Phase 3D)."""
+
+    st.caption(
+        "当前为个人知识检索范围；检索知识对象与知识记忆，"
+        "默认只返回现行（ACTIVE）状态的知识资产。"
+    )
+    st.text_input(
+        "搜索内容",
+        key="search_query_input",
+        placeholder="例如：液压泵 汽蚀 或 \"cavitation analysis\"",
+        help="多个词为 OR；用英文双引号表示连续短语。本范围完全离线，不调用 AI。",
+    )
+    if st.button(
+        "搜索个人知识",
+        type="primary",
+        use_container_width=True,
+        key="apply_search_filters",
+    ):
+        _activate_state(_knowledge_state_from_widgets(state))
+
+    search_error = st.session_state.pop("search_error", "")
+    if search_error:
+        st.error(search_error)
+
+    knowledge_results = st.session_state.get("knowledge_scope_results", [])
+    if not state.query.strip():
+        st.info("请输入要检索的个人知识关键词。")
+        return
+    if not knowledge_results:
+        st.info("没有找到匹配的个人知识。可尝试更短的关键词，或切换回页面资料检索。")
+        return
+    st.subheader(f"个人知识检索结果（已载入 {len(knowledge_results)} 条）")
+    for index, result in enumerate(knowledge_results, start=1):
+        render_knowledge_result_card(result, index)
+
+
 def _state_from_widgets(active: SearchPageState, basket_id: int) -> SearchPageState:
     """Build a typed state using only whitelisted widget values."""
 
@@ -323,6 +403,7 @@ def _state_from_widgets(active: SearchPageState, basket_id: int) -> SearchPageSt
         filters=filters,
         sort=sort,
         mode=mode,
+        scope=active.scope,
         limit=int(st.session_state["search_limit"]),
         result_page=active.result_page if keep_page else 1,
         filters_open=active.filters_open,
@@ -385,11 +466,6 @@ except Exception as exc:
     st.error(f"初始化检索服务失败：{exc}")
     st.stop()
 
-if not all_documents:
-    st.info("知识库中还没有文档，因此暂无可检索内容。请先导入第一份 PDF。")
-    if st.button("📥 前往导入资料", use_container_width=True):
-        st.switch_page("pages/1_导入资料.py")
-
 document_names = {
     document.id: document.title.strip() or document.filename.strip() or f"文档 {document.id}"
     for document in all_documents
@@ -416,7 +492,11 @@ if url_has_state and st.session_state.get("search_url_signature") != url_signatu
     _set_widget_state(url_state)
     executed_projection = st.session_state.get("search_executed_projection")
     already_executed = _search_projection(url_state) == executed_projection
-    if auto_execute_allowed(
+    if url_state.scope is SearchScope.KNOWLEDGE:
+        # Knowledge search is free and offline; restore it like a keyword URL.
+        if not already_executed:
+            _search_with_state(url_state)
+    elif auto_execute_allowed(
         url_state.mode,
         url_state.filters,
         url_state.sort,
@@ -476,6 +556,7 @@ for key, value in {
     "search_in_basket": active_state.filters.evidence_basket_id is not None,
     "search_sort_value": active_state.sort.value,
     "search_mode_value": active_state.mode.value,
+    "search_scope_value": active_state.scope.value,
     "search_limit": active_state.limit,
     "search_filters_open": active_state.filters_open,
     "search_view_mode": active_state.view_mode.value,
@@ -485,6 +566,37 @@ for key, value in {
 }.items():
     if key not in st.session_state:
         st.session_state[key] = value.copy() if isinstance(value, list) else value
+
+scope_value = st.radio(
+    "检索范围",
+    options=[scope.value for scope in SearchScope],
+    format_func=lambda value: SearchScope(value).label,
+    key="search_scope_value",
+    horizontal=True,
+    help="页面资料沿用原有页面检索；个人知识检索知识对象与知识记忆。",
+)
+if SearchScope(scope_value) is not active_state.scope:
+    _activate_state(
+        replace(
+            active_state,
+            scope=SearchScope(scope_value),
+            result_page=1,
+            expanded_document_id=None,
+            preview_page_id=None,
+            focus_result=None,
+        ),
+        remember_previous=False,
+        refresh_results=False,
+    )
+
+if active_state.scope is SearchScope.KNOWLEDGE:
+    _render_knowledge_scope(active_state)
+    st.stop()
+
+if not all_documents:
+    st.info("知识库中还没有文档，因此暂无可检索内容。请先导入第一份 PDF。")
+    if st.button("📥 前往导入资料", use_container_width=True):
+        st.switch_page("pages/1_导入资料.py")
 
 try:
     facet_counts = search_service.facet_counts(

@@ -7,7 +7,7 @@ import re
 import sqlite3
 import unicodedata
 from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager, nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
@@ -17,19 +17,29 @@ import jieba
 from src.ai.embedding_store import decode_vector, encode_vector
 from src.migrations import SCHEMA_VERSION, MigrationError, migrate_database
 from src.models import (
+    KNOWLEDGE_MEMORY_STABLE_TYPE,
+    KNOWLEDGE_OBJECT_STABLE_TYPE,
     DashboardStats,
     Document,
     ImportRecord,
     ImportStatus,
+    KnowledgeAuthorship,
+    KnowledgeConfirmationStatus,
+    KnowledgeEpistemicBasis,
+    KnowledgeLifecycle,
     KnowledgeMemoryEntry,
     KnowledgeMemoryEntryKind,
+    KnowledgeMemoryStatus,
     KnowledgeObject,
     KnowledgeObjectKind,
     KnowledgeObjectSource,
     KnowledgeObjectSourceType,
-    KnowledgeObjectStatus,
     KnowledgeRelation,
     KnowledgeRelationType,
+    KnowledgeRevision,
+    KnowledgeRevisionEventType,
+    KnowledgeSearchResult,
+    KnowledgeSearchResultType,
     NoteImportance,
     Page,
     PageEmbedding,
@@ -45,6 +55,7 @@ from src.models import (
     SearchResult,
     SearchSort,
     Tag,
+    build_stable_id,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -1604,7 +1615,52 @@ class Database:
             ).fetchall()
         return tuple(_page_embedding_from_row(row) for row in rows)
 
-    # Knowledge objects (schema v9) ---------------------------------------
+    # Knowledge objects (schema v10) ---------------------------------------
+    def get_knowledge_base_uuid(self) -> str:
+        """Return the persistent local knowledge-base UUID created by v10."""
+
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT kb_uuid FROM knowledge_base_meta WHERE id = 1"
+            ).fetchone()
+        if row is None:
+            raise DatabaseError("知识库元数据缺失：knowledge_base_meta 无记录")
+        return str(row["kb_uuid"])
+
+    def knowledge_object_stable_id(self, knowledge_object_id: int) -> str:
+        """Return the canonical stable ID for one knowledge object."""
+
+        return build_stable_id(
+            self.get_knowledge_base_uuid(),
+            KNOWLEDGE_OBJECT_STABLE_TYPE,
+            knowledge_object_id,
+        )
+
+    @contextmanager
+    def knowledge_transaction(self) -> Iterator[sqlite3.Connection]:
+        """Run one multi-statement knowledge mutation in a single transaction.
+
+        Yields a connection with ``BEGIN IMMEDIATE`` already issued. On any
+        exception the whole transaction rolls back and nothing is committed.
+        """
+
+        with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            try:
+                yield connection
+            except Exception:
+                connection.rollback()
+                raise
+            else:
+                connection.commit()
+
+    def _knowledge_scope(
+        self, connection: sqlite3.Connection | None
+    ) -> AbstractContextManager[sqlite3.Connection]:
+        if connection is not None:
+            return nullcontext(connection)
+        return self._connection()
+
     def create_knowledge_object(
         self,
         *,
@@ -1612,13 +1668,25 @@ class Database:
         title: str,
         content: str,
         importance: NoteImportance | str = NoteImportance.NORMAL,
-        status: KnowledgeObjectStatus | str = KnowledgeObjectStatus.DRAFT,
+        authorship: KnowledgeAuthorship | str = KnowledgeAuthorship.USER,
+        epistemic_basis: KnowledgeEpistemicBasis | str = KnowledgeEpistemicBasis.UNKNOWN_LEGACY,
+        lifecycle: KnowledgeLifecycle | str = KnowledgeLifecycle.ACTIVE,
+        confirmation_status: KnowledgeConfirmationStatus
+        | str = KnowledgeConfirmationStatus.UNCONFIRMED,
+        connection: sqlite3.Connection | None = None,
     ) -> KnowledgeObject:
-        """Persist one knowledge object with validated enum and length fields."""
+        """Persist one knowledge object with validated orthogonal fields."""
 
         normalized_kind = KnowledgeObjectKind(kind)
         normalized_importance = NoteImportance(importance)
-        normalized_status = KnowledgeObjectStatus(status)
+        normalized_authorship = KnowledgeAuthorship(authorship)
+        if normalized_authorship is KnowledgeAuthorship.AI:
+            raise ValueError("v0.5.2 不允许创建 AI 署名的知识对象")
+        normalized_basis = KnowledgeEpistemicBasis(epistemic_basis)
+        normalized_lifecycle = KnowledgeLifecycle(lifecycle)
+        normalized_confirmation = KnowledgeConfirmationStatus(confirmation_status)
+        if normalized_confirmation is KnowledgeConfirmationStatus.CONFIRMED:
+            raise ValueError("新知识对象必须以未确认状态创建")
         normalized_title = title.strip()
         normalized_content = content.strip()
         if not normalized_title:
@@ -1630,26 +1698,29 @@ class Database:
         if len(normalized_content) > 20000:
             raise ValueError("知识对象内容不能超过 20000 个字符")
         timestamp = _utc_now()
-        reviewed_at = (
-            timestamp if normalized_status is KnowledgeObjectStatus.REVIEWED else None
-        )
-        with self._connection() as connection:
+        with self._knowledge_scope(connection) as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO knowledge_objects(
-                    kind, title, content, importance, status,
-                    created_at, updated_at, reviewed_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    kind, authorship, epistemic_basis, title, content, importance,
+                    lifecycle, superseded_by_ko_id, confirmation_status,
+                    confirmed_at, confirmed_revision, current_revision,
+                    search_title, search_content, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, NULL, NULL, 1, ?, ?, ?, ?)
                 """,
                 (
                     normalized_kind.value,
+                    normalized_authorship.value,
+                    normalized_basis.value,
                     normalized_title,
                     normalized_content,
                     normalized_importance.value,
-                    normalized_status.value,
+                    normalized_lifecycle.value,
+                    normalized_confirmation.value,
+                    _tokenize_for_fts(normalized_title),
+                    _tokenize_for_fts(normalized_content),
                     timestamp,
                     timestamp,
-                    reviewed_at,
                 ),
             )
             row = connection.execute(
@@ -1666,23 +1737,20 @@ class Database:
             ).fetchone()
         return _knowledge_object_from_row(row) if row is not None else None
 
-    def update_knowledge_object(
+    def update_knowledge_object_content(
         self,
         knowledge_object_id: int,
         *,
+        new_revision: int,
         title: str | None = None,
         content: str | None = None,
         importance: NoteImportance | str | None = None,
-        status: KnowledgeObjectStatus | str | None = None,
+        connection: sqlite3.Connection | None = None,
     ) -> KnowledgeObject:
-        """Update selected knowledge-object fields in one transaction.
+        """Update content fields and advance ``current_revision`` atomically."""
 
-        Moving into ``reviewed`` stamps ``reviewed_at``; leaving it clears the
-        stamp. ``updated_at`` always advances, using the same microsecond
-        alternation trick as ``update_page`` so rapid successive edits are
-        observable.
-        """
-
+        if isinstance(new_revision, bool) or not isinstance(new_revision, int) or new_revision <= 0:
+            raise ValueError("new_revision 必须是正整数")
         assignments: list[str] = []
         values: list[object] = []
         if title is not None:
@@ -1693,6 +1761,8 @@ class Database:
                 raise ValueError("知识对象标题不能超过 200 个字符")
             assignments.append("title = ?")
             values.append(normalized_title)
+            assignments.append("search_title = ?")
+            values.append(_tokenize_for_fts(normalized_title))
         if content is not None:
             normalized_content = content.strip()
             if not normalized_content:
@@ -1701,32 +1771,24 @@ class Database:
                 raise ValueError("知识对象内容不能超过 20000 个字符")
             assignments.append("content = ?")
             values.append(normalized_content)
+            assignments.append("search_content = ?")
+            values.append(_tokenize_for_fts(normalized_content))
         if importance is not None:
             assignments.append("importance = ?")
             values.append(NoteImportance(importance).value)
-        if status is not None:
-            normalized_status = KnowledgeObjectStatus(status)
-            assignments.extend(("status = ?", "reviewed_at = ?"))
-            values.extend(
-                (
-                    normalized_status.value,
-                    _utc_now() if normalized_status is KnowledgeObjectStatus.REVIEWED else None,
-                )
-            )
         if not assignments:
-            knowledge_object = self.get_knowledge_object(knowledge_object_id)
-            if knowledge_object is None:
-                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
-            return knowledge_object
+            raise ValueError("至少提供 title、content 或 importance 之一")
         timestamp = _utc_now()
         alternate_timestamp = (
             datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
         ).isoformat(timespec="microseconds")
+        assignments.append("current_revision = ?")
+        values.append(new_revision)
         assignments.append(
             "updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END"
         )
         values.extend((timestamp, alternate_timestamp, timestamp, knowledge_object_id))
-        with self._connection() as connection:
+        with self._knowledge_scope(connection) as connection:
             cursor = connection.execute(
                 f"UPDATE knowledge_objects SET {', '.join(assignments)} WHERE id = ?",
                 values,
@@ -1738,12 +1800,154 @@ class Database:
             ).fetchone()
         return _knowledge_object_from_row(row)
 
+    def update_knowledge_object_epistemic_basis(
+        self,
+        knowledge_object_id: int,
+        *,
+        epistemic_basis: KnowledgeEpistemicBasis | str,
+        new_revision: int,
+        connection: sqlite3.Connection | None = None,
+    ) -> KnowledgeObject:
+        """Revise ``epistemic_basis`` and advance ``current_revision`` atomically.
+
+        ``unknown_legacy`` is reserved for v9 migration backfill (written via
+        raw migration SQL, never through this method) and is rejected here.
+        """
+
+        normalized_basis = KnowledgeEpistemicBasis(epistemic_basis)
+        if normalized_basis is KnowledgeEpistemicBasis.UNKNOWN_LEGACY:
+            raise ValueError("形成依据不能改为「未知（旧数据）」")
+        if isinstance(new_revision, bool) or not isinstance(new_revision, int) or new_revision <= 0:
+            raise ValueError("new_revision 必须是正整数")
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        with self._knowledge_scope(connection) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE knowledge_objects SET
+                    epistemic_basis = ?,
+                    current_revision = ?,
+                    updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END
+                WHERE id = ?
+                """,
+                (
+                    normalized_basis.value,
+                    new_revision,
+                    timestamp,
+                    alternate_timestamp,
+                    timestamp,
+                    knowledge_object_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            ).fetchone()
+        return _knowledge_object_from_row(row)
+
+    def update_knowledge_object_confirmation(
+        self,
+        knowledge_object_id: int,
+        *,
+        confirmation_status: KnowledgeConfirmationStatus | str,
+        confirmed_at: str | None,
+        confirmed_revision: int | None,
+        connection: sqlite3.Connection | None = None,
+    ) -> KnowledgeObject:
+        """Update the confirmation fields of one knowledge object."""
+
+        normalized_status = KnowledgeConfirmationStatus(confirmation_status)
+        if normalized_status is KnowledgeConfirmationStatus.CONFIRMED:
+            if confirmed_at is None or confirmed_revision is None:
+                raise ValueError("确认状态必须同时写入 confirmed_at 与 confirmed_revision")
+        elif confirmed_at is not None:
+            raise ValueError("未确认状态不能携带 confirmed_at")
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        with self._knowledge_scope(connection) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE knowledge_objects SET
+                    confirmation_status = ?,
+                    confirmed_at = ?,
+                    confirmed_revision = ?,
+                    updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END
+                WHERE id = ?
+                """,
+                (
+                    normalized_status.value,
+                    confirmed_at,
+                    confirmed_revision,
+                    timestamp,
+                    alternate_timestamp,
+                    timestamp,
+                    knowledge_object_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            ).fetchone()
+        return _knowledge_object_from_row(row)
+
+    def update_knowledge_object_lifecycle(
+        self,
+        knowledge_object_id: int,
+        *,
+        lifecycle: KnowledgeLifecycle | str,
+        superseded_by_ko_id: int | None,
+        connection: sqlite3.Connection | None = None,
+    ) -> KnowledgeObject:
+        """Update the lifecycle fields of one knowledge object.
+
+        The caller must satisfy the lifecycle/pointer CHECK invariants:
+        active/archived carry NULL, superseded carries a successor. The
+        database CHECK is the second line of defence.
+        """
+
+        normalized_lifecycle = KnowledgeLifecycle(lifecycle)
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        with self._knowledge_scope(connection) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE knowledge_objects SET
+                    lifecycle = ?,
+                    superseded_by_ko_id = ?,
+                    updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END
+                WHERE id = ?
+                """,
+                (
+                    normalized_lifecycle.value,
+                    superseded_by_ko_id,
+                    timestamp,
+                    alternate_timestamp,
+                    timestamp,
+                    knowledge_object_id,
+                ),
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            ).fetchone()
+        return _knowledge_object_from_row(row)
     def list_knowledge_objects(
         self,
         *,
         kind: KnowledgeObjectKind | str | None = None,
         importance: NoteImportance | str | None = None,
-        status: KnowledgeObjectStatus | str | None = None,
+        lifecycle: KnowledgeLifecycle | str | None = None,
+        confirmation_status: KnowledgeConfirmationStatus | str | None = None,
+        epistemic_basis: KnowledgeEpistemicBasis | str | None = None,
         query: str = "",
         sort_by: str = "updated_desc",
         limit: int = 100,
@@ -1758,7 +1962,12 @@ class Database:
             "title_asc": "title COLLATE NOCASE ASC, id ASC",
         }.get(sort_by, "updated_at DESC, id DESC")
         where, parameters = self._knowledge_object_where(
-            kind=kind, importance=importance, status=status, query=query
+            kind=kind,
+            importance=importance,
+            lifecycle=lifecycle,
+            confirmation_status=confirmation_status,
+            epistemic_basis=epistemic_basis,
+            query=query,
         )
         with self._connection() as connection:
             rows = connection.execute(
@@ -1773,13 +1982,20 @@ class Database:
         *,
         kind: KnowledgeObjectKind | str | None = None,
         importance: NoteImportance | str | None = None,
-        status: KnowledgeObjectStatus | str | None = None,
+        lifecycle: KnowledgeLifecycle | str | None = None,
+        confirmation_status: KnowledgeConfirmationStatus | str | None = None,
+        epistemic_basis: KnowledgeEpistemicBasis | str | None = None,
         query: str = "",
     ) -> int:
         """Count knowledge objects with exactly the same filters as the list."""
 
         where, parameters = self._knowledge_object_where(
-            kind=kind, importance=importance, status=status, query=query
+            kind=kind,
+            importance=importance,
+            lifecycle=lifecycle,
+            confirmation_status=confirmation_status,
+            epistemic_basis=epistemic_basis,
+            query=query,
         )
         with self._connection() as connection:
             return int(
@@ -1792,22 +2008,46 @@ class Database:
         """Delete one knowledge object plus its sources and relations.
 
         ``knowledge_memory_entries`` survive with ``knowledge_object_id`` set
-        to NULL (``ON DELETE SET NULL``). Never touches any source material.
+        to NULL (``ON DELETE SET NULL``); revision rows are never touched. A
+        successor object that still has superseded predecessors is protected
+        by the ``ON DELETE RESTRICT`` foreign key; the service pre-checks this
+        to produce a clear Chinese error.
         """
 
+        try:
+            with self._connection() as connection:
+                cursor = connection.execute(
+                    "DELETE FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+                )
+                if cursor.rowcount == 0:
+                    raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
+        except sqlite3.IntegrityError as exc:
+            if "FOREIGN KEY" in str(exc):
+                raise DatabaseError(
+                    "该知识对象仍被其它知识对象作为替代后继引用，请先处置替代关系"
+                ) from exc
+            raise
+
+    def count_inbound_supersessions(self, knowledge_object_id: int) -> int:
+        """Return how many superseded objects point at this object."""
+
         with self._connection() as connection:
-            cursor = connection.execute(
-                "DELETE FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
+            return int(
+                connection.execute(
+                    "SELECT COUNT(*) FROM knowledge_objects "
+                    "WHERE superseded_by_ko_id = ?",
+                    (knowledge_object_id,),
+                ).fetchone()[0]
             )
-            if cursor.rowcount == 0:
-                raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}")
 
     @staticmethod
     def _knowledge_object_where(
         *,
         kind: KnowledgeObjectKind | str | None,
         importance: NoteImportance | str | None,
-        status: KnowledgeObjectStatus | str | None,
+        lifecycle: KnowledgeLifecycle | str | None,
+        confirmation_status: KnowledgeConfirmationStatus | str | None,
+        epistemic_basis: KnowledgeEpistemicBasis | str | None,
         query: str,
     ) -> tuple[str, list[object]]:
         conditions: list[str] = []
@@ -1818,9 +2058,15 @@ class Database:
         if importance is not None:
             conditions.append("importance = ?")
             parameters.append(NoteImportance(importance).value)
-        if status is not None:
-            conditions.append("status = ?")
-            parameters.append(KnowledgeObjectStatus(status).value)
+        if lifecycle is not None:
+            conditions.append("lifecycle = ?")
+            parameters.append(KnowledgeLifecycle(lifecycle).value)
+        if confirmation_status is not None:
+            conditions.append("confirmation_status = ?")
+            parameters.append(KnowledgeConfirmationStatus(confirmation_status).value)
+        if epistemic_basis is not None:
+            conditions.append("epistemic_basis = ?")
+            parameters.append(KnowledgeEpistemicBasis(epistemic_basis).value)
         normalized_query = query.strip()
         if normalized_query:
             pattern = _like_pattern(normalized_query)
@@ -1836,7 +2082,7 @@ class Database:
         if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
             raise ValueError("offset 必须是非负整数")
 
-    # Knowledge object sources (schema v9) --------------------------------
+    # Knowledge object sources (schema v10) --------------------------------
     def add_knowledge_object_source(
         self,
         *,
@@ -1844,8 +2090,16 @@ class Database:
         source_type: KnowledgeObjectSourceType | str,
         source_id: int,
         source_note: str = "",
+        source_fingerprint: str | None = None,
+        fingerprint_version: int = 1,
+        connection: sqlite3.Connection | None = None,
     ) -> KnowledgeObjectSource:
-        """Link one knowledge object to one local source entity."""
+        """Link one knowledge object to one local source entity.
+
+        ``source_fingerprint`` is the canonical snapshot captured at link time;
+        passing ``None`` (legacy/backward-compatible default) stores the
+        UNKNOWN state. Target existence stays a service-layer check.
+        """
 
         normalized_type = KnowledgeObjectSourceType(source_type)
         _validate_positive_id(knowledge_object_id, "知识对象 ID")
@@ -1854,19 +2108,23 @@ class Database:
             raise ValueError("来源说明不能超过 500 个字符")
         timestamp = _utc_now()
         try:
-            with self._connection() as connection:
+            with self._knowledge_scope(connection) as connection:
                 cursor = connection.execute(
                     """
                     INSERT INTO knowledge_object_sources(
                         knowledge_object_id, source_type, source_id,
-                        source_note, created_at
-                    ) VALUES (?, ?, ?, ?, ?)
+                        source_note, source_fingerprint, fingerprint_version,
+                        captured_at, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         knowledge_object_id,
                         normalized_type.value,
                         source_id,
                         source_note.strip(),
+                        source_fingerprint,
+                        fingerprint_version,
+                        timestamp,
                         timestamp,
                     ),
                 )
@@ -1878,6 +2136,36 @@ class Database:
             if "FOREIGN KEY" in str(exc):
                 raise RecordNotFoundError(f"知识对象不存在：{knowledge_object_id}") from exc
             raise DatabaseError("该来源已经关联到该知识对象") from exc
+        return _knowledge_object_source_from_row(row)
+
+    def update_knowledge_object_source_fingerprint(
+        self,
+        source_id: int,
+        *,
+        source_fingerprint: str,
+        fingerprint_version: int = 1,
+        connection: sqlite3.Connection | None = None,
+    ) -> KnowledgeObjectSource:
+        """Recapture the canonical fingerprint of one existing source link."""
+
+        _validate_positive_id(source_id, "来源 ID")
+        timestamp = _utc_now()
+        with self._knowledge_scope(connection) as connection:
+            cursor = connection.execute(
+                """
+                UPDATE knowledge_object_sources SET
+                    source_fingerprint = ?,
+                    fingerprint_version = ?,
+                    captured_at = ?
+                WHERE id = ?
+                """,
+                (source_fingerprint, fingerprint_version, timestamp, source_id),
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"知识对象来源不存在：{source_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_object_sources WHERE id = ?", (source_id,)
+            ).fetchone()
         return _knowledge_object_source_from_row(row)
 
     def get_knowledge_object_source(self, source_id: int) -> KnowledgeObjectSource | None:
@@ -1904,10 +2192,12 @@ class Database:
             ).fetchall()
         return [_knowledge_object_source_from_row(row) for row in rows]
 
-    def remove_knowledge_object_source(self, source_id: int) -> None:
+    def remove_knowledge_object_source(
+        self, source_id: int, *, connection: sqlite3.Connection | None = None
+    ) -> None:
         """Remove one source link; the source material itself is never touched."""
 
-        with self._connection() as connection:
+        with self._knowledge_scope(connection) as connection:
             cursor = connection.execute(
                 "DELETE FROM knowledge_object_sources WHERE id = ?", (source_id,)
             )
@@ -1995,7 +2285,7 @@ class Database:
             if cursor.rowcount == 0:
                 raise RecordNotFoundError(f"知识关系不存在：{relation_id}")
 
-    # Knowledge memory entries (schema v9) --------------------------------
+    # Knowledge memory entries (schema v10) --------------------------------
     def create_knowledge_memory_entry(
         self,
         *,
@@ -2007,10 +2297,12 @@ class Database:
         knowledge_object_id: int | None = None,
         document_id: int | None = None,
         page_id: int | None = None,
+        status: KnowledgeMemoryStatus | str = KnowledgeMemoryStatus.ACTIVE,
     ) -> KnowledgeMemoryEntry:
-        """Persist one memory entry with optional knowledge/source links."""
+        """Persist one user-authored memory entry with optional links."""
 
         normalized_kind = KnowledgeMemoryEntryKind(kind)
+        normalized_status = KnowledgeMemoryStatus(status)
         normalized_title = title.strip()
         if not normalized_title:
             raise ValueError("记忆标题不能为空")
@@ -2032,9 +2324,10 @@ class Database:
                     """
                     INSERT INTO knowledge_memory_entries(
                         kind, title, content, root_cause, lesson,
-                        knowledge_object_id, document_id, page_id,
-                        created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        knowledge_object_id, document_id, page_id, status,
+                        search_title, search_content, search_root_cause,
+                        search_lesson, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         normalized_kind.value,
@@ -2045,6 +2338,11 @@ class Database:
                         knowledge_object_id,
                         document_id,
                         page_id,
+                        normalized_status.value,
+                        _tokenize_for_fts(normalized_title),
+                        _tokenize_for_fts(content),
+                        _tokenize_for_fts(root_cause),
+                        _tokenize_for_fts(lesson),
                         timestamp,
                         timestamp,
                     ),
@@ -2089,6 +2387,8 @@ class Database:
                 raise ValueError("记忆标题不能超过 200 个字符")
             assignments.append("title = ?")
             values.append(normalized_title)
+            assignments.append("search_title = ?")
+            values.append(_tokenize_for_fts(normalized_title))
         for field, value, max_length in (
             ("content", content, 20000),
             ("root_cause", root_cause, 4000),
@@ -2097,8 +2397,11 @@ class Database:
             if value is not None:
                 if len(value) > max_length:
                     raise ValueError(f"{field} 超过最大长度")
+                normalized_value = value.strip()
                 assignments.append(f"{field} = ?")
-                values.append(value.strip())
+                values.append(normalized_value)
+                assignments.append(f"search_{field} = ?")
+                values.append(_tokenize_for_fts(normalized_value))
         if not assignments:
             entry = self.get_knowledge_memory_entry(entry_id)
             if entry is None:
@@ -2125,10 +2428,41 @@ class Database:
             ).fetchone()
         return _knowledge_memory_entry_from_row(row)
 
+    def update_knowledge_memory_status(
+        self,
+        entry_id: int,
+        *,
+        status: KnowledgeMemoryStatus | str,
+    ) -> KnowledgeMemoryEntry:
+        """Archive or reactivate one personal memory entry."""
+
+        normalized_status = KnowledgeMemoryStatus(status)
+        timestamp = _utc_now()
+        alternate_timestamp = (
+            datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
+        ).isoformat(timespec="microseconds")
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE knowledge_memory_entries SET
+                    status = ?,
+                    updated_at = CASE WHEN updated_at = ? THEN ? ELSE ? END
+                WHERE id = ?
+                """,
+                (normalized_status.value, timestamp, alternate_timestamp, timestamp, entry_id),
+            )
+            if cursor.rowcount == 0:
+                raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
+            row = connection.execute(
+                "SELECT * FROM knowledge_memory_entries WHERE id = ?", (entry_id,)
+            ).fetchone()
+        return _knowledge_memory_entry_from_row(row)
+
     def list_knowledge_memory_entries(
         self,
         *,
         kind: KnowledgeMemoryEntryKind | str | None = None,
+        status: KnowledgeMemoryStatus | str | None = None,
         knowledge_object_id: int | None = None,
         limit: int = 100,
         offset: int = 0,
@@ -2141,6 +2475,9 @@ class Database:
         if kind is not None:
             conditions.append("kind = ?")
             parameters.append(KnowledgeMemoryEntryKind(kind).value)
+        if status is not None:
+            conditions.append("status = ?")
+            parameters.append(KnowledgeMemoryStatus(status).value)
         if knowledge_object_id is not None:
             conditions.append("knowledge_object_id = ?")
             parameters.append(knowledge_object_id)
@@ -2157,6 +2494,7 @@ class Database:
         self,
         *,
         kind: KnowledgeMemoryEntryKind | str | None = None,
+        status: KnowledgeMemoryStatus | str | None = None,
         knowledge_object_id: int | None = None,
     ) -> int:
         """Count memory entries with exactly the same filters as the list."""
@@ -2166,6 +2504,9 @@ class Database:
         if kind is not None:
             conditions.append("kind = ?")
             parameters.append(KnowledgeMemoryEntryKind(kind).value)
+        if status is not None:
+            conditions.append("status = ?")
+            parameters.append(KnowledgeMemoryStatus(status).value)
         if knowledge_object_id is not None:
             conditions.append("knowledge_object_id = ?")
             parameters.append(knowledge_object_id)
@@ -2187,6 +2528,276 @@ class Database:
             )
             if cursor.rowcount == 0:
                 raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
+
+    # Knowledge revisions (schema v10) ------------------------------------
+    def next_knowledge_revision_number(
+        self,
+        knowledge_object_id: int,
+        *,
+        connection: sqlite3.Connection | None = None,
+    ) -> int:
+        """Return the next per-object revision event sequence number."""
+
+        with self._knowledge_scope(connection) as connection:
+            row = connection.execute(
+                """
+                SELECT COALESCE(MAX(revision_number), 0) + 1
+                FROM knowledge_object_revisions
+                WHERE knowledge_object_id = ?
+                """,
+                (knowledge_object_id,),
+            ).fetchone()
+        return int(row[0])
+
+    def insert_knowledge_revision(
+        self,
+        *,
+        knowledge_object_id: int | None,
+        object_local_id_snapshot: int | None,
+        object_stable_id_snapshot: str | None,
+        object_title_snapshot: str,
+        object_kind_snapshot: str,
+        revision_number: int,
+        event_type: KnowledgeRevisionEventType | str,
+        before_title: str | None = None,
+        after_title: str | None = None,
+        before_content: str | None = None,
+        after_content: str | None = None,
+        before_lifecycle: str | None = None,
+        after_lifecycle: str | None = None,
+        before_confirmation: str | None = None,
+        after_confirmation: str | None = None,
+        superseded_by_before: int | None = None,
+        superseded_by_after: int | None = None,
+        source_ref: str | None = None,
+        detail: str = "",
+        connection: sqlite3.Connection | None = None,
+    ) -> KnowledgeRevision:
+        """Append one immutable revision row. There is no update/delete API."""
+
+        normalized_event = KnowledgeRevisionEventType(event_type)
+        timestamp = _utc_now()
+        with self._knowledge_scope(connection) as connection:
+            cursor = connection.execute(
+                """
+                INSERT INTO knowledge_object_revisions (
+                    knowledge_object_id, object_local_id_snapshot,
+                    object_stable_id_snapshot, object_title_snapshot,
+                    object_kind_snapshot, revision_number, event_type,
+                    before_title, after_title, before_content, after_content,
+                    before_lifecycle, after_lifecycle, before_confirmation,
+                    after_confirmation, superseded_by_before,
+                    superseded_by_after, source_ref, payload_version, detail,
+                    created_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
+                )
+                """,
+                (
+                    knowledge_object_id,
+                    object_local_id_snapshot,
+                    object_stable_id_snapshot,
+                    object_title_snapshot,
+                    object_kind_snapshot,
+                    revision_number,
+                    normalized_event.value,
+                    before_title,
+                    after_title,
+                    before_content,
+                    after_content,
+                    before_lifecycle,
+                    after_lifecycle,
+                    before_confirmation,
+                    after_confirmation,
+                    superseded_by_before,
+                    superseded_by_after,
+                    source_ref,
+                    detail,
+                    timestamp,
+                ),
+            )
+            row = connection.execute(
+                "SELECT * FROM knowledge_object_revisions WHERE id = ?",
+                (cursor.lastrowid,),
+            ).fetchone()
+        return _knowledge_revision_from_row(row)
+
+    def list_knowledge_revisions(
+        self, knowledge_object_id: int
+    ) -> list[KnowledgeRevision]:
+        """List every revision of one knowledge object in revision order."""
+
+        with self._connection() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM knowledge_object_revisions
+                WHERE knowledge_object_id = ?
+                ORDER BY revision_number ASC, id ASC
+                """,
+                (knowledge_object_id,),
+            ).fetchall()
+        return [_knowledge_revision_from_row(row) for row in rows]
+
+    # Knowledge search (schema v11) ------------------------------------------
+    def search_knowledge(
+        self,
+        match_expression: str,
+        *,
+        limit: int = 20,
+        include_archived: bool = False,
+        include_superseded: bool = False,
+    ) -> list[KnowledgeSearchResult]:
+        """Search knowledge objects and memory entries with FTS5 MATCH recall.
+
+        This is the knowledge scope only: FTS5 ``MATCH`` is the recall gate and
+        ``bm25`` is the intra-type ranking key. The page scope (``search``) is
+        deliberately untouched. Results are grouped knowledge-objects first,
+        then memory entries; ``limit`` applies per type. ``knowledge_object_
+        revisions`` are never queried and therefore can never appear.
+        """
+
+        normalized_expression = match_expression.strip()
+        if not normalized_expression or limit <= 0:
+            return []
+        safe_limit = min(limit, 100)
+        object_lifecycles = ["active"]
+        if include_archived:
+            object_lifecycles.append("archived")
+        if include_superseded:
+            object_lifecycles.append("superseded")
+        memory_statuses = ["active"]
+        if include_archived:
+            memory_statuses.append("archived")
+        kb_uuid = self.get_knowledge_base_uuid()
+        try:
+            with self._connection() as connection:
+                object_rows = connection.execute(
+                    f"""
+                    SELECT ko.id, ko.kind, ko.title, ko.content, ko.lifecycle,
+                           ko.updated_at,
+                           bm25(knowledge_object_search, 1.0, 1.0) AS search_rank
+                    FROM knowledge_object_search
+                    JOIN knowledge_objects ko ON ko.id = knowledge_object_search.rowid
+                    WHERE knowledge_object_search MATCH ?
+                      AND ko.lifecycle IN ({",".join("?" for _ in object_lifecycles)})
+                    ORDER BY search_rank ASC, ko.updated_at DESC, ko.id DESC
+                    LIMIT ?
+                    """,
+                    (normalized_expression, *object_lifecycles, safe_limit),
+                ).fetchall()
+                memory_rows = connection.execute(
+                    f"""
+                    SELECT me.id, me.kind, me.title, me.content, me.root_cause,
+                           me.lesson, me.status, me.updated_at,
+                           me.knowledge_object_id, me.document_id, me.page_id,
+                           bm25(knowledge_memory_search, 1.0, 1.0, 1.0, 1.0)
+                               AS search_rank
+                    FROM knowledge_memory_search
+                    JOIN knowledge_memory_entries me
+                        ON me.id = knowledge_memory_search.rowid
+                    WHERE knowledge_memory_search MATCH ?
+                      AND me.status IN ({",".join("?" for _ in memory_statuses)})
+                    ORDER BY search_rank ASC, me.updated_at DESC, me.id DESC
+                    LIMIT ?
+                    """,
+                    (normalized_expression, *memory_statuses, safe_limit),
+                ).fetchall()
+                object_ids = tuple(int(row["id"]) for row in object_rows)
+                anchors = self._knowledge_source_anchors(connection, object_ids)
+                results: list[KnowledgeSearchResult] = []
+                for row in object_rows:
+                    lifecycle = KnowledgeLifecycle(row["lifecycle"])
+                    kind = KnowledgeObjectKind(row["kind"])
+                    results.append(
+                        KnowledgeSearchResult(
+                            result_type=KnowledgeSearchResultType.KNOWLEDGE_OBJECT,
+                            id=int(row["id"]),
+                            stable_id=build_stable_id(
+                                kb_uuid,
+                                KNOWLEDGE_OBJECT_STABLE_TYPE,
+                                int(row["id"]),
+                            ),
+                            title=str(row["title"]),
+                            content=str(row["content"]),
+                            status=lifecycle.value,
+                            status_label=lifecycle.label,
+                            kind=kind.value,
+                            kind_label=kind.label,
+                            updated_at=_parse_datetime(str(row["updated_at"])),
+                            source_anchors=anchors.get(int(row["id"]), ()),
+                        )
+                    )
+                for row in memory_rows:
+                    status = KnowledgeMemoryStatus(row["status"])
+                    kind = KnowledgeMemoryEntryKind(row["kind"])
+                    content = "\n".join(
+                        value
+                        for value in (
+                            str(row["content"]),
+                            str(row["root_cause"]),
+                            str(row["lesson"]),
+                        )
+                        if value
+                    ) or str(row["title"])
+                    results.append(
+                        KnowledgeSearchResult(
+                            result_type=KnowledgeSearchResultType.KNOWLEDGE_MEMORY,
+                            id=int(row["id"]),
+                            stable_id=build_stable_id(
+                                kb_uuid,
+                                KNOWLEDGE_MEMORY_STABLE_TYPE,
+                                int(row["id"]),
+                            ),
+                            title=str(row["title"]),
+                            content=content,
+                            status=status.value,
+                            status_label=status.label,
+                            kind=kind.value,
+                            kind_label=kind.label,
+                            updated_at=_parse_datetime(str(row["updated_at"])),
+                            knowledge_object_id=_optional_int(
+                                row["knowledge_object_id"]
+                            ),
+                            document_id=_optional_int(row["document_id"]),
+                            page_id=_optional_int(row["page_id"]),
+                        )
+                    )
+                return results
+        except sqlite3.OperationalError:
+            LOGGER.warning(
+                "忽略无效的知识 FTS5 检索表达式：%r", match_expression, exc_info=True
+            )
+            return []
+
+    @staticmethod
+    def _knowledge_source_anchors(
+        connection: sqlite3.Connection, knowledge_object_ids: Sequence[int]
+    ) -> dict[int, tuple[tuple[str, int], ...]]:
+        """Return ``knowledge_object_id -> ((source_type, source_id), ...)``."""
+
+        if not knowledge_object_ids:
+            return {}
+        placeholders = ",".join("?" for _ in knowledge_object_ids)
+        rows = connection.execute(
+            f"""
+            SELECT knowledge_object_id, source_type, source_id
+            FROM knowledge_object_sources
+            WHERE knowledge_object_id IN ({placeholders})
+            ORDER BY knowledge_object_id, id
+            """,
+            tuple(knowledge_object_ids),
+        ).fetchall()
+        anchors: dict[int, list[tuple[str, int]]] = {
+            knowledge_object_id: [] for knowledge_object_id in knowledge_object_ids
+        }
+        for row in rows:
+            anchors[int(row["knowledge_object_id"])].append(
+                (str(row["source_type"]), int(row["source_id"]))
+            )
+        return {
+            knowledge_object_id: tuple(values)
+            for knowledge_object_id, values in anchors.items()
+        }
 
 
 def _utc_now() -> str:
@@ -2696,13 +3307,19 @@ def _knowledge_object_from_row(row: sqlite3.Row) -> KnowledgeObject:
     return KnowledgeObject(
         id=int(row["id"]),
         kind=KnowledgeObjectKind(row["kind"]),
+        authorship=KnowledgeAuthorship(row["authorship"]),
+        epistemic_basis=KnowledgeEpistemicBasis(row["epistemic_basis"]),
         title=str(row["title"]),
         content=str(row["content"]),
         importance=NoteImportance(row["importance"]),
-        status=KnowledgeObjectStatus(row["status"]),
+        lifecycle=KnowledgeLifecycle(row["lifecycle"]),
+        superseded_by_ko_id=_optional_int(row["superseded_by_ko_id"]),
+        confirmation_status=KnowledgeConfirmationStatus(row["confirmation_status"]),
+        confirmed_at=_parse_datetime(row["confirmed_at"]),
+        confirmed_revision=_optional_int(row["confirmed_revision"]),
+        current_revision=int(row["current_revision"]),
         created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
         updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
-        reviewed_at=_parse_datetime(row["reviewed_at"]),
     )
 
 
@@ -2713,6 +3330,13 @@ def _knowledge_object_source_from_row(row: sqlite3.Row) -> KnowledgeObjectSource
         source_type=KnowledgeObjectSourceType(row["source_type"]),
         source_id=int(row["source_id"]),
         source_note=str(row["source_note"]),
+        source_fingerprint=(
+            str(row["source_fingerprint"])
+            if row["source_fingerprint"] is not None
+            else None
+        ),
+        fingerprint_version=int(row["fingerprint_version"]),
+        captured_at=_parse_datetime(row["captured_at"]),  # type: ignore[arg-type]
         created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
     )
 
@@ -2739,8 +3363,62 @@ def _knowledge_memory_entry_from_row(row: sqlite3.Row) -> KnowledgeMemoryEntry:
         knowledge_object_id=_optional_int(row["knowledge_object_id"]),
         document_id=_optional_int(row["document_id"]),
         page_id=_optional_int(row["page_id"]),
+        status=KnowledgeMemoryStatus(row["status"]),
         created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
         updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
+    )
+
+
+def _knowledge_revision_from_row(row: sqlite3.Row) -> KnowledgeRevision:
+    return KnowledgeRevision(
+        id=int(row["id"]),
+        knowledge_object_id=_optional_int(row["knowledge_object_id"]),
+        object_local_id_snapshot=_optional_int(row["object_local_id_snapshot"]),
+        object_stable_id_snapshot=(
+            str(row["object_stable_id_snapshot"])
+            if row["object_stable_id_snapshot"] is not None
+            else None
+        ),
+        object_title_snapshot=str(row["object_title_snapshot"]),
+        object_kind_snapshot=str(row["object_kind_snapshot"]),
+        revision_number=int(row["revision_number"]),
+        event_type=KnowledgeRevisionEventType(row["event_type"]),
+        before_title=(
+            str(row["before_title"]) if row["before_title"] is not None else None
+        ),
+        after_title=(
+            str(row["after_title"]) if row["after_title"] is not None else None
+        ),
+        before_content=(
+            str(row["before_content"]) if row["before_content"] is not None else None
+        ),
+        after_content=(
+            str(row["after_content"]) if row["after_content"] is not None else None
+        ),
+        before_lifecycle=(
+            str(row["before_lifecycle"]) if row["before_lifecycle"] is not None else None
+        ),
+        after_lifecycle=(
+            str(row["after_lifecycle"]) if row["after_lifecycle"] is not None else None
+        ),
+        before_confirmation=(
+            str(row["before_confirmation"])
+            if row["before_confirmation"] is not None
+            else None
+        ),
+        after_confirmation=(
+            str(row["after_confirmation"])
+            if row["after_confirmation"] is not None
+            else None
+        ),
+        superseded_by_before=_optional_int(row["superseded_by_before"]),
+        superseded_by_after=_optional_int(row["superseded_by_after"]),
+        source_ref=(
+            str(row["source_ref"]) if row["source_ref"] is not None else None
+        ),
+        payload_version=int(row["payload_version"]),
+        detail=str(row["detail"]),
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
     )
 
 
