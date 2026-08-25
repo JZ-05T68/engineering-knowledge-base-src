@@ -1,4 +1,4 @@
-# Engineering Knowledge Base v0.5.2
+# Engineering Knowledge Base v0.5.3
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -9,7 +9,7 @@
 EKB 面向需要长期积累工程经验的个人用户。它把用户主动导入的资料、人工记录的经验和可核验的来源
 组织为本地知识资产，而不是把项目简化成 PDF 摘要器、RAG 工具或通用聊天机器人。
 
-## Vision
+## 定位
 
 通用 AI 可以生成答案，但无法天然保存一个人的长期经验，也不会自动理解某个项目为什么这样决策、
 一次故障如何定位，或者某条失败路径为什么不应重复。
@@ -28,7 +28,7 @@ EKB 关注长期沉淀以下内容：
 资料 → 理解 → 知识对象 → 来源核验 → 知识记忆 → 检索 → 复用 → 工程能力
 ```
 
-## Core Architecture
+## 核心架构
 
 ```text
 Source ── Fingerprint ──> Knowledge Object ── Revision ──> 可审计演进
@@ -50,26 +50,36 @@ Source ── Fingerprint ──> Knowledge Object ── Revision ──> 可�
 | **Evidence** | 保留整页、文字选区或图片区域的来源定位与人工确认状态。 |
 | **Knowledge Memory** | 手动记录问题解决、经验和决策，并保留与知识对象或其他本地来源的联系。 |
 | **Retrieval** | 在页面资料、知识对象和知识记忆之间提供本地检索与来源回链。 |
+| **AI 能力** | 可审计、引用约束、按需触发的可选增强层，不替代本地事实来源和人工确认。 |
 
-RAG 或外部 AI 不是 EKB 的第一定位。可选 AI 只是一层显式启用的增强能力，不能替代本地事实来源、
-人工确认和工程判断。
+## v0.5.3 — 可审计 AI 接入
 
-## v0.5.2 — Knowledge Foundation
+v0.5.3 在 v0.5.2 Knowledge Foundation 之上，为用户明确选定或检索出的本地知识增加可审计、
+引用约束、按需触发的 AI 辅助能力，同时补齐 AI 调用台账、结构化导出和旧备份升级。
 
-v0.5.2 完成个人知识资产底座的第一阶段收口：
+当前能力包括：
 
-- **Knowledge Foundation**：建立知识对象、类型化关系、知识记忆、稳定标识、生命周期和追加式修订记录。
-- **Source Integrity**：知识对象来源绑定本地文档、页面、笔记或证据，并通过 Source Fingerprint
-  在读取时判断来源完整性。
-- **FTS v11 Retrieval**：schema v11 为知识对象和知识记忆建立本地 SQLite FTS5 索引、同步触发器与安全重建路径。
-- **Knowledge Object Search**：按标题、摘要、正文和标签检索知识对象，并保留状态与来源信息。
-- **Knowledge Memory Search**：按问题解决、经验和决策内容检索个人知识记忆。
-- **Provenance-aware retrieval**：页面结果、知识对象和知识记忆使用各自明确的来源锚点，检索结果可以回到本地来源核验。
-- **Local-first operation**：核心知识管理和知识检索不需要账号、云服务、VPN 或 API Key。
+- **ContextItem 与 KnowledgeContextPackage**：页面、知识对象、知识记忆和证据统一投影为只读
+  ContextItem，并打包为带引用、来源、生命周期和排除信息的上下文包。
+- **两个检索范围**：页面资料检索与个人知识检索继续离线可用，默认行为保持不变。
+- **Ask AI / RAG Answer**：用户主动提问，AI 只能依据所选 KnowledgeContextPackage 回答。
+- **引用运行时校验**：AI 回答中的每个引用都必须属于本次上下文包；未知、伪造、越界和空引用
+  一律 fail-closed，不显示半成品回答。
+- **只读 AI 整理经验**：按需生成结构化经验候选，只读预览，不自动写入知识资产。
+- **AI 调用台账**：ai_calls 记录调用类型、来源、状态、Token 与目标引用；台账只读，不保存完整
+  prompt、上下文正文或模型回答。
+- **Knowledge Export**：知识对象、来源、关系、修订和知识记忆的结构化无损导出，含 manifest、
+  逐文件 SHA-256 与每对象独立 Markdown。
+- **AI Ledger Export**：ai_calls 审计元数据独立导出（JSON/JSONL 权威格式），不含正文与密钥。
+- **schema v8 旧备份隔离升级**：旧数据库快照通过独立入口升级到当前 schema，原始备份保持不变。
+- **schema v12**：知识资产与 AI 台账共存的当前数据库结构。
+- **本地运行**：正式服务固定绑定 `127.0.0.1:8501`；无 API Key 时全部离线基础功能保持不变。
 
-v0.5.2 没有实现 Personal Context Agent、自动经验学习、后台自动改写知识或云端同步。
+明确边界：AI 不自动写知识；Experience Candidate 不是已确认经验；没有 Agent；没有工具调用；
+没有长期会话记忆；不会自动扫描私人资料；没有云同步；AI 调用台账不保存完整 prompt、上下文和回答；
+AI 是可选层，不是基础功能依赖。
 
-## Personal Knowledge Workflow
+## 个人知识工作流
 
 ```text
 用户主动导入或记录
@@ -84,13 +94,15 @@ Knowledge Memory
         ↓
 Page / Object / Memory Retrieval
         ↓
+（可选）用户选定上下文 → Ask AI / AI 整理经验 → 只读结果
+        ↓
 回到来源核验并复用
 ```
 
 系统可以提取元数据、渲染页面、检测文本层、标记待复核页面并建议整理路径，但不会自动覆盖原始资料、
 修改用户笔记、删除文件或把未经确认的推断写成个人经验。
 
-## Existing Core Capabilities
+## 既有核心能力
 
 - 导入 PDF，以 SHA-256 检测重复文件，逐页渲染 PNG 并提取已有文本层；
 - 对扫描页显式执行本地单页 OCR，保留“未经人工核验”的边界；
@@ -101,7 +113,7 @@ Page / Object / Memory Retrieval
 - 创建、验证和恢复本地完整备份；
 - 在显式配置时使用可选的页面向量与混合检索；AI 不可用时离线核心功能保持可用。
 
-## Local-First and Information Boundaries
+## 本地优先与信息边界
 
 - 本地文件和 SQLite 是唯一事实来源；用户材料默认存放在本机。
 - 正式服务固定绑定 `127.0.0.1:8501`，不暴露到局域网或公网。
@@ -111,44 +123,46 @@ Page / Object / Memory Retrieval
 - 不包含注册、登录、账号、密码、OAuth、JWT、角色、管理员或多用户权限系统。
 - 不提供云同步；备份位置和备份介质由用户自行控制。
 
-## Release Validation
+## 发布验证
 
-v0.5.2 CLOSED 基线记录：
+v0.5.3 发布门禁以 `scripts/release_check.py` 与 Phase 7 报告为准，至少包括：
 
-- Full pytest：**1646 passed in 975.32s**；
-- Retrieval benchmark：**45 passed**；
-- Focused regression：**279 passed**；
+- 全量 pytest：**1762+ tests collected，exit 0**；
 - Ruff：**PASS**；
 - `git diff --check`：**clean**；
-- 生产数据库：`data/database/knowledge.db`，327680 bytes；
-- 生产数据库 SHA-256：`6a3ab3542c6865007c1fab3c739228f97d2120b1527dbb6cdefa26834e8b9c91`；
-- CLOSED 运行验收：`127.0.0.1:8501`，health HTTP 200。
+- schema v12 备份/恢复逐字段 roundtrip；
+- 生产数据库：`data/database/knowledge.db`；
+- 生产数据库 SHA-256：`59caf2cfc5e80d197ca02a64b702ea6d06b7c4eb66e02c7fefa272403a4c0ad9`；
+- 正式运行验收：`127.0.0.1:8501`，health HTTP 200。
 
-这些数字记录冻结发布基线，不代表所有工程领域、语料或查询都已获得同等质量保证。
+这些数字记录发布候选基线，不代表所有工程领域、语料或查询都已获得同等质量保证。
 
 ## Roadmap
 
 | 版本线 | 主题 | 状态 |
 | --- | --- | --- |
-| **v0.5.x** | Knowledge Foundation | v0.5.2 已完成知识对象、来源完整性、修订、知识记忆和本地检索底座。 |
-| **v0.6.x** | Personal Context Agent | 未来规划；尚未实现。目标是在用户显式控制下组织个人上下文。 |
-| **v0.7.x** | Experience Memory | 未来规划；尚未实现。目标是增强长期经验的确认、演进和复用。 |
-| **v1.0** | Personal Experience System | 长期方向；尚未实现。目标是形成完整的个人经验系统。 |
+| **v0.5.x** | Knowledge Foundation | v0.5.3 完成可审计 AI 接入、台账、导出与备份升级。 |
+| **v0.6.x** | Agent Foundation | 未来规划；尚未实现。Agent 自主选择和工具调用从这一阶段才开始。 |
+| **v0.7.x** | Personal Experience Agent | 未来规划；尚未实现。从这一阶段才开始使用用户长期经验。 |
+| **v0.8.x** | Agent Reliability | 未来规划；尚未实现。处理 Agent 错误行为与可靠性。 |
+| **v0.9.x** | Agent Hardening | 未来规划；尚未实现。处理长期运行、成本、上下文、记忆污染、Eval 与工程硬化。 |
+| **v1.0.0** | Personal Experience System | 长期方向；尚未实现。完整个人经验系统。 |
 
 详细边界见 [v0.5.x Roadmap](docs/v0.5.x-roadmap.md)。路线图不是当前能力承诺，也不承诺发布日期。
 
-## Limitations
+## 限制
 
 - 当前是 Windows 本地、单用户系统，没有多用户协作或权限模型。
 - 没有云同步、云账号或托管服务；跨设备备份需要用户自行管理。
-- Personal Context Agent 尚未完成，系统不会自主规划任务或代表用户持续行动。
+- Agent、工具调用和长期会话记忆尚未实现，系统不会自主规划任务或代表用户持续行动。
 - 不会自动学习个人经验；知识对象和知识记忆需要用户主动创建、复核或确认。
+- Experience Candidate 只是 AI 整理候选，不是已确认经验，也不会自动写入知识库。
 - 本地 OCR 面向单页印刷体，不支持手写、公式、复杂表格结构识别或批量 OCR。
 - 关键词检索不会自动扩展同义词；可选混合检索不代表全面语义理解，也不替代来源核验。
 - 当前搜索展示和批量操作有加载范围限制；超大知识库的深分页性能仍需持续观察。
 - 完整备份是本地目录结构，不是加密归档；备份介质安全由用户负责。
 
-## Installation
+## 安装
 
 环境要求：Windows 10/11、PowerShell、Python 3.11，以及支持 FTS5 的 Python SQLite。
 
@@ -163,7 +177,7 @@ Copy-Item .env.example .env
 `.env` 是可选的本地配置，不应提交到 Git。完整的新机器恢复流程见
 [Windows 恢复与环境重建](docs/windows-recovery.md)。GitHub 不保存用户数据库、导入资料、凭据、日志或缓存。
 
-## Start and Stop
+## 启动与停止
 
 - 启动：双击 `启动工程知识库.bat`；
 - 静默启动：双击 `静默启动工程知识库.vbs`；
@@ -179,7 +193,7 @@ Copy-Item .env.example .env
 正式地址固定为 <http://127.0.0.1:8501>，健康检查为
 <http://127.0.0.1:8501/_stcore/health>。不要改为 `0.0.0.0` 或暴露到外部网络。
 
-## Local Data and Safety
+## 本地数据与安全
 
 ```text
 data/
@@ -194,7 +208,7 @@ data/
 纯增量迁移、迁移前备份、事务、完整性检查和外键检查。文档删除需要显式影响预览与确认；系统不会自动
 删除原始 PDF 或页面图像。
 
-## Quality Checks
+## 质量检查
 
 ```powershell
 python -m pytest
@@ -210,10 +224,12 @@ git diff --check
 
 发布提交和 tag 收口阶段可使用已验证备份与 stopped-service 模式；任何检查失败都必须在发布前明确处理。
 
-## Documentation
+## 文档
 
 - [CHANGELOG](CHANGELOG.md)
 - [v0.5.x Roadmap](docs/v0.5.x-roadmap.md)
+- [v0.5.3 Release Notes（中文）](docs/v0.5.3-release-notes.md)
+- [v0.5.3 Release Notes（英文）](docs/v0.5.3-release-notes-en.md)
 - [Windows 恢复与环境重建](docs/windows-recovery.md)
 - [GitHub Releases](https://github.com/JZ-05T68/engineering-knowledge-base-src/releases)
 

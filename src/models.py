@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 
 class ImportStatus(StrEnum):
@@ -1288,7 +1289,13 @@ class KnowledgeRelation:
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeMemoryEntry:
-    """One user-authored personal memory entry (schema v10)."""
+    """One user-authored personal memory entry (schema v10, v12 extended).
+
+    ``content_revision`` is the lightweight per-entry version counter added in
+    v12: it starts at 1 and increments on content edits, giving future agents
+    a citable version number without a full revision table. ``outcome`` and
+    ``context_conditions`` are the Experience Model ground fields (V53-ADR-03).
+    """
 
     id: int
     kind: KnowledgeMemoryEntryKind
@@ -1302,6 +1309,20 @@ class KnowledgeMemoryEntry:
     status: KnowledgeMemoryStatus
     created_at: datetime
     updated_at: datetime
+    content_revision: int = 1
+    outcome: str = ""
+    context_conditions: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeProjectLink:
+    """One project-to-knowledge association row (schema v12)."""
+
+    id: int
+    project_id: int
+    target_type: str
+    target_id: int
+    created_at: datetime
 
 
 class KnowledgeSearchResultType(StrEnum):
@@ -1395,6 +1416,8 @@ KNOWLEDGE_MEMORY_STABLE_TYPE = "knowledge_memory"
 KNOWLEDGE_RELATION_STABLE_TYPE = "knowledge_relation"
 KNOWLEDGE_SOURCE_STABLE_TYPE = "knowledge_source"
 KNOWLEDGE_REVISION_STABLE_TYPE = "knowledge_revision"
+PAGE_STABLE_TYPE = "page"
+EVIDENCE_STABLE_TYPE = "evidence"
 
 _KNOWN_STABLE_TYPES = frozenset(
     {
@@ -1403,6 +1426,8 @@ _KNOWN_STABLE_TYPES = frozenset(
         KNOWLEDGE_RELATION_STABLE_TYPE,
         KNOWLEDGE_SOURCE_STABLE_TYPE,
         KNOWLEDGE_REVISION_STABLE_TYPE,
+        PAGE_STABLE_TYPE,
+        EVIDENCE_STABLE_TYPE,
     }
 )
 
@@ -1428,3 +1453,268 @@ def build_stable_id(kb_uuid: str, object_type: str, local_id: int) -> str:
     if local_id_int < 1:
         raise ValueError("local_id 必须是正整数")
     return f"{kb_uuid}:{object_type}:{local_id_int}"
+
+
+# --------------------------------------------------------------------------
+# Context Engineering contracts (v0.5.3 Phase 2-B, V53-ADR-01/02)
+# --------------------------------------------------------------------------
+
+
+class ContextItemType(StrEnum):
+    """The four entity kinds that may be projected into a ContextItem."""
+
+    PAGE = "page"
+    KNOWLEDGE_OBJECT = "knowledge_object"
+    KNOWLEDGE_MEMORY = "knowledge_memory"
+    EVIDENCE = "evidence"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.PAGE: "页面",
+            self.KNOWLEDGE_OBJECT: "知识对象",
+            self.KNOWLEDGE_MEMORY: "知识记忆",
+            self.EVIDENCE: "证据",
+        }[self]
+
+
+class ContextAnchorType(StrEnum):
+    """Anchor categories carried by a ContextItem source anchor."""
+
+    DOCUMENT = "document"
+    PAGE = "page"
+    NOTE = "note"
+    EVIDENCE = "evidence"
+    SELECTION = "selection"
+    IMAGE_REGION = "image_region"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.DOCUMENT: "文档",
+            self.PAGE: "页面",
+            self.NOTE: "结构化笔记",
+            self.EVIDENCE: "证据条目",
+            self.SELECTION: "文字选区",
+            self.IMAGE_REGION: "图片区域",
+        }[self]
+
+
+class ContextFingerprintState(StrEnum):
+    """Read-time fingerprint state of one source anchor."""
+
+    VALID = "valid"
+    CHANGED = "changed"
+    MISSING = "missing"
+    UNKNOWN = "unknown"
+    NOT_APPLICABLE = "not_applicable"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.VALID: "来源有效",
+            self.CHANGED: "来源已变化",
+            self.MISSING: "来源不存在",
+            self.UNKNOWN: "来源状态未知",
+            self.NOT_APPLICABLE: "不适用",
+        }[self]
+
+
+@dataclass(frozen=True, slots=True)
+class ContextSourceAnchor:
+    """One traceable, back-to-source anchor of a ContextItem."""
+
+    anchor_type: str
+    anchor_id: int | None
+    anchor_label: str
+    fingerprint_state: str = ContextFingerprintState.NOT_APPLICABLE.value
+
+
+@dataclass(frozen=True, slots=True)
+class ContextRelationRef:
+    """One already-stored direct relation, never inferred or created."""
+
+    relation_type: str
+    relation_label: str
+    direction: str
+    target_stable_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ContextItem:
+    """Read-only projection of one local knowledge entity for RAG context.
+
+    ContextItem is not a new knowledge entity and is never persisted. It is
+    the single consumption shape understood by the KnowledgeContextPackager
+    and, later, by the v0.6.x agent input boundary.
+    """
+
+    type: ContextItemType
+    local_id: int
+    stable_id: str
+    title: str
+    content: str
+    kind: str | None
+    kind_label: str | None
+    status: str
+    status_label: str
+    importance: str | None
+    updated_at: datetime | None
+    revision_ref: str | None
+    source_anchors: tuple[ContextSourceAnchor, ...]
+    relation_refs: tuple[ContextRelationRef, ...]
+
+
+# --------------------------------------------------------------------------
+# Audited AI output (v0.5.3 Phase 3)
+# --------------------------------------------------------------------------
+
+if TYPE_CHECKING:
+    from src.ai.provider import CompletionUsage
+
+
+@dataclass(frozen=True, slots=True)
+class AuditedAIOutput:
+    """One traceable, citation-grounded AI answer over a context package.
+
+    This is an in-memory service result, not a persisted knowledge entity.
+    ``context_stable_ids`` lists the knowledge actually used, ``excluded``
+    records what the packager excluded and why, and ``warnings`` carries the
+    package's explicit risk notices. ``confidence`` is deliberately not
+    fabricated: it stays ``None`` unless a future provider reports one.
+    """
+
+    output_id: str
+    query: str
+    context_package_id: str
+    provider: str
+    model: str
+    generated_at: str
+    answer: str
+    citations: tuple[tuple[str, str], ...]
+    answer_citations: tuple[str, ...] = ()
+    warnings: tuple[str, ...] = ()
+    token_usage: CompletionUsage | None = None
+    context_stable_ids: tuple[str, ...] = ()
+    excluded: tuple[tuple[str, str], ...] = ()
+    confidence: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ExperienceCandidate:
+    """Structured AI-organised experience candidate (read-only, not persisted).
+
+    Every field that cannot be confirmed from the selected context stays
+    empty; the model is explicitly forbidden from fabricating content.
+    """
+
+    title: str
+    problem: str = ""
+    context: str = ""
+    action: str = ""
+    result: str = ""
+    root_cause: str = ""
+    lesson: str = ""
+    applicability: str = ""
+    limitations: str = ""
+    citations: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class AuditedExperienceOutput:
+    """One audited, structured experience-candidate generation result.
+
+    This is an in-memory service result. It is never persisted and never
+    becomes a KnowledgeMemoryEntry / KnowledgeObject without an explicit,
+    separate user action. ``audit_call_id`` is ``None`` here because the
+    durable call uuid lives in the ``ai_calls`` ledger and is retrievable via
+    ``source_feature='experience_model'`` plus ``target_refs``.
+    """
+
+    output_id: str
+    task: str
+    context_package_id: str
+    provider: str
+    model: str
+    audit_call_id: str | None
+    generated_at: str
+    candidate: ExperienceCandidate
+    warnings: tuple[str, ...]
+    is_mock: bool
+
+
+# --------------------------------------------------------------------------
+# Read-only AI call ledger projections (v0.5.3 Phase 5)
+# --------------------------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class AICallLedgerEntry:
+    """One read-only AI call ledger row.
+
+    ``provider`` stays ``None`` because schema v12 does not store a provider
+    column; the runtime wires exactly one vendor (Qwen) and the UI renders
+    that documented constant instead of guessing. ``finished_at`` is absent
+    from v12 and stays ``None``. ``is_real_call`` is always ``True`` for a
+    persisted row: Mock/offline demonstrations never write the ledger.
+    """
+
+    call_id: int
+    call_uuid: str
+    capability: str
+    source_feature: str
+    provider: str | None
+    model: str
+    status: str
+    created_at: str
+    finished_at: str | None
+    latency_ms: int | None
+    prompt_tokens: int | None
+    completion_tokens: int | None
+    total_tokens: int | None
+    target_refs: tuple[str, ...]
+    target_refs_parse_error: bool
+    unavailable_target_refs: tuple[str, ...] = ()
+    error_class: str | None = None
+    error_summary: str = ""
+    is_real_call: bool = True
+    retry_count: int = 0
+    finish_reason: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class AICallLedgerQuery:
+    """Whitelisted filter/sort/pagination input for the ledger query."""
+
+    source_feature: str | None = None
+    capability: str | None = None
+    status: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    since_iso: str | None = None
+    until_iso: str | None = None
+    sort: str = "created_at_desc"
+    limit: int = 20
+    offset: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class AICallLedgerPage:
+    """One stable page of ledger entries."""
+
+    entries: tuple[AICallLedgerEntry, ...]
+    total: int
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True, slots=True)
+class AICallLedgerStats:
+    """Limited aggregates; token sums count only non-null reliable values."""
+
+    total_calls: int
+    success_count: int
+    error_count: int
+    rejected_count: int
+    total_tokens: int | None
+    by_source_feature: tuple[tuple[str, int], ...]

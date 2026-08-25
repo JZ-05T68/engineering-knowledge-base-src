@@ -658,7 +658,7 @@ def test_backup_and_restore_preserve_embedding_records(tmp_path: Path) -> None:
     restore = target.restore_backup(
         result.backup_path, service_is_running=lambda: False
     )
-    assert restore.database_summary.schema_version == 11
+    assert restore.database_summary.schema_version == 12
 
     restored = Database(target.database_path).get_page_embedding(
         page_id=page.id, model=TS_MODEL, dimensions=4, config_version=1

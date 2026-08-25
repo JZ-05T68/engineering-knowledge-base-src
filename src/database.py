@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import sqlite3
@@ -15,6 +16,7 @@ from typing import Final
 import jieba
 
 from src.ai.embedding_store import decode_vector, encode_vector
+from src.ai.provider import AiCallRecord, AiOutputRecord
 from src.migrations import SCHEMA_VERSION, MigrationError, migrate_database
 from src.models import (
     KNOWLEDGE_MEMORY_STABLE_TYPE,
@@ -34,6 +36,7 @@ from src.models import (
     KnowledgeObjectKind,
     KnowledgeObjectSource,
     KnowledgeObjectSourceType,
+    KnowledgeProjectLink,
     KnowledgeRelation,
     KnowledgeRelationType,
     KnowledgeRevision,
@@ -1681,7 +1684,7 @@ class Database:
         normalized_importance = NoteImportance(importance)
         normalized_authorship = KnowledgeAuthorship(authorship)
         if normalized_authorship is KnowledgeAuthorship.AI:
-            raise ValueError("v0.5.2 不允许创建 AI 署名的知识对象")
+            raise ValueError("当前版本不允许创建 AI 署名的知识对象")
         normalized_basis = KnowledgeEpistemicBasis(epistemic_basis)
         normalized_lifecycle = KnowledgeLifecycle(lifecycle)
         normalized_confirmation = KnowledgeConfirmationStatus(confirmation_status)
@@ -2016,6 +2019,11 @@ class Database:
 
         try:
             with self._connection() as connection:
+                connection.execute(
+                    "DELETE FROM knowledge_project_links "
+                    "WHERE target_type = 'knowledge_object' AND target_id = ?",
+                    (knowledge_object_id,),
+                )
                 cursor = connection.execute(
                     "DELETE FROM knowledge_objects WHERE id = ?", (knowledge_object_id,)
                 )
@@ -2285,7 +2293,7 @@ class Database:
             if cursor.rowcount == 0:
                 raise RecordNotFoundError(f"知识关系不存在：{relation_id}")
 
-    # Knowledge memory entries (schema v10) --------------------------------
+    # Knowledge memory entries (schema v10, v12 extended) -------------------
     def create_knowledge_memory_entry(
         self,
         *,
@@ -2298,8 +2306,15 @@ class Database:
         document_id: int | None = None,
         page_id: int | None = None,
         status: KnowledgeMemoryStatus | str = KnowledgeMemoryStatus.ACTIVE,
+        outcome: str = "",
+        context_conditions: str = "",
     ) -> KnowledgeMemoryEntry:
-        """Persist one user-authored memory entry with optional links."""
+        """Persist one user-authored memory entry with optional links.
+
+        ``content_revision`` starts at 1; ``outcome`` and
+        ``context_conditions`` are the v12 Experience Model ground fields and
+        are stored verbatim as user-supplied text, never auto-filled.
+        """
 
         normalized_kind = KnowledgeMemoryEntryKind(kind)
         normalized_status = KnowledgeMemoryStatus(status)
@@ -2314,6 +2329,10 @@ class Database:
             raise ValueError("最终原因不能超过 4000 个字符")
         if len(lesson) > 4000:
             raise ValueError("经验教训不能超过 4000 个字符")
+        if len(outcome) > 4000:
+            raise ValueError("结果不能超过 4000 个字符")
+        if len(context_conditions) > 4000:
+            raise ValueError("适用条件不能超过 4000 个字符")
         knowledge_object_id = _optional_positive_id(knowledge_object_id, "知识对象 ID")
         document_id = _optional_positive_id(document_id, "文档 ID")
         page_id = _optional_positive_id(page_id, "页面 ID")
@@ -2325,9 +2344,10 @@ class Database:
                     INSERT INTO knowledge_memory_entries(
                         kind, title, content, root_cause, lesson,
                         knowledge_object_id, document_id, page_id, status,
+                        content_revision, outcome, context_conditions,
                         search_title, search_content, search_root_cause,
                         search_lesson, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         normalized_kind.value,
@@ -2339,6 +2359,8 @@ class Database:
                         document_id,
                         page_id,
                         normalized_status.value,
+                        outcome.strip(),
+                        context_conditions.strip(),
                         _tokenize_for_fts(normalized_title),
                         _tokenize_for_fts(content),
                         _tokenize_for_fts(root_cause),
@@ -2374,8 +2396,15 @@ class Database:
         content: str | None = None,
         root_cause: str | None = None,
         lesson: str | None = None,
+        outcome: str | None = None,
+        context_conditions: str | None = None,
     ) -> KnowledgeMemoryEntry:
-        """Update selected memory-entry text fields in one transaction."""
+        """Update selected memory-entry text fields in one transaction.
+
+        Any content-bearing field change (title/content/root_cause/lesson/
+        outcome/context_conditions) increments ``content_revision`` by one;
+        status-only changes do not touch the revision counter.
+        """
 
         assignments: list[str] = []
         values: list[object] = []
@@ -2402,11 +2431,21 @@ class Database:
                 values.append(normalized_value)
                 assignments.append(f"search_{field} = ?")
                 values.append(_tokenize_for_fts(normalized_value))
+        for field, label, value in (
+            ("outcome", "结果", outcome),
+            ("context_conditions", "适用条件", context_conditions),
+        ):
+            if value is not None:
+                if len(value) > 4000:
+                    raise ValueError(f"{label}不能超过 4000 个字符")
+                assignments.append(f"{field} = ?")
+                values.append(value.strip())
         if not assignments:
             entry = self.get_knowledge_memory_entry(entry_id)
             if entry is None:
                 raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
             return entry
+        assignments.append("content_revision = content_revision + 1")
         timestamp = _utc_now()
         alternate_timestamp = (
             datetime.fromisoformat(timestamp) + timedelta(microseconds=1)
@@ -2520,14 +2559,192 @@ class Database:
             )
 
     def delete_knowledge_memory_entry(self, entry_id: int) -> None:
-        """Delete one memory entry; linked source material is never touched."""
+        """Delete one memory entry; linked source material is never touched.
+
+        Project links pointing at this entry are removed together with it;
+        the project itself is never affected.
+        """
 
         with self._connection() as connection:
+            connection.execute(
+                "DELETE FROM knowledge_project_links "
+                "WHERE target_type = 'knowledge_memory' AND target_id = ?",
+                (entry_id,),
+            )
             cursor = connection.execute(
                 "DELETE FROM knowledge_memory_entries WHERE id = ?", (entry_id,)
             )
             if cursor.rowcount == 0:
                 raise RecordNotFoundError(f"记忆条目不存在：{entry_id}")
+
+    # AI call / output audit ledger (schema v12) ----------------------------
+    def insert_ai_call(self, record: AiCallRecord) -> None:
+        """Append one AI call audit row; never updates or deletes old rows."""
+
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO ai_calls(
+                    call_uuid, capability, model, prompt_sha256, input_chars,
+                    status, error_class, retry_count, latency_ms,
+                    prompt_tokens, completion_tokens, total_tokens,
+                    finish_reason, source_feature, target_refs, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.call_uuid,
+                    record.capability,
+                    record.model,
+                    record.prompt_sha256,
+                    record.input_chars,
+                    record.status,
+                    record.error_class,
+                    record.retry_count,
+                    record.latency_ms,
+                    record.prompt_tokens,
+                    record.completion_tokens,
+                    record.total_tokens,
+                    record.finish_reason,
+                    record.source_feature,
+                    json.dumps(list(record.target_refs), ensure_ascii=False),
+                    record.created_at or _utc_now(),
+                ),
+            )
+
+    def list_ai_calls(
+        self, *, limit: int = 100, offset: int = 0
+    ) -> list[AiCallRecord]:
+        """Return AI call audit rows, newest first, read-only."""
+
+        if not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("limit 必须是 1～500 的整数")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset 必须是非负整数")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM ai_calls ORDER BY id DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+        return [_ai_call_from_row(row) for row in rows]
+
+    def total_ai_tokens_since(self, since_iso: str) -> int:
+        """Sum successful AI call tokens since an ISO timestamp (inclusive)."""
+
+        with self._connection() as connection:
+            return int(
+                connection.execute(
+                    "SELECT COALESCE(SUM(total_tokens), 0) FROM ai_calls "
+                    "WHERE status = 'success' AND created_at >= ?",
+                    (since_iso,),
+                ).fetchone()[0]
+            )
+
+    def insert_ai_output(self, record: AiOutputRecord) -> None:
+        """Append one AI output audit anchor; never writes knowledge assets."""
+
+        with self._connection() as connection:
+            connection.execute(
+                """
+                INSERT INTO ai_outputs(
+                    output_uuid, call_uuid, model, context_package_sha256,
+                    output_sha256, output_kind, source_feature, target_refs,
+                    recheck_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.output_uuid,
+                    record.call_uuid,
+                    record.model,
+                    record.context_package_sha256,
+                    record.output_sha256,
+                    record.output_kind,
+                    record.source_feature,
+                    json.dumps(list(record.target_refs), ensure_ascii=False),
+                    record.recheck_path,
+                    record.created_at or _utc_now(),
+                ),
+            )
+
+    def list_ai_outputs(
+        self, *, limit: int = 100, offset: int = 0
+    ) -> list[AiOutputRecord]:
+        """Return AI output audit anchors, newest first, read-only."""
+
+        if not isinstance(limit, int) or not 1 <= limit <= 500:
+            raise ValueError("limit 必须是 1～500 的整数")
+        if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+            raise ValueError("offset 必须是非负整数")
+        with self._connection() as connection:
+            rows = connection.execute(
+                "SELECT * FROM ai_outputs ORDER BY id DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+        return [_ai_output_from_row(row) for row in rows]
+
+    # Project-to-knowledge links (schema v12) -------------------------------
+    def link_knowledge_to_project(
+        self, *, project_id: int, target_type: str, target_id: int
+    ) -> bool:
+        """Link a knowledge object or memory entry to a project.
+
+        Returns ``True`` when a new link was created and ``False`` when the
+        link already existed. Both the project and the knowledge target must
+        exist; the target is validated by the service layer's polymorphic
+        check before this data-access method is called.
+        """
+
+        if target_type not in {"knowledge_object", "knowledge_memory"}:
+            raise ValueError("target_type 必须是 knowledge_object 或 knowledge_memory")
+        project_id = _optional_positive_id(project_id, "项目 ID") or 0
+        target_id = _optional_positive_id(target_id, "目标 ID") or 0
+        timestamp = _utc_now()
+        with self._connection() as connection:
+            cursor = connection.execute(
+                """
+                INSERT OR IGNORE INTO knowledge_project_links(
+                    project_id, target_type, target_id, created_at
+                ) VALUES (?, ?, ?, ?)
+                """,
+                (project_id, target_type, target_id, timestamp),
+            )
+        return cursor.rowcount > 0
+
+    def unlink_knowledge_from_project(
+        self, *, project_id: int, target_type: str, target_id: int
+    ) -> None:
+        """Remove one project-to-knowledge link; neither side is deleted."""
+
+        if target_type not in {"knowledge_object", "knowledge_memory"}:
+            raise ValueError("target_type 必须是 knowledge_object 或 knowledge_memory")
+        with self._connection() as connection:
+            connection.execute(
+                "DELETE FROM knowledge_project_links "
+                "WHERE project_id = ? AND target_type = ? AND target_id = ?",
+                (project_id, target_type, target_id),
+            )
+
+    def list_project_knowledge_links(
+        self, *, project_id: int | None = None, target_type: str | None = None
+    ) -> list[KnowledgeProjectLink]:
+        """List project-to-knowledge links with optional filters."""
+
+        conditions: list[str] = []
+        parameters: list[object] = []
+        if project_id is not None:
+            conditions.append("project_id = ?")
+            parameters.append(project_id)
+        if target_type is not None:
+            if target_type not in {"knowledge_object", "knowledge_memory"}:
+                raise ValueError("target_type 必须是 knowledge_object 或 knowledge_memory")
+            conditions.append("target_type = ?")
+            parameters.append(target_type)
+        where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+        with self._connection() as connection:
+            rows = connection.execute(
+                f"SELECT * FROM knowledge_project_links {where} ORDER BY id",
+                parameters,
+            ).fetchall()
+        return [_knowledge_project_link_from_row(row) for row in rows]
 
     # Knowledge revisions (schema v10) ------------------------------------
     def next_knowledge_revision_number(
@@ -3366,7 +3583,93 @@ def _knowledge_memory_entry_from_row(row: sqlite3.Row) -> KnowledgeMemoryEntry:
         status=KnowledgeMemoryStatus(row["status"]),
         created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
         updated_at=_parse_datetime(row["updated_at"]),  # type: ignore[arg-type]
+        content_revision=int(row["content_revision"]),
+        outcome=str(row["outcome"]),
+        context_conditions=str(row["context_conditions"]),
     )
+
+
+def _ai_call_from_row(row: sqlite3.Row) -> AiCallRecord:
+    return AiCallRecord(
+        call_uuid=str(row["call_uuid"]),
+        capability=str(row["capability"]),
+        model=str(row["model"]),
+        prompt_sha256=str(row["prompt_sha256"]),
+        input_chars=int(row["input_chars"]),
+        status=str(row["status"]),
+        source_feature=str(row["source_feature"]),
+        target_refs=_json_string_tuple(row["target_refs"]),
+        error_class=(
+            str(row["error_class"]) if row["error_class"] is not None else None
+        ),
+        retry_count=int(row["retry_count"]),
+        latency_ms=(
+            int(row["latency_ms"]) if row["latency_ms"] is not None else None
+        ),
+        prompt_tokens=(
+            int(row["prompt_tokens"]) if row["prompt_tokens"] is not None else None
+        ),
+        completion_tokens=(
+            int(row["completion_tokens"])
+            if row["completion_tokens"] is not None
+            else None
+        ),
+        total_tokens=(
+            int(row["total_tokens"]) if row["total_tokens"] is not None else None
+        ),
+        finish_reason=(
+            str(row["finish_reason"]) if row["finish_reason"] is not None else None
+        ),
+        created_at=str(row["created_at"]),
+    )
+
+
+def _ai_output_from_row(row: sqlite3.Row) -> AiOutputRecord:
+    return AiOutputRecord(
+        output_uuid=str(row["output_uuid"]),
+        call_uuid=(
+            str(row["call_uuid"]) if row["call_uuid"] is not None else None
+        ),
+        model=str(row["model"]),
+        context_package_sha256=(
+            str(row["context_package_sha256"])
+            if row["context_package_sha256"] is not None
+            else None
+        ),
+        output_sha256=str(row["output_sha256"]),
+        output_kind=str(row["output_kind"]),
+        source_feature=str(row["source_feature"]),
+        target_refs=_json_string_tuple(row["target_refs"]),
+        recheck_path=(
+            str(row["recheck_path"]) if row["recheck_path"] is not None else None
+        ),
+        created_at=str(row["created_at"]),
+    )
+
+
+def _knowledge_project_link_from_row(row: sqlite3.Row) -> KnowledgeProjectLink:
+    return KnowledgeProjectLink(
+        id=int(row["id"]),
+        project_id=int(row["project_id"]),
+        target_type=str(row["target_type"]),
+        target_id=int(row["target_id"]),
+        created_at=_parse_datetime(row["created_at"]),  # type: ignore[arg-type]
+    )
+
+
+def _json_string_tuple(value: str) -> tuple[str, ...]:
+    """Decode a JSON string array stored in an audit column, fail-safe."""
+
+    if not value:
+        return ()
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        LOGGER.warning("审计列 JSON 解析失败，按空引用处理：%s", value)
+        return ()
+    if not isinstance(decoded, list):
+        return ()
+    return tuple(str(item) for item in decoded)
 
 
 def _knowledge_revision_from_row(row: sqlite3.Row) -> KnowledgeRevision:

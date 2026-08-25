@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.runtime import application_settings
 
-st.set_page_config(page_title="运行说明｜工程知识库 v0.5.2", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="运行说明｜工程知识库 v0.5.3", page_icon="⚙️", layout="wide")
 st.title("设置与运行说明")
 
 settings = application_settings()

@@ -6,6 +6,7 @@ import logging
 
 import streamlit as st
 
+from src.experience_ui import render_experience_section
 from src.knowledge_memory_ui import render_knowledge_memory_page
 from src.runtime import (
     application_database,
@@ -14,7 +15,7 @@ from src.runtime import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="知识记忆｜工程知识库 v0.5.2", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="知识记忆｜工程知识库 v0.5.3", page_icon="🧭", layout="wide")
 st.title("知识记忆")
 st.caption("记录问题解决过程、经验和决策；知识对象的变更会自动留痕。")
 
@@ -27,3 +28,5 @@ except Exception as exc:
     st.stop()
 
 render_knowledge_memory_page(service)
+
+render_experience_section(database)

@@ -32,6 +32,7 @@ from src.models import (
     SearchViewMode,
 )
 from src.prompt_builder import PromptBuilder
+from src.rag_answer_ui import render_ask_ai_section
 from src.runtime import (
     application_classification_metadata_service,
     application_coverage_service,
@@ -74,7 +75,7 @@ from src.search_state import (
 LOGGER = logging.getLogger(__name__)
 RESULTS_PER_PAGE = 10
 
-st.set_page_config(page_title="检索资料｜工程知识库 v0.5.2", page_icon="🔎", layout="wide")
+st.set_page_config(page_title="检索资料｜工程知识库 v0.5.3", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
 _coverage = application_coverage_service().coverage_summary()
@@ -362,6 +363,13 @@ def _render_knowledge_scope(state: SearchPageState) -> None:
     st.subheader(f"个人知识检索结果（已载入 {len(knowledge_results)} 条）")
     for index, result in enumerate(knowledge_results, start=1):
         render_knowledge_result_card(result, index)
+    render_ask_ai_section(
+        database,
+        knowledge_results,
+        scope="knowledge",
+        kb_uuid=database.get_knowledge_base_uuid(),
+        app_version="0.5.3",
+    )
 
 
 def _state_from_widgets(active: SearchPageState, basket_id: int) -> SearchPageState:
@@ -1283,6 +1291,14 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
     prompt = st.session_state.get("knowledge_prompt")
     if prompt:
         st.text_area("提示词", value=prompt, height=500)
+
+    render_ask_ai_section(
+        database,
+        results,
+        scope="page",
+        kb_uuid=database.get_knowledge_base_uuid(),
+        app_version="0.5.3",
+    )
 
 
 def _render_group_result_card(result: SearchResult, result_index: int) -> None:

@@ -95,6 +95,11 @@ class EvidenceBasketService:
         basket = self.default_basket() if basket_id is None else self._require_basket(basket_id)
         return self._repository.list_items(basket.id)
 
+    def get_item(self, item_id: int) -> EvidenceItem | None:
+        """Return one evidence item by primary key, or ``None`` when absent."""
+
+        return self._repository.get_item(item_id)
+
     def contains(
         self,
         page_id: int,
@@ -748,6 +753,13 @@ class _EvidenceRepository:
                 (basket_id,),
             ).fetchall()
         return [_item_from_row(row) for row in rows]
+
+    def get_item(self, item_id: int) -> EvidenceItem | None:
+        with self._connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM evidence_items WHERE id = ?", (item_id,)
+            ).fetchone()
+        return _item_from_row(row) if row is not None else None
 
     def delete_item(self, basket_id: int, item_id: int) -> bool:
         now = _utc_now()

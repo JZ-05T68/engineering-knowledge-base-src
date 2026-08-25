@@ -1,41 +1,35 @@
-# Engineering Knowledge Base v0.5.2
+# Engineering Knowledge Base v0.5.3
 
-[简体中文](README.md) | [English](README_EN.md)
+[Chinese](README.md) | [English](README_EN.md)
 
 **Engineering Knowledge Base (EKB)**
 
-A local-first personal knowledge system for accumulating, organizing, validating, and reusing long-term knowledge assets.
+A local-first personal knowledge system for accumulating, organizing, verifying and reusing long-term knowledge assets.
 
-EKB is designed for individuals who need to preserve engineering experience over time. It organizes material the user
-actively imports, experience the user records, and verifiable sources into local knowledge assets. It is not merely a
-PDF summarizer, a RAG tool, or a general-purpose chatbot.
+EKB is built for individual users who accumulate engineering experience over time. It turns actively imported materials, manually recorded experience and verifiable sources into local knowledge assets, instead of reducing the project to a PDF summarizer, a RAG tool or a general-purpose chatbot.
 
-## Vision
+## Positioning
 
-General-purpose AI can generate answers, but it does not inherently preserve a person's long-term experience. It does
-not automatically know why a project made a particular decision, how a failure was debugged, or why an unsuccessful
-approach should not be repeated.
+General-purpose AI can generate answers, but it cannot naturally preserve one person's long-term experience, understand why a project made a particular decision, how a failure was located, or why a failed path should not be repeated.
 
-EKB focuses on preserving:
+EKB focuses on accumulating the following over time:
 
 - project decisions and their context;
-- debugging and troubleshooting paths;
-- errors, failures, and rework lessons;
-- learning records and conceptual understanding;
+- debugging processes and troubleshooting paths;
+- errors, failures and rework experience;
+- learning notes and conceptual understanding;
 - reusable engineering practices.
 
-Sources, revisions, fingerprints, evidence, and retrieval turn this material into traceable, verifiable, and reusable
-personal knowledge assets:
+These items become traceable, verifiable and reusable personal knowledge assets through sources, revisions, fingerprints, evidence and retrieval:
 
 ```text
-Material → Understanding → Knowledge Object → Source Validation
-         → Knowledge Memory → Retrieval → Reuse → Engineering Capability
+materials → understanding → knowledge objects → source verification → knowledge memory → retrieval → reuse → engineering capability
 ```
 
 ## Core Architecture
 
 ```text
-Source ── Fingerprint ──> Knowledge Object ── Revision ──> Auditable evolution
+Source ── Fingerprint ──> Knowledge Object ── Revision ──> auditable evolution
   │                              │
   ├── Document / Page            ├── Relation
   ├── Note / Evidence            └── Knowledge Memory
@@ -45,118 +39,122 @@ Source ── Fingerprint ──> Knowledge Object ── Revision ──> Audit
                        Retrieval (Page / Object / Memory)
 ```
 
-| Component | Role |
+| Component | Purpose |
 | --- | --- |
-| **Knowledge Object** | Organizes concepts, facts, principles, experiences, problems, and decisions into manageable knowledge units. |
-| **Source** | Connects a knowledge object to a local document, page, note, or evidence item. |
-| **Revision** | Preserves knowledge-object changes as append-only history instead of silently overwriting their evolution. |
-| **Fingerprint** | Captures a canonical SHA-256 source fingerprint to identify valid, changed, missing, or unknown source states. |
-| **Evidence** | Retains the source location and human-confirmation state of a full page, text selection, or image region. |
-| **Knowledge Memory** | Manually records problem solving, experience, and decisions while retaining links to knowledge objects or other local sources. |
-| **Retrieval** | Provides local search and source trace-back across page material, knowledge objects, and knowledge memories. |
+| **Knowledge Object** | Organizes concepts, facts, principles, experience, problems and decisions into manageable knowledge units. |
+| **Source** | Links a knowledge object to a local document, page, note or evidence item. |
+| **Revision** | Preserves knowledge-object changes as an append-only history instead of silently overwriting evolution. |
+| **Fingerprint** | Captures a canonical SHA-256 fingerprint of a source to detect valid, changed, missing or unknown states. |
+| **Evidence** | Keeps source anchors and human confirmation states for whole pages, text selections or image regions. |
+| **Knowledge Memory** | Manually records problem solving, experience and decisions, with links to knowledge objects or other local sources. |
+| **Retrieval** | Provides local retrieval and source links across pages, knowledge objects and knowledge memories. |
+| **AI capability** | An optional, auditable, citation-constrained, on-demand enhancement layer that never replaces local facts or human confirmation. |
 
-RAG and external AI are not EKB's primary identity. Optional AI is an explicitly enabled enhancement layer; it cannot
-replace local sources of truth, human confirmation, or engineering judgment.
+## v0.5.3 — Audited AI Integration
 
-## v0.5.2 — Knowledge Foundation
+v0.5.3 builds on the v0.5.2 Knowledge Foundation by adding auditable, citation-constrained, on-demand AI assistance over knowledge that the user explicitly selects or retrieves, together with an AI call ledger, structured exports and legacy backup upgrade.
 
-v0.5.2 closes the first stage of the personal knowledge-asset foundation:
+Current capabilities:
 
-- **Knowledge Foundation**: knowledge objects, typed relations, knowledge memories, stable identifiers, lifecycle states, and append-only revisions.
-- **Source Integrity**: knowledge-object sources link to local documents, pages, notes, or evidence and use Source Fingerprints to evaluate integrity at read time.
-- **FTS v11 Retrieval**: schema v11 adds local SQLite FTS5 indexes, synchronization triggers, and safe rebuild paths for knowledge objects and knowledge memories.
-- **Knowledge Object Search**: searches object titles, summaries, content, and tags while retaining status and source information.
-- **Knowledge Memory Search**: searches personal problem-solving, experience, and decision records.
-- **Provenance-aware retrieval**: page results, knowledge objects, and knowledge memories use explicit provenance anchors so users can return to local sources for verification.
-- **Local-first operation**: core knowledge management and retrieval require no account, cloud service, VPN, or API key.
+- **ContextItem and KnowledgeContextPackage**: pages, knowledge objects, knowledge memories and evidence are projected into read-only ContextItems and packaged with citations, sources, lifecycle and exclusion information.
+- **Two retrieval scopes**: page-material search and personal-knowledge search remain offline-first with unchanged default behavior.
+- **Ask AI / RAG Answer**: the user asks on demand, and the AI may answer only from the selected KnowledgeContextPackage.
+- **Runtime citation validation**: every citation in an AI answer must belong to the current context package; unknown, forged, out-of-range and empty citations fail closed without showing a half-finished answer.
+- **Read-only AI experience organizer**: generates structured experience candidates on demand for preview only; nothing is written to knowledge assets automatically.
+- **AI call ledger**: ai_calls records capability, source feature, status, tokens and target references; the ledger is read-only and never stores full prompts, context text or model answers.
+- **Knowledge Export**: lossless structured export of knowledge objects, sources, relations, revisions and memories with a manifest, per-file SHA-256 and one Markdown file per object.
+- **AI Ledger Export**: a standalone audit export of ai_calls metadata (JSON/JSONL authoritative), without content or credentials.
+- **Schema-v8 legacy backup isolated upgrade**: legacy database snapshots are upgraded to the current schema through a dedicated entry point while the original backup stays unchanged.
+- **Schema v12**: the current database structure hosting both knowledge assets and the AI ledger.
+- **Local operation**: the official service binds to `127.0.0.1:8501` only; without an API Key all offline core features keep working.
 
-v0.5.2 does not implement a Personal Context Agent, automatic experience learning, background knowledge rewriting, or cloud synchronization.
+Explicit boundaries: AI does not write knowledge automatically; an Experience Candidate is not confirmed experience; there is no Agent; no tool calling; no long-term session memory; no automatic scanning of private files; no cloud sync; the AI call ledger does not store full prompts, context or answers; AI is an optional layer, not a dependency of core features.
 
 ## Personal Knowledge Workflow
 
 ```text
-User actively imports or records
+user imports or records on demand
         ↓
 Document / Page / Note / Evidence
         ↓
 Knowledge Object + Source Fingerprint
         ↓
-Human review, revision, and relationship organization
+human review, revision and relation organization
         ↓
 Knowledge Memory
         ↓
 Page / Object / Memory Retrieval
         ↓
-Return to the source, verify, and reuse
+(optional) user selects context → Ask AI / AI experience organizer → read-only result
+        ↓
+return to sources for verification and reuse
 ```
 
-The system can extract metadata, render pages, detect text layers, mark pages for review, and suggest organization
-paths. It does not automatically overwrite originals, modify user notes, delete files, or turn unconfirmed inferences
-into personal experience.
+The system may extract metadata, render pages, detect text layers, mark pages for review and suggest organization paths, but it never overwrites original materials, modifies user notes, deletes files or turns unconfirmed inference into personal experience.
 
 ## Existing Core Capabilities
 
-- Imports PDFs, detects duplicates with SHA-256, renders page PNGs, and extracts existing text layers.
-- Runs explicit, local, single-page OCR for scanned pages while preserving the “not human-verified” boundary.
-- Browses documents and pages and manages Markdown, structured notes, tags, and projects.
-- Performs local full-text retrieval with SQLite FTS5, jieba, and field weighting.
-- Creates page, text-selection, and image-region evidence and generates citation-grounded prompt packages after human confirmation.
-- Manages knowledge objects, knowledge memories, sources, relations, revisions, and source integrity.
-- Creates, validates, and restores complete local backups.
-- Supports optional page-vector and hybrid retrieval when explicitly configured; offline core functions remain available when AI is unavailable.
+- import PDFs, detect duplicates by SHA-256, render page PNGs and extract existing text layers;
+- explicit local single-page OCR for scanned pages, preserving the "not human-reviewed" boundary;
+- browse documents and pages, maintain Markdown, structured notes, tags and projects;
+- local full-text search with SQLite FTS5, jieba and field weights;
+- create page, text-selection and image-region evidence, then generate citation-grounded prompt packages after human confirmation;
+- manage knowledge objects, memories, sources, relations, revisions and source integrity;
+- create, validate and restore complete local backups;
+- use optional page vectors and hybrid search when explicitly configured; offline core features remain available when AI is unavailable.
 
 ## Local-First and Information Boundaries
 
-- Local files and SQLite are the sole source of truth; user material stays on the local machine by default.
-- The formal service binds to `127.0.0.1:8501` and is not exposed to a LAN or the public internet.
-- The system processes only material the user actively imports or explicitly authorizes; it does not crawl private chats or unauthorized third-party material.
-- Original PDFs and page images are never automatically overwritten or deleted.
-- The default is `ai_mode="manual"`; the application and its core features work without an API key.
-- There is no registration, login, account, password, OAuth, JWT, role, administrator, or multi-user permission subsystem.
-- There is no cloud synchronization; the user controls backup locations and media.
+- Local files and SQLite are the single source of truth; user materials stay on the local machine by default.
+- The official service binds to `127.0.0.1:8501` only and is never exposed to the LAN or the public internet.
+- The system processes only materials the user imports or explicitly authorizes; it never scrapes private chats or unauthorized third-party material.
+- Original PDFs and page images are never overwritten or deleted automatically.
+- `ai_mode="manual"` by default; the application starts and core features work without an API Key.
+- No registration, login, accounts, passwords, OAuth, JWT, roles, administrators or multi-user permissions.
+- No cloud sync; backup location and media are controlled by the user.
 
 ## Release Validation
 
-The v0.5.2 CLOSED baseline records:
+The v0.5.3 release gate is defined by `scripts/release_check.py` and the Phase 7 report, including at least:
 
-- Full pytest: **1646 passed in 975.32s**;
-- Retrieval benchmark: **45 passed**;
-- Focused regression: **279 passed**;
+- full pytest: **1762+ tests collected, exit 0**;
 - Ruff: **PASS**;
 - `git diff --check`: **clean**;
-- Production database: `data/database/knowledge.db`, 327680 bytes;
-- Production database SHA-256: `6a3ab3542c6865007c1fab3c739228f97d2120b1527dbb6cdefa26834e8b9c91`;
-- CLOSED runtime acceptance: `127.0.0.1:8501`, health HTTP 200.
+- schema v12 backup/restore field-by-field roundtrip;
+- production database: `data/database/knowledge.db`;
+- production database SHA-256: `59caf2cfc5e80d197ca02a64b702ea6d06b7c4eb66e02c7fefa272403a4c0ad9`;
+- official acceptance: `127.0.0.1:8501`, health HTTP 200.
 
-These figures describe the frozen release baseline. They do not guarantee equal retrieval quality for every engineering
-domain, corpus, or query.
+These numbers record the release-candidate baseline and do not imply equal quality guarantees for every engineering domain, corpus or query.
 
 ## Roadmap
 
 | Version line | Theme | Status |
 | --- | --- | --- |
-| **v0.5.x** | Knowledge Foundation | v0.5.2 completes the knowledge-object, source-integrity, revision, knowledge-memory, and local-retrieval foundation. |
-| **v0.6.x** | Personal Context Agent | Future roadmap; not implemented. The goal is user-controlled organization of personal context. |
-| **v0.7.x** | Experience Memory | Future roadmap; not implemented. The goal is stronger confirmation, evolution, and reuse of long-term experience. |
-| **v1.0** | Personal Experience System | Long-term direction; not implemented. The goal is a complete personal experience system. |
+| **v0.5.x** | Knowledge Foundation | v0.5.3 completes audited AI integration, ledger, exports and backup upgrade. |
+| **v0.6.x** | Agent Foundation | Planned, not implemented. Agent autonomy and tool calling begin here only. |
+| **v0.7.x** | Personal Experience Agent | Planned, not implemented. Long-term user experience is used from here only. |
+| **v0.8.x** | Agent Reliability | Planned, not implemented. Handles Agent misbehavior and reliability. |
+| **v0.9.x** | Agent Hardening | Planned, not implemented. Handles long-running operation, cost, context, memory pollution, Eval and engineering hardening. |
+| **v1.0.0** | Personal Experience System | Long-term direction, not implemented. The complete personal experience system. |
 
-See the [v0.5.x Roadmap](docs/v0.5.x-roadmap.md) for boundaries. The roadmap is not a statement of current capability
-and does not promise release dates.
+See [v0.5.x Roadmap](docs/v0.5.x-roadmap.md) for detailed boundaries. The roadmap is not a capability promise and does not promise release dates.
 
 ## Limitations
 
-- EKB is currently a local, single-user Windows system with no multi-user collaboration or permission model.
-- There is no cloud synchronization, cloud account, or hosted service; users manage cross-device backups themselves.
-- The Personal Context Agent is not complete; EKB does not autonomously plan tasks or act continuously on a user's behalf.
-- EKB does not automatically learn personal experience; users actively create, review, or confirm knowledge objects and memories.
-- Local OCR is single-page and intended for printed text; it does not support handwriting, formula OCR, structured complex tables, or batch OCR.
-- Keyword retrieval does not automatically expand synonyms. Optional hybrid retrieval does not imply comprehensive semantic understanding or replace source verification.
-- Search display and batch operations have loading limits; deep-pagination performance for very large knowledge bases remains under observation.
-- Complete backups are local directory structures, not encrypted archives; users are responsible for backup-media security.
+- Currently a Windows-local, single-user system with no multi-user collaboration or permission model.
+- No cloud sync, cloud accounts or hosted services; cross-device backup is managed by the user.
+- Agent, tool calling and long-term session memory are not implemented; the system does not plan tasks autonomously or act continuously on the user's behalf.
+- It does not learn personal experience automatically; knowledge objects and memories require explicit user creation, review or confirmation.
+- An Experience Candidate is only an AI-organized draft, not confirmed experience, and is never written into the knowledge base automatically.
+- Local OCR targets single-page printed text; it does not support handwriting, formulas, complex table structure or batch OCR.
+- Keyword search does not expand synonyms automatically; optional hybrid search is not full semantic understanding and does not replace source verification.
+- Search display and batch operations have load-range limits; deep pagination performance on very large knowledge bases still needs observation.
+- Complete backups are local directory structures, not encrypted archives; backup media security is the user's responsibility.
 
 ## Installation
 
-Requirements: Windows 10 or 11, PowerShell, Python 3.11, and a Python SQLite build with FTS5 support.
+Requirements: Windows 10/11, PowerShell, Python 3.11 and a Python SQLite build with FTS5 support.
 
 ```powershell
 py -3.11 -m venv .venv
@@ -166,41 +164,37 @@ python -m pip install -r requirements.txt
 Copy-Item .env.example .env
 ```
 
-`.env` is optional local configuration and must not be committed. See
-[Windows recovery and environment reconstruction](docs/windows-recovery.md) for a complete clean-machine workflow.
-GitHub does not store the user's database, imported material, credentials, logs, or cache.
+`.env` is an optional local configuration and must never be committed to Git. See
+[Windows recovery and environment rebuild](docs/windows-recovery.md) for the complete new-machine recovery flow. GitHub never stores user databases, imported materials, credentials, logs or caches.
 
 ## Start and Stop
 
-- Start: double-click `启动工程知识库.bat`.
-- Silent start: double-click `静默启动工程知识库.vbs`.
-- Inspect status: double-click `查看运行状态.bat`.
+- Start: double-click `启动工程知识库.bat`;
+- Silent start: double-click `静默启动工程知识库.vbs`;
+- Status: double-click `查看运行状态.bat`;
 - Stop: double-click `停止工程知识库.bat`.
 
-For foreground development:
+For development, run in the foreground:
 
 ```powershell
 .\.venv\Scripts\python.exe -m streamlit run app.py
 ```
 
-The formal endpoint is fixed at <http://127.0.0.1:8501>; the health endpoint is
-<http://127.0.0.1:8501/_stcore/health>. Do not bind to `0.0.0.0` or expose EKB to an external network.
+The official endpoint is <http://127.0.0.1:8501> and the health check is
+<http://127.0.0.1:8501/_stcore/health>. Never change it to `0.0.0.0` or expose it to an external network.
 
 ## Local Data and Safety
 
 ```text
 data/
-├── raw/            # Original PDFs; retained for compatibility with existing local data
-├── pages/          # Page PNGs
-├── markdown/       # Page Markdown
+├── raw/            # original PDFs; compatible with existing local data paths
+├── pages/          # page PNGs
+├── markdown/       # page Markdown
 └── database/
     └── knowledge.db
 ```
 
-`data/`, `backups/`, `logs/`, `runtime/`, and local configuration remain separate from application source and are
-ignored by Git. Database upgrades use additive migrations, pre-migration backups, transactions, integrity checks, and
-foreign-key checks. Document deletion requires an explicit impact preview and confirmation; original PDFs and page
-images are never deleted automatically.
+`data/`, `backups/`, `logs/`, `runtime/` and local configuration are separated from source code and ignored by Git. Database upgrades use pure incremental migrations, pre-migration backups, transactions, integrity checks and foreign-key checks. Document deletion requires an explicit impact preview and confirmation; the system never deletes original PDFs or page images automatically.
 
 ## Quality Checks
 
@@ -216,15 +210,15 @@ Unified release check:
 .\.venv\Scripts\python.exe scripts\release_check.py
 ```
 
-Release-commit and tag closure can reuse a verified backup in stopped-service mode. Every failed check must be handled
-explicitly before publication.
+The release commit and tag closure may use verified-backup and stopped-service modes; every failed check must be handled explicitly before release.
 
 ## Documentation
 
 - [CHANGELOG](CHANGELOG.md)
 - [v0.5.x Roadmap](docs/v0.5.x-roadmap.md)
-- [Windows recovery and environment reconstruction](docs/windows-recovery.md)
+- [v0.5.3 Release Notes (Chinese)](docs/v0.5.3-release-notes.md)
+- [v0.5.3 Release Notes (English)](docs/v0.5.3-release-notes-en.md)
+- [Windows recovery and environment rebuild](docs/windows-recovery.md)
 - [GitHub Releases](https://github.com/JZ-05T68/engineering-knowledge-base-src/releases)
 
-`README.md` and `README_EN.md` are equivalent official project documents. Product positioning, capabilities,
-limitations, and roadmap changes must be maintained in both languages.
+`README.md` and `README_EN.md` are equivalent official project documents; positioning, capabilities, limitations and roadmap changes must be maintained in sync.

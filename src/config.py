@@ -55,8 +55,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_title: str = "工程知识库 v0.5.2"
-    app_version: str = "0.5.2"
+    app_title: str = "工程知识库 v0.5.3"
+    app_version: str = "0.5.3"
     host: Literal["127.0.0.1"] = OFFICIAL_HOST
     port: int = Field(default=OFFICIAL_PORT, ge=1, le=65535)
 
@@ -85,6 +85,11 @@ class Settings(BaseSettings):
     ai_embedding_model: str = "qwen3.7-text-embedding"
     ai_rerank_model: str = "qwen3-rerank"
     ai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
+    # Bounded retry and token budgets (v0.5.3). Budget unit is tokens, never
+    # currency; 0 means unlimited. Retry ceiling is capped at 2 extra attempts.
+    ai_max_extra_attempts: int = Field(default=2, ge=0, le=2)
+    ai_daily_token_budget: int = Field(default=0, ge=0)
+    ai_monthly_token_budget: int = Field(default=0, ge=0)
 
     def ensure_directories(self) -> None:
         """Create all writable local directories without removing existing data."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 import src.runtime as runtime
-from src.ai.provider import AIExecutionError
+from src.ai.provider import AIExecutionError, AuditedAIProvider
 from src.ai.qwen_client import QwenProvider, QwenTransportError
 from src.config import Settings
 
@@ -37,31 +37,34 @@ def test_api_mode_without_key_disables_ai_provider(
     assert runtime.application_ai_provider() is None
 
 
-def test_api_mode_with_key_builds_qwen_provider(
+def test_api_mode_with_key_builds_audited_provider(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_settings(monkeypatch, ai_mode="api", ai_api_key="sk-runtime-test")
 
     provider = runtime.application_ai_provider()
 
-    assert isinstance(provider, QwenProvider)
+    assert isinstance(provider, AuditedAIProvider)
     assert provider.is_configured
+    assert isinstance(provider.wrapped, QwenProvider)
 
 
-def test_application_provider_forces_zero_retry(
+def test_application_provider_uses_configured_retry_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The EKB runtime policy pins max_extra_attempts to 0 for the app.
+    """Retry policy comes from Settings.ai_max_extra_attempts, never a hard-coded 0."""
 
-    The Qwen library default stays 2; only the runtime factory's own provider
-    is pinned. Verified through observable behaviour: a provider with zero
-    retry calls the transport exactly once and raises on the first transient
-    failure instead of retrying.
-    """
-    _stub_settings(monkeypatch, ai_mode="api", ai_api_key="sk-runtime-test")
-
+    _stub_settings(
+        monkeypatch,
+        ai_mode="api",
+        ai_api_key="sk-runtime-test",
+        ai_max_extra_attempts=0,
+    )
     provider = runtime.application_ai_provider()
-    assert isinstance(provider, QwenProvider)
+    assert isinstance(provider, AuditedAIProvider)
+    inner = provider.wrapped
+    assert isinstance(inner, QwenProvider)
+    assert inner._max_extra_attempts == 0
 
     calls: list[int] = []
 
@@ -69,11 +72,21 @@ def test_application_provider_forces_zero_retry(
         calls.append(1)
         raise QwenTransportError("transient", status_code=503)
 
-    provider._transport = _failing_transport
+    inner._transport = _failing_transport
     with pytest.raises(AIExecutionError):
-        provider.embed(("query",), model="qwen3.7-text-embedding", dimensions=1024)
+        inner.embed(("query",), model="qwen3.7-text-embedding", dimensions=1024)
 
     assert len(calls) == 1
+
+
+def test_application_provider_default_retry_policy_is_two(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_settings(monkeypatch, ai_mode="api", ai_api_key="sk-runtime-test")
+
+    provider = runtime.application_ai_provider()
+    assert isinstance(provider, AuditedAIProvider)
+    assert provider.wrapped._max_extra_attempts == 2  # type: ignore[attr-defined]
 
 
 def test_provider_factory_is_cached_per_process(
@@ -101,4 +114,4 @@ def test_ai_factory_never_touches_existing_services(
         lambda: pytest.fail("AI 工厂不应触碰 OCR 引擎"),
     )
 
-    assert isinstance(runtime.application_ai_provider(), QwenProvider)
+    assert isinstance(runtime.application_ai_provider(), AuditedAIProvider)

@@ -1,5 +1,40 @@
 # 变更记录
 
+## v0.5.3 — 可审计 AI 接入
+
+发布日期：2026-08-26。
+
+在 v0.5.2 Knowledge Foundation 之上，为用户明确选定或检索出的本地知识增加可审计、引用约束、
+按需触发的 AI 辅助能力，并补齐 AI 调用台账、结构化导出和旧备份升级。
+
+### 变更
+
+- 应用版本推进至 0.5.3；数据库保持 **schema v12**，不新增 migration。
+- **ContextItem / KnowledgeContextPackage**：页面、知识对象、知识记忆和证据统一投影为只读
+  ContextItem，并打包为带引用、来源、生命周期和排除信息的上下文包（fail-closed）。
+- **Ask AI / RAG Answer**：用户主动提问，AI 只能依据所选 KnowledgeContextPackage 回答；
+  每次真实调用进入 ai_calls 台账并携带 `source_feature="rag_answer"` 与目标 stable_id。
+- **引用运行时完整性校验**：AI 回答中的每个引用都必须属于本次上下文包；未知、伪造、越界和
+  空引用一律 fail-closed，不显示半成品回答。
+- **只读 AI 整理经验**：基于用户选定上下文按需生成结构化 Experience Candidate，只读预览，
+  不自动写入知识资产；真实调用携带 `source_feature="experience_model"`。
+- **AI 调用台账**：ai_calls 只读查询服务与只读仪表盘，白名单排序、稳定分页、target_refs
+  批处理解析、错误脱敏；不保存完整 prompt、上下文或回答；Mock 不写台账。
+- **Knowledge Export**：知识对象、来源、关系、修订和知识记忆的结构化无损导出，含 manifest、
+  逐文件 SHA-256 与每对象独立 Markdown；不混入 AI 台账、向量或密钥。
+- **AI Ledger Export**：ai_calls 审计元数据独立导出（JSON/JSONL 权威格式），不含正文、
+  密钥、provider 或费用猜测。
+- **schema v8 旧备份隔离升级**：旧数据库快照通过独立入口升级到当前 schema，原始备份字节不变，
+  八步状态机含 staging、迁移、验证与第二隔离目录恢复演练。
+- **生产端点**：正式服务固定绑定 `127.0.0.1:8501`；无 API Key 时全部离线基础功能保持不变。
+
+### 安全边界与已知限制
+
+- AI 不自动写知识；Experience Candidate 不是已确认经验；
+- 无 Agent、无工具调用、无长期会话记忆、无自动扫描私人资料、无云同步；
+- AI 调用台账不保存完整 prompt、上下文和回答；
+- AI 是可选层，不是基础功能依赖。
+
 ## v0.5.2 — Knowledge Foundation
 
 发布日期：2026-08-25。

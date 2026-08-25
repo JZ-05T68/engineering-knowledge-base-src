@@ -43,6 +43,7 @@ KNOWLEDGE_MEMORY_COLUMNS = {
     "knowledge_object_id", "document_id", "page_id", "status",
     "created_at", "updated_at", "search_title", "search_content",
     "search_root_cause", "search_lesson",
+    "content_revision", "outcome", "context_conditions",
 }
 KNOWLEDGE_REVISION_COLUMNS = {
     "id", "knowledge_object_id", "object_local_id_snapshot",
@@ -234,7 +235,7 @@ def test_migrate_v9_to_v10_preserves_data_and_adds_structures(tmp_path: Path) ->
         )
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert version == SCHEMA_VERSION == 11
+    assert version == SCHEMA_VERSION == 12
     # v9 reviewed → active + confirmed, confirmation bound to baseline (#3).
     assert objects[0] == (
         1, "fact", "user", "unknown_legacy", "active", "confirmed", 3, 3, "事实A",
@@ -265,7 +266,7 @@ def test_migrate_v9_to_v10_preserves_data_and_adds_structures(tmp_path: Path) ->
 
 def test_fresh_database_has_v10_structure_and_single_uuid(tmp_path: Path) -> None:
     database = Database(tmp_path / "knowledge.db")
-    assert database.SCHEMA_VERSION == 11
+    assert database.SCHEMA_VERSION == 12
     with sqlite3.connect(database.database_path) as connection:
         versions = [
             row[0]
@@ -284,7 +285,7 @@ def test_fresh_database_has_v10_structure_and_single_uuid(tmp_path: Path) -> Non
         uuid_row = connection.execute(
             "SELECT kb_uuid FROM knowledge_base_meta WHERE id = 1"
         ).fetchone()
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     assert meta_rows == 1
     assert len(uuid_row[0]) == 36
     assert database.get_knowledge_base_uuid() == uuid_row[0]
@@ -309,7 +310,7 @@ def test_remigration_is_noop_and_uuid_stable(tmp_path: Path) -> None:
         object_count = connection.execute(
             "SELECT COUNT(*) FROM knowledge_objects"
         ).fetchone()[0]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
     assert object_count == 3
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
 

@@ -150,7 +150,7 @@ def _unconfigured_transport(
     """Default transport: guarantee this phase never emits real requests."""
 
     raise AIUnavailableError(
-        "AI 传输层未配置：v0.5.0 当前阶段不发起真实 AI API 请求。"
+        "AI 传输层未配置：当前环境不发起真实 AI API 请求。"
     )
 
 
@@ -162,6 +162,18 @@ def _is_transient(error: QwenTransportError) -> bool:
         or error.status_code == 429
         or error.status_code >= 500
     )
+
+
+def _error_class_for(error: QwenTransportError) -> str:
+    """Map one transport failure to the vendor-neutral ledger error class."""
+
+    if error.status_code is None:
+        return "transport"
+    if error.status_code == 429:
+        return "http_429"
+    if error.status_code >= 500:
+        return "http_5xx"
+    return "http_4xx"
 
 
 class QwenProvider:
@@ -235,8 +247,8 @@ class QwenProvider:
             if max_completion_tokens <= 0:
                 raise ValueError("max_completion_tokens 必须为正数")
             payload["max_completion_tokens"] = max_completion_tokens
-        response = self._post("/chat/completions", payload)
-        return self._parse_completion(response, chosen_model)
+        response, retry_count = self._post("/chat/completions", payload)
+        return self._parse_completion(response, chosen_model, retry_count=retry_count)
 
     def embed(
         self,
@@ -269,9 +281,13 @@ class QwenProvider:
         }
         if dimensions is not None:
             payload["dimensions"] = dimensions
-        response = self._post("/embeddings", payload)
+        response, retry_count = self._post("/embeddings", payload)
         return self._parse_embeddings(
-            response, chosen_model, expected_count=len(texts), dimensions=dimensions
+            response,
+            chosen_model,
+            expected_count=len(texts),
+            dimensions=dimensions,
+            retry_count=retry_count,
         )
 
     def rerank(
@@ -294,8 +310,14 @@ class QwenProvider:
                 "AI 能力不可用：未配置 API Key（当前为手动模式或未设置 EKB_AI_API_KEY）。"
             )
 
-    def _post(self, path: str, payload: Mapping[str, Any]) -> Mapping[str, Any]:
-        """Send one request with the bounded, flat retry policy."""
+    def _post(
+        self, path: str, payload: Mapping[str, Any]
+    ) -> tuple[Mapping[str, Any], int]:
+        """Send one request with the bounded, flat retry policy.
+
+        Returns ``(response_body, extra_attempts_used)`` so the adapter can
+        report the consumed retry budget to the vendor-neutral audit layer.
+        """
 
         url = f"{self._base_url}{path}"
         headers = {
@@ -305,17 +327,26 @@ class QwenProvider:
         attempts = 1 + self._max_extra_attempts
         for attempt in range(attempts):
             try:
-                return self._transport(url, headers, payload, self._timeout_seconds)
+                return self._transport(url, headers, payload, self._timeout_seconds), attempt
             except QwenTransportError as exc:
                 if not _is_transient(exc) or attempt == attempts - 1:
                     raise AIExecutionError(
-                        f"AI 请求执行失败（HTTP {exc.status_code}）：{exc}"
+                        f"AI 请求执行失败（HTTP {exc.status_code}）：{exc}",
+                        error_class=_error_class_for(exc),
+                        retry_count=attempt,
                     ) from exc
-        raise AIExecutionError("AI 请求执行失败：重试次数已用尽。")  # pragma: no cover
+        raise AIExecutionError(
+            "AI 请求执行失败：重试次数已用尽。",
+            error_class="transport",
+            retry_count=self._max_extra_attempts,
+        )  # pragma: no cover
 
     @staticmethod
     def _parse_completion(
-        response: Mapping[str, Any], requested_model: str
+        response: Mapping[str, Any],
+        requested_model: str,
+        *,
+        retry_count: int = 0,
     ) -> CompletionResult:
         """Parse one OpenAI-compatible chat completion response."""
 
@@ -325,15 +356,19 @@ class QwenProvider:
             text = message["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise AIExecutionError(
-                "AI 响应解析失败：缺少 choices/message/content 结构。"
+                "AI 响应解析失败：缺少 choices/message/content 结构。",
+                error_class="parse",
             ) from exc
         if not isinstance(text, str):
-            raise AIExecutionError("AI 响应解析失败：content 不是文本。")
+            raise AIExecutionError(
+                "AI 响应解析失败：content 不是文本。", error_class="parse"
+            )
         return CompletionResult(
             text=text,
             model=str(response.get("model") or requested_model),
             usage=QwenProvider._parse_usage(response.get("usage")),
             finish_reason=QwenProvider._parse_finish_reason(choices[0]),
+            retry_count=retry_count,
         )
 
     @staticmethod
@@ -353,6 +388,7 @@ class QwenProvider:
         *,
         expected_count: int,
         dimensions: int | None,
+        retry_count: int = 0,
     ) -> EmbeddingResult:
         """Parse and fail-closed validate one embeddings response."""
 
@@ -361,37 +397,54 @@ class QwenProvider:
             items = sorted(data, key=lambda item: item["index"])
         except (KeyError, TypeError) as exc:
             raise AIExecutionError(
-                "AI 响应解析失败：缺少 data/embedding 结构。"
+                "AI 响应解析失败：缺少 data/embedding 结构。",
+                error_class="parse",
             ) from exc
         if len(items) != expected_count:
             raise AIExecutionError(
-                f"AI 响应校验失败：返回向量数 {len(items)} 与输入数 {expected_count} 不一致。"
+                f"AI 响应校验失败：返回向量数 {len(items)} 与输入数 {expected_count} 不一致。",
+                error_class="parse",
             )
         if [item["index"] for item in items] != list(range(expected_count)):
-            raise AIExecutionError("AI 响应校验失败：embedding index 与输入顺序不对应。")
+            raise AIExecutionError(
+                "AI 响应校验失败：embedding index 与输入顺序不对应。",
+                error_class="parse",
+            )
         vectors: list[tuple[float, ...]] = []
         for item in items:
             raw_vector = item.get("embedding")
             if raw_vector is None:
-                raise AIExecutionError("AI 响应解析失败：缺少 data/embedding 结构。")
+                raise AIExecutionError(
+                    "AI 响应解析失败：缺少 data/embedding 结构。",
+                    error_class="parse",
+                )
             if not isinstance(raw_vector, Sequence) or isinstance(raw_vector, str):
-                raise AIExecutionError("AI 响应校验失败：embedding 不是数值数组。")
+                raise AIExecutionError(
+                    "AI 响应校验失败：embedding 不是数值数组。",
+                    error_class="parse",
+                )
             if len(raw_vector) == 0:
-                raise AIExecutionError("AI 响应校验失败：存在空 embedding 向量。")
+                raise AIExecutionError(
+                    "AI 响应校验失败：存在空 embedding 向量。",
+                    error_class="parse",
+                )
             if dimensions is not None and len(raw_vector) != dimensions:
                 raise AIExecutionError(
-                    f"AI 响应校验失败：向量维度 {len(raw_vector)} 与请求值 {dimensions} 不一致。"
+                    f"AI 响应校验失败：向量维度 {len(raw_vector)} 与请求值 {dimensions} 不一致。",
+                    error_class="parse",
                 )
             try:
                 vectors.append(tuple(float(value) for value in raw_vector))
             except (TypeError, ValueError) as exc:
                 raise AIExecutionError(
-                    "AI 响应校验失败：embedding 含非数值元素。"
+                    "AI 响应校验失败：embedding 含非数值元素。",
+                    error_class="parse",
                 ) from exc
         return EmbeddingResult(
             embeddings=tuple(vectors),
             model=str(response.get("model") or requested_model),
             usage=QwenProvider._parse_embedding_usage(response.get("usage")),
+            retry_count=retry_count,
         )
 
     @staticmethod
@@ -406,7 +459,9 @@ class QwenProvider:
                 total_tokens=int(raw_usage["total_tokens"]),
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise AIExecutionError("AI 响应解析失败：usage 结构不完整。") from exc
+            raise AIExecutionError(
+                "AI 响应解析失败：usage 结构不完整。", error_class="parse"
+            ) from exc
 
     @staticmethod
     def _parse_usage(raw_usage: Any) -> CompletionUsage | None:
@@ -421,4 +476,6 @@ class QwenProvider:
                 total_tokens=int(raw_usage["total_tokens"]),
             )
         except (KeyError, TypeError, ValueError) as exc:
-            raise AIExecutionError("AI 响应解析失败：usage 结构不完整。") from exc
+            raise AIExecutionError(
+                "AI 响应解析失败：usage 结构不完整。", error_class="parse"
+            ) from exc

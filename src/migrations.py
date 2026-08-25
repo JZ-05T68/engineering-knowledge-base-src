@@ -10,12 +10,14 @@ from pathlib import Path
 from uuid import uuid4
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 # 仅用于 Phase 2B-V 失败注入验证；生产运行时恒为 None，永不触发。
 _V10_INJECTION_POINT: str | None = None
 # 仅用于 Phase 3B 失败注入验证；生产运行时恒为 None，永不触发。
 _V11_INJECTION_POINT: str | None = None
+# 仅用于 Phase 2-A v12 失败注入验证；生产运行时恒为 None，永不触发。
+_V12_INJECTION_POINT: str | None = None
 
 
 def _inject_v10_failure(point: str) -> None:
@@ -30,6 +32,13 @@ def _inject_v11_failure(point: str) -> None:
 
     if _V11_INJECTION_POINT == point:
         raise MigrationError(f"v11 迁移失败注入点：{point}")
+
+
+def _inject_v12_failure(point: str) -> None:
+    """Raise inside ``_apply_version_twelve`` when ``point`` matches the test hook."""
+
+    if _V12_INJECTION_POINT == point:
+        raise MigrationError(f"v12 迁移失败注入点：{point}")
 
 
 class MigrationError(RuntimeError):
@@ -101,6 +110,9 @@ def migrate_database(database_path: Path) -> Path | None:
         if current_version < 11:
             _apply_version_eleven(connection)
             current_version = 11
+        if current_version < 12:
+            _apply_version_twelve(connection)
+            current_version = 12
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -1591,6 +1603,181 @@ def _apply_version_eleven(connection: sqlite3.Connection) -> None:
     except Exception:
         connection.rollback()
         raise
+
+
+def _apply_version_twelve(connection: sqlite3.Connection) -> None:
+    """Add the v0.5.3 AI audit ledger and experience-model groundwork.
+
+    v12 changes (Phase 2-A, V53-ADR-06) are pure incremental:
+
+    - three new tables: ``ai_calls`` (append-only AI call audit ledger),
+      ``ai_outputs`` (AI output audit anchors) and ``knowledge_project_links``
+      (project-to-knowledge association);
+    - ``knowledge_memory_entries`` gains ``content_revision``, ``outcome`` and
+      ``context_conditions`` through ``ALTER TABLE ADD COLUMN`` only, with
+      conservative defaults (1 / '' / '') — legacy rows are never backfilled
+      from their historical content;
+    - no existing v1-v11 table, index or FTS object is dropped, rebuilt or
+      recreated.
+
+    Data integrity is checked by comparing the v12 fingerprint before and
+    after: row sets and content fields of the existing knowledge, document,
+    page, note and evidence tables must be byte-identical.
+    """
+
+    fingerprint = _v12_data_fingerprint(connection)
+    migration_timestamp = _utc_now()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE ai_calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                call_uuid TEXT NOT NULL UNIQUE,
+                capability TEXT NOT NULL
+                    CHECK (capability IN ('completion', 'embedding', 'rerank')),
+                model TEXT NOT NULL,
+                prompt_sha256 TEXT NOT NULL
+                    CHECK (length(prompt_sha256) = 64),
+                input_chars INTEGER NOT NULL DEFAULT 0
+                    CHECK (input_chars >= 0),
+                status TEXT NOT NULL
+                    CHECK (status IN ('success', 'error', 'rejected')),
+                error_class TEXT,
+                retry_count INTEGER NOT NULL DEFAULT 0
+                    CHECK (retry_count >= 0),
+                latency_ms INTEGER,
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                total_tokens INTEGER,
+                finish_reason TEXT,
+                source_feature TEXT NOT NULL,
+                target_refs TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        _inject_v12_failure("v12_ai_calls")
+        connection.execute(
+            "CREATE INDEX idx_ai_calls_created_at ON ai_calls(created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_ai_calls_feature_created "
+            "ON ai_calls(source_feature, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_ai_calls_status ON ai_calls(status)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE ai_outputs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                output_uuid TEXT NOT NULL UNIQUE,
+                call_uuid TEXT,
+                model TEXT NOT NULL,
+                context_package_sha256 TEXT,
+                output_sha256 TEXT NOT NULL
+                    CHECK (length(output_sha256) = 64),
+                output_kind TEXT NOT NULL
+                    CHECK (output_kind IN ('imported_answer', 'prompt_package')),
+                source_feature TEXT NOT NULL,
+                target_refs TEXT NOT NULL DEFAULT '[]',
+                recheck_path TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+        _inject_v12_failure("v12_ai_outputs")
+        connection.execute(
+            "CREATE INDEX idx_ai_outputs_created_at ON ai_outputs(created_at)"
+        )
+        connection.execute(
+            """
+            CREATE TABLE knowledge_project_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                project_id INTEGER NOT NULL
+                    REFERENCES projects(id) ON DELETE CASCADE,
+                target_type TEXT NOT NULL
+                    CHECK (target_type IN ('knowledge_object', 'knowledge_memory')),
+                target_id INTEGER NOT NULL,
+                created_at TEXT NOT NULL,
+                UNIQUE(project_id, target_type, target_id)
+            )
+            """
+        )
+        _inject_v12_failure("v12_project_links")
+        connection.execute(
+            "CREATE INDEX idx_knowledge_project_links_target "
+            "ON knowledge_project_links(target_type, target_id)"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN content_revision INTEGER NOT NULL DEFAULT 1 "
+            "CHECK (content_revision >= 1)"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN outcome TEXT NOT NULL DEFAULT ''"
+        )
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN context_conditions TEXT NOT NULL DEFAULT ''"
+        )
+        _inject_v12_failure("v12_memory_columns")
+
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (12, ?)",
+            (migration_timestamp,),
+        )
+        _inject_v12_failure("v12_version_record")
+        if _v12_data_fingerprint(connection) != fingerprint:
+            raise MigrationError(
+                "schema v12 迁移改变了现有知识、文档、页面、笔记或证据数据"
+            )
+        _inject_v12_failure("v12_before_commit")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v12")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _v12_data_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:
+    """Return raw invariants that the v12 pure-incremental migration must keep.
+
+    ``knowledge_memory_entries`` is fingerprinted by its pre-v12 column list
+    only, so the three newly added columns can never be mistaken for data
+    mutation. All other existing tables are untouched by v12 and are compared
+    row-by-row with ``SELECT *``.
+    """
+
+    def _rows(table: str) -> tuple[tuple[object, ...], ...]:
+        return tuple(
+            tuple(row)
+            for row in connection.execute(
+                f"SELECT * FROM {table} ORDER BY id"
+            ).fetchall()
+        )
+
+    memory_rows = tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT id, kind, title, content, root_cause, lesson,"
+            " knowledge_object_id, document_id, page_id, status, created_at,"
+            " updated_at FROM knowledge_memory_entries ORDER BY id"
+        ).fetchall()
+    )
+    return (
+        _rows("knowledge_objects"),
+        memory_rows,
+        _rows("knowledge_object_sources"),
+        _rows("knowledge_relations"),
+        _rows("knowledge_object_revisions"),
+        _rows("documents"),
+        _rows("pages"),
+        _rows("notes"),
+        _rows("evidence_items"),
+    )
 
 
 def _backfill_knowledge_shadow_columns(connection: sqlite3.Connection) -> None:

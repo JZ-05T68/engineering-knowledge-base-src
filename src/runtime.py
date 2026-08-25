@@ -5,19 +5,28 @@ from __future__ import annotations
 import logging
 import sys
 import threading
+from datetime import UTC, datetime
 from functools import lru_cache
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from src.ai.coverage_service import PageEmbeddingCoverageService
+from src.ai.experience_model_service import ExperienceModelService
 from src.ai.hybrid_search import HybridSearchService
 from src.ai.page_indexer import EMBEDDING_CONFIG_VERSION, EMBEDDING_DIMENSIONS
-from src.ai.provider import CompletionProvider, EmbeddingProvider
+from src.ai.provider import (
+    AiCallRecord,
+    AIUnavailableError,
+    AuditedAIProvider,
+    CompletionProvider,
+    EmbeddingProvider,
+)
 from src.ai.qwen_client import QwenProvider, urllib_transport
 from src.ai.vector_recall import (
     PersistentVectorRecallSource,
     SearchableContentFingerprintSource,
 )
+from src.ai_ledger_service import AILedgerService
 from src.backup_service import BackupService
 from src.batch_service import PageBatchService
 from src.classification_metadata import ClassificationMetadataService
@@ -107,13 +116,20 @@ def application_database() -> Database:
 
 @lru_cache(maxsize=1)
 def application_ai_provider() -> CompletionProvider | None:
-    """Return the optional AI provider, or ``None`` when AI is disabled.
+    """Return the optional audited AI provider, or ``None`` when AI is disabled.
 
     AI is an optional capability, never a startup dependency: manual mode,
     a missing API key, or an unknown provider all yield ``None``, and no
-    existing service receives or requires this provider. Construction is
-    cheap and performs no network I/O; the current phase's adapter uses
-    the unconfigured transport that refuses real API requests.
+    existing service receives or requires this provider. When enabled, the
+    vendor adapter is wrapped in :class:`AuditedAIProvider`, so every real
+    completion/embedding call is recorded in the local ``ai_calls`` ledger
+    and evaluated against the configured token budgets before any network
+    request is sent. Retry policy comes from ``Settings.ai_max_extra_attempts``
+    (bounded to 0..2) instead of a hard-coded value.
+
+    Construction performs no network I/O. The durable ledger and budget guard
+    resolve the local database lazily on first use, so building the provider
+    never initializes the database or OCR engine.
     """
 
     settings = application_settings()
@@ -122,16 +138,70 @@ def application_ai_provider() -> CompletionProvider | None:
     api_key = settings.ai_api_key.get_secret_value()
     if not api_key:
         return None
-    return QwenProvider(
+    qwen_provider = QwenProvider(
         api_key=api_key,
         llm_model=settings.ai_llm_model,
         llm_model_hard=settings.ai_llm_model_hard,
         embedding_model=settings.ai_embedding_model,
         rerank_model=settings.ai_rerank_model,
         timeout_seconds=settings.ai_timeout_seconds,
-        max_extra_attempts=0,
+        max_extra_attempts=settings.ai_max_extra_attempts,
         transport=urllib_transport,
     )
+    return AuditedAIProvider(
+        qwen_provider,
+        default_model=settings.ai_llm_model,
+        default_embedding_model=settings.ai_embedding_model,
+        source_feature="application",
+        ledger=_LazyDatabaseAiCallLedger(),
+        budget_guard=_LazyTokenBudgetGuard(settings),
+    )
+
+
+class _LazyDatabaseAiCallLedger:
+    """Ledger sink that opens the local database only when a call is recorded."""
+
+    def record(self, call: AiCallRecord) -> None:
+        application_database().insert_ai_call(call)
+
+
+class _LazyTokenBudgetGuard:
+    """Token budget gate evaluated against the local ``ai_calls`` ledger.
+
+    Budgets are expressed in tokens and read from settings; ``0`` means
+    unlimited. The database is resolved lazily so constructing the AI
+    provider never touches it. An exceeded budget raises
+    ``AIUnavailableError`` before any network request is sent.
+    """
+
+    def __init__(self, settings: Settings) -> None:
+        self._daily_budget = settings.ai_daily_token_budget
+        self._monthly_budget = settings.ai_monthly_token_budget
+
+    def ensure_allowed(self, capability: str) -> None:
+        if self._daily_budget <= 0 and self._monthly_budget <= 0:
+            return
+        now = datetime.now(UTC)
+        if self._daily_budget > 0:
+            day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            used = application_database().total_ai_tokens_since(
+                day_start.isoformat(timespec="microseconds")
+            )
+            if used >= self._daily_budget:
+                raise AIUnavailableError(
+                    f"AI 调用被日预算限制拒绝：今日已用 {used} tokens，"
+                    f"上限 {self._daily_budget} tokens。"
+                )
+        if self._monthly_budget > 0:
+            month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            used = application_database().total_ai_tokens_since(
+                month_start.isoformat(timespec="microseconds")
+            )
+            if used >= self._monthly_budget:
+                raise AIUnavailableError(
+                    f"AI 调用被月预算限制拒绝：本月已用 {used} tokens，"
+                    f"上限 {self._monthly_budget} tokens。"
+                )
 
 
 @lru_cache(maxsize=1)
@@ -295,6 +365,29 @@ def application_knowledge_memory_service() -> KnowledgeMemoryService:
     """Return the process-wide knowledge-memory service (schema v9)."""
 
     return KnowledgeMemoryService(application_database())
+
+
+@lru_cache(maxsize=1)
+def application_experience_model_service() -> ExperienceModelService:
+    """Return the process-wide experience-model service (v0.5.3 Phase 4).
+
+    The service receives the shared AI provider (which may be ``None`` when AI
+    is disabled); callers fall back to the deterministic mock provider at the
+    UI layer. No network request happens at construction time.
+    """
+
+    return ExperienceModelService(application_ai_provider())
+
+
+@lru_cache(maxsize=1)
+def application_ai_ledger_service() -> AILedgerService:
+    """Return the process-wide read-only AI call ledger service (Phase 5).
+
+    The factory performs no network request and no AI call; it only wires the
+    local database.
+    """
+
+    return AILedgerService(application_database())
 
 
 @lru_cache(maxsize=1)

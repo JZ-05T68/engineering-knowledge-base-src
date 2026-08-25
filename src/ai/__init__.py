@@ -7,10 +7,15 @@ including the default manual AI mode with no API key configured.
 """
 
 from src.ai.provider import (
+    AiBudgetGuard,
+    AiCallLedger,
+    AiCallRecord,
     AIError,
     AIExecutionError,
+    AiOutputRecord,
     AIProvider,
     AIUnavailableError,
+    AuditedAIProvider,
     CompletionProvider,
     CompletionResult,
     CompletionUsage,
@@ -27,6 +32,11 @@ __all__ = [
     "AIExecutionError",
     "AIProvider",
     "AIUnavailableError",
+    "AiBudgetGuard",
+    "AiCallLedger",
+    "AiCallRecord",
+    "AiOutputRecord",
+    "AuditedAIProvider",
     "CompletionProvider",
     "CompletionResult",
     "CompletionUsage",

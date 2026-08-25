@@ -1,4 +1,4 @@
-"""Unified v0.5.2 release-readiness checks with clear process exit status."""
+"""Unified v0.5.3 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.5.2"
+EXPECTED_VERSION: Final[str] = "0.5.3"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -178,7 +178,7 @@ class ReleaseChecker:
         pytest = _run_command(
             [str(self._python()), "-m", "pytest", "-q"],
             self.project_root,
-            timeout=1_200,
+            timeout=2_400,
         )
         passed = successful_test_count(
             pytest.output,
@@ -252,7 +252,10 @@ class ReleaseChecker:
             )
             results.append(schema_v7_invariants_check(self.settings.database_path))
             results.append(schema_v8_invariants_check(self.settings.database_path))
+            results.append(schema_v9_v12_invariants_check(self.settings.database_path))
 
+        results.append(readme_parity_check(self.project_root))
+        results.append(export_format_constants_check())
         results.append(data_pollution_check(self.settings.data_dir))
 
         residual = tuple(
@@ -602,6 +605,147 @@ def schema_v8_invariants_check(database_path: Path) -> CheckResult:
     )
 
 
+def schema_v9_v12_invariants_check(database_path: Path) -> CheckResult:
+    """Read-only schema v9-v12 knowledge and AI-ledger invariants."""
+
+    required_tables = {
+        "knowledge_base_meta",
+        "knowledge_objects",
+        "knowledge_object_sources",
+        "knowledge_relations",
+        "knowledge_memory_entries",
+        "knowledge_object_revisions",
+        "knowledge_object_search",
+        "knowledge_memory_search",
+        "ai_calls",
+        "ai_outputs",
+    }
+    required_indexes = {
+        "idx_ai_calls_created_at",
+        "idx_ai_calls_feature_created",
+        "idx_ai_calls_status",
+        "idx_ai_outputs_created_at",
+    }
+    try:
+        with closing(sqlite3.connect(f"file:{database_path}?mode=ro", uri=True)) as connection:
+            tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type IN ('table', 'index', 'trigger')"
+                )
+            }
+            meta_rows = connection.execute(
+                "SELECT COUNT(*) FROM knowledge_base_meta"
+            ).fetchone()[0]
+            kb_uuid = connection.execute(
+                "SELECT kb_uuid FROM knowledge_base_meta"
+            ).fetchone()[0]
+            ai_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(ai_calls)")
+            }
+            capabilities = {
+                row[0]
+                for row in connection.execute("SELECT DISTINCT capability FROM ai_calls")
+            }
+            statuses = {
+                row[0]
+                for row in connection.execute("SELECT DISTINCT status FROM ai_calls")
+            }
+    except (OSError, sqlite3.Error) as exc:
+        return CheckResult("Schema v9-v12 invariants", CheckStatus.FAIL, str(exc))
+    issues: list[str] = []
+    missing_tables = sorted(required_tables - tables)
+    if missing_tables:
+        issues.append(f"缺少表或索引对象：{missing_tables}")
+    missing_indexes = sorted(required_indexes - tables)
+    if missing_indexes:
+        issues.append(f"缺少必要索引：{missing_indexes}")
+    if meta_rows != 1:
+        issues.append(f"knowledge_base_meta 行数为 {meta_rows}")
+    if not isinstance(kb_uuid, str) or len(kb_uuid) != 36:
+        issues.append("kb_uuid 不合法")
+    required_ai_columns = {
+        "capability", "source_feature", "status", "target_refs", "prompt_sha256",
+        "model", "created_at",
+    }
+    missing_ai_columns = sorted(required_ai_columns - ai_columns)
+    if missing_ai_columns:
+        issues.append(f"ai_calls 缺少列：{missing_ai_columns}")
+    if not capabilities <= {"completion", "embedding", "rerank"}:
+        issues.append(f"非法 capability 值：{sorted(capabilities)}")
+    if not statuses <= {"success", "error", "rejected"}:
+        issues.append(f"非法 status 值：{sorted(statuses)}")
+    return CheckResult(
+        "Schema v9-v12 invariants",
+        CheckStatus.PASS if not issues else CheckStatus.FAIL,
+        "知识资产 / FTS / 台账 / 索引 / kb_uuid 全部在位" if not issues else "；".join(issues),
+    )
+
+
+_CJK_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"[㐀-鿿　-〿＀-￯]"
+)
+
+
+def readme_parity_check(project_root: Path) -> CheckResult:
+    """Require bilingual README structure parity and no CJK in README_EN."""
+
+    readme = _safe_read(project_root / "README.md")
+    readme_en = _safe_read(project_root / "README_EN.md")
+    issues: list[str] = []
+    if not readme.startswith("# Engineering Knowledge Base v0.5.3"):
+        issues.append("README.md 标题版本不是 v0.5.3")
+    if not readme_en.startswith("# Engineering Knowledge Base v0.5.3"):
+        issues.append("README_EN.md 标题版本不是 v0.5.3")
+    zh_headings = re.findall(r"(?m)^## .+", readme)
+    en_headings = re.findall(r"(?m)^## .+", readme_en)
+    if len(zh_headings) != len(en_headings):
+        issues.append(
+            f"一级/二级章节数量不一致：中文 {len(zh_headings)}，英文 {len(en_headings)}"
+        )
+    # Code spans are allowed to keep Chinese file names, commands and URLs verbatim.
+    text_without_code = re.sub(r"`[^`]*`", "", readme_en)
+    cjk_in_en = _CJK_PATTERN.findall(text_without_code)
+    if cjk_in_en:
+        issues.append(f"README_EN.md 正文含中文汉字 {len(cjk_in_en)} 处")
+    for token in ("ContextItem", "KnowledgeContextPackage", "Ask AI", "citation",
+                  "Experience", "AI call ledger", "Knowledge Export",
+                  "AI Ledger Export", "Schema-v8", "schema v12", "127.0.0.1:8501"):
+        if token not in readme_en:
+            issues.append(f"README_EN.md 缺少关键能力描述：{token}")
+    return CheckResult(
+        "README parity",
+        CheckStatus.PASS if not issues else CheckStatus.FAIL,
+        "中英文结构对等，英文版无中文残留" if not issues else "；".join(issues),
+    )
+
+
+def export_format_constants_check() -> CheckResult:
+    """Require the frozen export format constants for v0.5.3."""
+
+    try:
+        from src.ai_ledger_export_service import (  # noqa: PLC0415
+            AI_LEDGER_EXPORT_FORMAT_VERSION,
+        )
+        from src.knowledge_export_service import (  # noqa: PLC0415
+            KNOWLEDGE_EXPORT_FORMAT_VERSION,
+        )
+    except Exception as exc:  # pragma: no cover - import safety
+        return CheckResult("Export format constants", CheckStatus.FAIL, str(exc))
+    issues: list[str] = []
+    if KNOWLEDGE_EXPORT_FORMAT_VERSION != 1:
+        issues.append(f"knowledge_export_format_version={KNOWLEDGE_EXPORT_FORMAT_VERSION}")
+    if AI_LEDGER_EXPORT_FORMAT_VERSION != 1:
+        issues.append(f"ai_ledger_export_format_version={AI_LEDGER_EXPORT_FORMAT_VERSION}")
+    return CheckResult(
+        "Export format constants",
+        CheckStatus.PASS if not issues else CheckStatus.FAIL,
+        "knowledge/ai_ledger export format version 均为冻结值 1"
+        if not issues
+        else "；".join(issues),
+    )
+
+
 def listener_check(
     configured_host: str,
     port: int,
@@ -810,7 +954,7 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.5.2 统一发布检查")
+    parser = argparse.ArgumentParser(description="工程知识库 v0.5.3 统一发布检查")
     backup_group = parser.add_mutually_exclusive_group()
     backup_group.add_argument(
         "--skip-backup",
