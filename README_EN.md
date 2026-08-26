@@ -127,6 +127,185 @@ The v0.5.3 release gate is defined by `scripts/release_check.py` and the Phase 7
 
 These numbers record the release-candidate baseline and do not imply equal quality guarantees for every engineering domain, corpus or query.
 
+## Version History
+
+The entries below restore the formal scope and boundaries of each earlier release. The v0.0.x entries follow the
+repository's closed milestones; releases from v0.1.0 onward are also cross-checked against tags, the changelog and
+release records. These historical entries are not the current v0.5.3 capability statement.
+
+### v0.0.1 — Initial Local Knowledge Base MVP
+
+Established the local PDF workflow: preserve imported originals, render page images, extract text layers, identify
+pages needing review, maintain page-level Markdown, browse documents, search locally, generate traceable evidence
+packages and persist metadata in SQLite.
+
+### v0.0.2 — Page-Level Knowledge Management and Background Operation
+
+Established page-level organization and the Windows background start, stop, status, PID-validation, health-check and
+rotating-log workflow.
+
+### v0.0.3 — Continuous Review Workflow
+
+Added a continuous queue for pending, draft, failed, reviewed and skipped pages, with previous/next navigation,
+save-and-continue actions, unsaved-change protection and optional keyboard shortcuts.
+
+### v0.0.4 — Traceable Page Retrieval and Evidence Packages
+
+Made page search traceable to the document, original filename, page number, local source paths, review state and
+matched context. Evidence-package generation kept source material separate from user notes and warned on unreviewed pages.
+
+### v0.0.5 — Multi-Page Evidence Collection
+
+Introduced the persistent evidence basket for collecting selections from multiple pages, editing notes, ordering or
+removing evidence, returning to the source and exporting single- or multi-document Markdown packages. Source hashes
+and pre-generation validation prevent stale material from being exported as current evidence.
+
+### v0.0.6 — Search Filters and State Restoration
+
+Expanded local search with document, project, tag, review-state, matched-field, note and evidence-basket filters;
+AND semantics for multiple projects or tags; relevance and recency sorts; facet counts; literal Unicode option search;
+and allowlisted URL state restoration.
+
+### v0.0.7 — Search Explainability and Continuous Reading
+
+Added page and document-grouped result views, source-labeled excerpts and literal match counts, on-demand page previews,
+full-result and within-document navigation, and restoration of search, filter, sort, panel, preview and result-focus
+state without storing complete result ID lists in the URL.
+
+### v0.0.8 — Full Backup, Diagnostics and Release Closure
+
+Completed verified local backups, read-only diagnostics, redacted diagnostic reports, safe restore preflight and
+unified release checks, then closed directly into v0.1.0. No v0.0.9 release was created or planned.
+
+### v0.1.0 — First Full Manual Acceptance and Formal Release
+
+Closed the first formal release after full manual acceptance. It included manifest-based complete backups with SQLite
+online snapshots and SHA-256 records, stop-before-restore with pre-restore backup and rollback, read-only integrity
+diagnostics, redacted reports, usable empty states and a unified release-check entry point.
+
+### v0.1.1 — Stability and Usability Patch
+
+Fixed the production endpoint at `127.0.0.1:8501`, improved Windows diagnostics, added an explicit route from import
+results to pending review, and preserved distinct selections on one page while rejecting a duplicate normalized
+selection. Schema v4 remained unchanged and no AI, OCR, embedding, semantic-search or network API capability was added.
+
+### v0.1.2 — Batch Organization
+
+Added bounded batch updates for visible search results and the current review batch, with preflight, explicit
+confirmation, one-time action tokens, stable selection scope, additive tag/project changes and a single SQLite
+transaction. Cross-page or "select all matches" operations were intentionally excluded.
+
+### v0.2.0 — Long and Non-Standard Document Foundation
+
+Introduced isolated single-page processing, deterministic blank/short/landscape/rotated diagnostics, page-level failure
+isolation, document diagnostic summaries, a 120-page automated baseline and a 300-page mixed-PDF acceptance run.
+Schema v4 remained unchanged; this release did not add OCR, embeddings, semantic search or an external model API.
+
+### v0.2.1 — Default Evidence Basket Concurrency Patch
+
+Moved "find or create the default evidence basket" into one short transaction so concurrent first access returns one
+basket instead of creating duplicates. Schema v4 and product scope were unchanged.
+
+### v0.2.2 — Local OCR
+
+Added explicit, offline, single-page OCR for printed text with RapidOCR and ONNX Runtime. OCR text is stored separately,
+displayed as an unverified draft, included in local search with a warning, and never overwrites the PDF, rendered page,
+text layer, manual Markdown or review state. Handwriting, formulas, structured tables, rotation correction and batch OCR
+remain outside scope.
+
+### v0.2.3 — v0.2.x Closure
+
+Closed the long-document foundation with atomic PDF and page-image writes plus recovery after interrupted imports,
+stable navigation through large result sets, zero-increment duplicate imports across database and file assets, and
+diagnosable failed records when duplicate probing fails. The automated suite recorded 553 passing tests.
+
+### v0.2.4 — Release and Deployment Consistency Patch
+
+Aligned release checks, backup and restore tools, the displayed application version and the formal local deployment
+entry point. It added no business capability, schema change or AI feature.
+
+### v0.3.0 — Structured Notes Foundation
+
+Added create, read, update and delete workflows for document, page, text-selection and image-region notes. Text
+selections preserve separate source snapshots, user excerpts and personal notes; image regions bind coordinates to the
+original PNG and SHA-256. Schema v5 migrated incrementally with a pre-migration backup, and document deletion gained
+impact preview, exact-title confirmation, quarantine and two-phase cleanup.
+
+### v0.3.1 — Note Importance and Visual Mapping
+
+Added primary, secondary and normal importance to all four structured-note types, including filtering and customizable
+badge backgrounds. Schema v6 was an incremental, pre-backed-up migration; existing notes defaulted to normal importance.
+
+### v0.3.2 — Cross-Document Aggregation and Deletion Lifecycle
+
+Added a read-only, paginated aggregation view organized by project or tag, with importance and note-type filters and
+links back to sources or evidence. Document deletion gained impact reporting, per-operation quarantine manifests,
+restart reconciliation, conservative preservation of unknown states and explicit high-risk confirmation for evidence removal.
+
+### v0.3.3 — Document Management and Data Safety
+
+Introduced a dedicated document-management page and centralized the deletion confirmation flow. A service-layer
+exact-title check prevents side effects on mismatch, while the v0.3.2 quarantine and recovery design remains in force.
+Schema v6 was unchanged.
+
+### v0.4.0 — Evidence Objects and Source Model
+
+Unified whole-page, text-selection and image-region evidence under common source location, validation and
+human-confirmation semantics. Durable anchors use source-text hashes or original-PNG hashes, dimensions and coordinates.
+Schema v7 migrated existing evidence to unconfirmed text selections.
+
+### v0.4.1 — Citation-Grounded Prompt Packages
+
+Added prompt-package generation from confirmed evidence only, with source validation before generation and fail-closed
+behavior when any source is invalid. Text selections include source text, pages include clearly labeled current page
+text, and image regions include location and coordinates without inventing image contents. User notes remain separate
+from source facts, and EKB itself still does not call AI.
+
+### v0.4.2 — Prompt Freshness and Stale-Output Protection
+
+Bound generated prompt packages to the current question and confirmed evidence inputs. Changes to evidence,
+confirmation, ordering, notes, page text or source validity invalidate and clear the old package; unrelated tag,
+project, review-state or unconfirmed-evidence changes do not. Schema v7 and dependencies were unchanged.
+
+### v0.4.3 — Real-Problem Validation and AI Readiness Gate
+
+Validated real engineering material and questions across source authenticity, human confirmation, cross-document
+separation, image-region limits, stale-prompt invalidation and original-page traceability. The CONDITIONAL GO decision
+allowed later AI integration work; it did not claim that AI integration already existed or was validated.
+
+### v0.5.0 — AI Foundation and Optional Hybrid Retrieval
+
+Added an optional provider interface, controlled real calls, page-level embedding persistence and freshness, explicit
+indexing orchestration, persistent vector recall, and optional hybrid retrieval that unions lexical and vector
+candidates through RRF. Production and isolated test data, ports, logs, backups and runtime state remain separated;
+manual AI mode and offline fallback remain the defaults.
+
+### v0.5.1 — Retrieval Stabilization
+
+Established a frozen evaluation workflow, made hybrid fallback states explicit, calibrated assumptions with real
+embeddings, exposed read-only index coverage and added an honest weak-evidence notice. Production still uses
+equal-weight RRF; index completion remains manual, no numeric similarity eligibility threshold was introduced, and the
+final displayed-result boundary remains undefined. The release recorded 1,475 passing tests, a successful production
+rollout and zero rollout regressions.
+
+### v0.5.2 — Knowledge Foundation
+
+v0.5.2 was a product-direction restructuring: EKB moved beyond a local engineering knowledge base narrated primarily
+around page material, evidence and RAG, toward a Knowledge Foundation for accumulating, verifying, retrieving and
+reusing long-term personal knowledge assets. RAG and external AI were no longer the product's primary identity; AI was
+positioned explicitly as an optional enhancement layer above the knowledge foundation.
+
+The release established Knowledge Objects, Knowledge Memories, typed Relations, stable identifiers, lifecycle states
+and append-only Revisions. Source / Provenance links knowledge objects to local documents, pages, notes or evidence,
+while canonical SHA-256 Source Fingerprints distinguish valid, changed, missing, corrupt and unknown sources. Schema
+v11 added dedicated SQLite FTS5 indexes, synchronization triggers, legacy backfill and deterministic rebuild paths for
+Knowledge Objects and Knowledge Memories, creating a personal-knowledge retrieval foundation that leads users back to
+local sources for verification.
+
+v0.5.2 did not implement an Agent, tool calling, automatic experience learning, background knowledge rewriting or
+cloud synchronization. Agent Foundation enters scope only from v0.6.x. See the dedicated section above for the current
+v0.5.3 capabilities and boundaries.
+
 ## Roadmap
 
 | Version line | Theme | Status |
