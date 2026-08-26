@@ -17,6 +17,7 @@ import pytest
 from pdf_test_helpers import build_sample_pdf
 
 from scripts.check_scale_consistency import (
+    FORMAL_PROJECT_ROOT,
     CheckStatus,
     ScaleCheck,
     main,
@@ -280,7 +281,7 @@ def test_cli_requires_explicit_paths() -> None:
 def test_cli_refuses_formal_data_directory(tmp_path: Path) -> None:
     exit_code = main(
         [
-            "--database", "D:/Projects/engineering-kb/data/database/knowledge.db",
+            "--database", str(FORMAL_PROJECT_ROOT / "data" / "database" / "knowledge.db"),
             "--pages-dir", str(tmp_path),
         ]
     )

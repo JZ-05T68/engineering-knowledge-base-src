@@ -17,7 +17,6 @@ from streamlit.testing.v1 import AppTest
 import src.runtime as runtime
 from src.evidence_basket_service import EvidenceBasketService
 from src.evidence_service import OCR_EVIDENCE_WARNING
-from src.models import PageStatus, SearchField
 from src.search_service import SearchService
 
 ROOT = Path(r"D:\ekb-v0.2.2-manual-test")
@@ -93,7 +92,13 @@ REPORT["MT-03"] = {
 }
 compact1 = page1.ocr_text.replace(" ", "").upper()
 assert "STM32" in compact1 and "ADC" in compact1, page1.ocr_text
-print("MT-03 OK:", json.dumps({k: v for k, v in REPORT["MT-03"].items() if k != "ocr_text"}, ensure_ascii=False))
+print(
+    "MT-03 OK:",
+    json.dumps(
+        {k: v for k, v in REPORT["MT-03"].items() if k != "ocr_text"},
+        ensure_ascii=False,
+    ),
+)
 print("  page1 ocr_text:", repr(page1.ocr_text))
 
 # --- MT-04 page 2 Chinese OCR ---------------------------------------------------
@@ -157,24 +162,39 @@ basket.add_item(document_id=doc_id, page_id=p1.id, evidence_text=page1.ocr_text.
 export = basket.export_markdown()
 REPORT["MT-07"] = {
     "warning_present": OCR_EVIDENCE_WARNING in export,
-    "has_page_ref": f"第 {p1.page_number} 页" in export or f"page {p1.page_number}" in export.lower(),
+    "has_page_ref": (
+        f"第 {p1.page_number} 页" in export
+        or f"page {p1.page_number}" in export.lower()
+    ),
     "abs_path_leak": ("D:\\" in export or "D:/" in export),
     "export_excerpt": export[:400],
 }
-print("MT-07:", json.dumps({k: v for k, v in REPORT["MT-07"].items() if k != "export_excerpt"}, ensure_ascii=False))
+print(
+    "MT-07:",
+    json.dumps(
+        {k: v for k, v in REPORT["MT-07"].items() if k != "export_excerpt"},
+        ensure_ascii=False,
+    ),
+)
 
 # --- MT-08 data protection (read-only sqlite) ---------------------------------------
 con = sqlite3.connect(f"file:{DB}?mode=ro", uri=True)
 rows = con.execute(
-    "SELECT id, page_number, length(COALESCE(extracted_text,'')), length(COALESCE(ocr_text,'')), "
-    "length(COALESCE(markdown_content,'')), status, processing_status, COALESCE(processing_error,'') "
-    "FROM pages WHERE document_id=? ORDER BY page_number", (doc_id,),
+    "SELECT id, page_number, length(COALESCE(extracted_text,'')), "
+    "length(COALESCE(ocr_text,'')), "
+    "length(COALESCE(markdown_content,'')), status, processing_status, "
+    "COALESCE(processing_error,'') "
+    "FROM pages WHERE document_id=? ORDER BY page_number",
+    (doc_id,),
 ).fetchall()
 con.close()
 REPORT["MT-08"] = {
     "rows": rows,
     "pdf_sha256_after": sha256(PDF),
-    "png_sha256_after": {pid: sha256(p.image_path) for pid, p in ((p1.id, p1), (p2.id, p2), (p3.id, p3))},
+    "png_sha256_after": {
+        pid: sha256(p.image_path)
+        for pid, p in ((p1.id, p1), (p2.id, p2), (p3.id, p3))
+    },
 }
 print("MT-08:", json.dumps(REPORT["MT-08"], ensure_ascii=False, default=str))
 

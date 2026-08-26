@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from scripts.scale_metrics import (
+    FORMAL_PROJECT_ROOT,
     FormalPathError,
     ScaleMetricsCollector,
     current_working_set_bytes,
@@ -160,14 +161,14 @@ def test_formal_metrics_targets_are_rejected(tmp_path: Path) -> None:
     with pytest.raises(FormalPathError):
         ScaleMetricsCollector(
             "unit-formal-path",
-            metrics_path="D:/Projects/engineering-kb/logs/metrics.jsonl",
+            metrics_path=str(FORMAL_PROJECT_ROOT / "logs" / "metrics.jsonl"),
             watch_dir=tmp_path,
         )
     with pytest.raises(FormalPathError):
         ScaleMetricsCollector(
             "unit-formal-watch",
             metrics_path=tmp_path / "metrics.jsonl",
-            watch_dir="D:/Projects/engineering-kb/data",
+            watch_dir=FORMAL_PROJECT_ROOT / "data",
         )
 
 

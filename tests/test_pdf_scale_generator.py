@@ -15,6 +15,7 @@ import pymupdf
 import pytest
 
 from scripts.generate_scale_pdf import (
+    FORMAL_PROJECT_ROOT,
     SPECIAL_PAGE_TYPES,
     FormalPathError,
     build_scale_pdf,
@@ -143,7 +144,7 @@ def test_existing_output_is_kept_without_overwrite(tmp_path: Path) -> None:
 def test_formal_data_directory_is_rejected() -> None:
     with pytest.raises(FormalPathError):
         build_scale_pdf(
-            Path("D:/Projects/engineering-kb/data/raw/scale.pdf"), pages=1
+            FORMAL_PROJECT_ROOT / "data" / "raw" / "scale.pdf", pages=1
         )
 
 

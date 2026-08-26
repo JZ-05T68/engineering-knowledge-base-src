@@ -86,7 +86,7 @@ def test_small_import_end_to_end(tmp_path: Path) -> None:
 def test_formal_root_is_rejected(tmp_path: Path) -> None:
     pdf = _make_pdf(tmp_path)
     exit_code = probe.main(
-        ["--root", "D:/Projects/engineering-kb", "import", "--pdf", str(pdf)]
+        ["--root", str(probe.FORMAL_PROJECT_ROOT), "import", "--pdf", str(pdf)]
     )
     assert exit_code == 2
 
@@ -95,7 +95,7 @@ def test_formal_pdf_input_is_rejected(tmp_path: Path) -> None:
     exit_code = probe.main(
         [
             "--root", str(tmp_path / "case"),
-            "import", "--pdf", "D:/Projects/engineering-kb/data/raw/x.pdf",
+            "import", "--pdf", str(probe.FORMAL_PROJECT_ROOT / "data" / "raw" / "x.pdf"),
         ]
     )
     assert exit_code == 2
