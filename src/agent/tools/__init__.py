@@ -1,14 +1,19 @@
-"""Tool Contract Foundation (v0.6.0 Phase 1A).
+"""Tool Contract and Phase 1 read-only Tool Adapters (v0.6.0).
 
 This package freezes the vendor-neutral, agent-runtime-neutral and UI-neutral
-tool contract: definitions, inputs, contexts, results, errors, references,
-the side-effect classification, and the read-only registry.
+tool contract (definitions, inputs, contexts, results, errors, references,
+side-effect classification, registry) and the first four read-only adapters.
 
-It deliberately contains no Tool Adapter, no Agent, no executor, no retry
-loop, no database connection, and no AI provider dependency. ``rag_answer``
-is not a Tool (ADR-006 decision 7); it belongs to the Final Answer Stage.
+It deliberately contains no Agent, no executor, no retry loop, no AI provider
+dependency, and no Streamlit dependency. ``rag_answer`` is not a Tool
+(ADR-006 decision 7); it belongs to the Final Answer Stage.
 """
 
+from src.agent.tools.bootstrap import (
+    build_phase1_handlers,
+    build_phase1_registry,
+    phase1_tool_definitions,
+)
 from src.agent.tools.contracts import (
     MAX_DESCRIPTION_LENGTH,
     MAX_TOOL_NAME_LENGTH,
@@ -55,4 +60,7 @@ __all__ = [
     "ToolResultStatus",
     "ToolSideEffect",
     "UnknownToolError",
+    "build_phase1_handlers",
+    "build_phase1_registry",
+    "phase1_tool_definitions",
 ]

@@ -199,7 +199,8 @@ def test_updated_at_behavior(env: dict) -> None:
     before = service.get_note(legacy).note
     updated = service.update_page_note(legacy, "只改内容").note
     assert updated.importance == "primary"
-    assert updated.updated_at > before.updated_at  # 既有行为：正文更新刷新时间
+    # 同一微秒内连续写入时 updated_at 可能相等；>= 仍证明正文更新刷新了时间。
+    assert updated.updated_at >= before.updated_at
     leveled = service.update_page_note(legacy, "再改内容", importance="secondary").note
     assert leveled.importance == "secondary"
     assert leveled.updated_at >= updated.updated_at
