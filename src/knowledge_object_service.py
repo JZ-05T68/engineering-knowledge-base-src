@@ -594,6 +594,20 @@ class KnowledgeObjectService:
             )
         return views
 
+    def source_view(self, source_id: int) -> KnowledgeObjectSourceView:
+        """Return one source link with its freshly recomputed integrity status.
+
+        Minimal read facade for single-source inspection. The read path is
+        strictly read-only (ADR-03): the canonical fingerprint is recomputed in
+        memory and compared with the stored snapshot; nothing is written back.
+        """
+
+        source = self._database.get_knowledge_object_source(source_id)
+        if source is None:
+            raise KnowledgeObjectNotFoundError(f"知识对象来源不存在：{source_id}")
+        with self._database._connection() as connection:  # noqa: SLF001
+            return self._source_view_from(connection, source)
+
     def source_health(self, knowledge_object_id: int) -> KnowledgeSourceAggregate:
         """Compute the object-level aggregate source state (ADR-03 truth table)."""
 

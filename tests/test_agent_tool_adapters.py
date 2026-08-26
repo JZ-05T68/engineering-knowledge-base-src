@@ -28,8 +28,11 @@ from src.agent.tools import (
     build_phase1_registry,
 )
 from src.agent.tools.adapters import (
+    GET_EVIDENCE_DEFINITION,
     GET_KNOWLEDGE_MEMORY_DEFINITION,
     GET_KNOWLEDGE_OBJECT_DEFINITION,
+    INSPECT_PROVENANCE_DEFINITION,
+    INSPECT_SOURCE_INTEGRITY_DEFINITION,
     KNOWLEDGE_SEARCH_DEFINITION,
     PAGE_SEARCH_DEFINITION,
     KnowledgeMemoryAdapter,
@@ -39,14 +42,17 @@ from src.agent.tools.adapters import (
 )
 from src.agent.tools.registry import Phase1ReadOnlyPolicy
 from src.database import Database
+from src.evidence_basket_service import EvidenceBasketService
 from src.knowledge_memory_service import KnowledgeMemoryService
 from src.knowledge_object_service import (
     KnowledgeObjectNotFoundError,
     KnowledgeObjectService,
 )
 from src.models import (
+    EVIDENCE_STABLE_TYPE,
     KNOWLEDGE_MEMORY_STABLE_TYPE,
     KNOWLEDGE_OBJECT_STABLE_TYPE,
+    KNOWLEDGE_SOURCE_STABLE_TYPE,
     PAGE_STABLE_TYPE,
     KnowledgeAuthorship,
     KnowledgeConfirmationStatus,
@@ -706,8 +712,11 @@ def test_phase1_registry_exact_deterministic_list() -> None:
     registry = build_phase1_registry()
 
     assert [item.name for item in registry.list_definitions()] == [
+        "get_evidence",
         "get_knowledge_memory",
         "get_knowledge_object",
+        "inspect_provenance",
+        "inspect_source_integrity",
         "knowledge_search",
         "page_search",
     ]
@@ -722,12 +731,17 @@ def test_phase1_registry_has_no_forbidden_tools() -> None:
         "knowledge_search",
         "get_knowledge_object",
         "get_knowledge_memory",
-    }
-    assert not names & {
-        "rag_answer",
         "inspect_provenance",
         "inspect_source_integrity",
         "get_evidence",
+    }
+    assert not names & {
+        "rag_answer",
+        "confirm_evidence",
+        "write_memory",
+        "create_knowledge_object",
+        "reindex",
+        "ai_ledger",
     }
 
 
@@ -738,12 +752,15 @@ def test_phase1_all_definitions_are_read_only() -> None:
         KNOWLEDGE_SEARCH_DEFINITION,
         GET_KNOWLEDGE_OBJECT_DEFINITION,
         GET_KNOWLEDGE_MEMORY_DEFINITION,
+        INSPECT_PROVENANCE_DEFINITION,
+        INSPECT_SOURCE_INTEGRITY_DEFINITION,
+        GET_EVIDENCE_DEFINITION,
     ):
         assert definition.side_effect is ToolSideEffect.READ_ONLY
         policy.validate(definition)
 
 
-def test_phase1_registry_resolves_all_four_tools() -> None:
+def test_phase1_registry_resolves_all_seven_tools() -> None:
     registry = build_phase1_registry()
 
     for name in (
@@ -751,6 +768,9 @@ def test_phase1_registry_resolves_all_four_tools() -> None:
         "knowledge_search",
         "get_knowledge_object",
         "get_knowledge_memory",
+        "inspect_provenance",
+        "inspect_source_integrity",
+        "get_evidence",
     ):
         assert registry.resolve(name).name == name
 
@@ -776,17 +796,23 @@ def test_fake_write_tool_rejected_by_phase1_registry() -> None:
 @pytest.fixture()
 def library(tmp_path: Path) -> SimpleNamespace:
     database = Database(tmp_path / "knowledge.db")
+    source_path = tmp_path / "raw" / "manual.pdf"
+    source_path.parent.mkdir(parents=True, exist_ok=True)
+    source_path.write_bytes(b"pdf")
+    image_path = tmp_path / "pages" / "1" / "page_0001.png"
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    image_path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"fixture")
     document = database.create_document(
         title="测试文档",
         filename="manual.pdf",
-        source_path=tmp_path / "raw" / "manual.pdf",
+        source_path=source_path,
         sha256="a" * 64,
         page_count=1,
     )
     page = database.create_page(
         document_id=document.id,
         page_number=1,
-        image_path=tmp_path / "pages" / "1" / "page_0001.png",
+        image_path=image_path,
         extracted_text="电机控制 PID 整定经验",
     )
     objects = KnowledgeObjectService(database)
@@ -795,6 +821,9 @@ def library(tmp_path: Path) -> SimpleNamespace:
         title="PID 整定",
         content="比例积分微分参数整定经验",
         epistemic_basis="personal_experience",
+        source_links=(
+            (KnowledgeObjectSourceType.PAGE.value, page.id, "来自页面"),
+        ),
     )
     memories = KnowledgeMemoryService(database)
     memory = memories.create_entry(
@@ -807,12 +836,22 @@ def library(tmp_path: Path) -> SimpleNamespace:
         document_id=document.id,
         page_id=page.id,
     )
+    evidence_service = EvidenceBasketService(database)
+    evidence = evidence_service.add_item(
+        document_id=document.id,
+        page_id=page.id,
+        evidence_text="电机控制 PID 整定经验",
+    )
+    evidence = evidence_service.set_confirmation(evidence.id, True)
+    source_link_id = objects.source_views(object_view.knowledge_object.id)[0].source.id
     return SimpleNamespace(
         database=database,
         document=document,
         page=page,
         object_id=object_view.knowledge_object.id,
         memory=memory,
+        evidence=evidence,
+        source_link_id=source_link_id,
         kb_uuid=database.get_knowledge_base_uuid(),
         handlers=build_phase1_handlers(database),
     )
@@ -920,68 +959,25 @@ def test_get_knowledge_memory_integration_not_found(library: SimpleNamespace) ->
     assert result.error.code is ToolErrorCode.NOT_FOUND
 
 
-def test_phase1_programmatic_smoke(library: SimpleNamespace) -> None:
-    registry = build_phase1_registry()
-    for name in (
-        "page_search",
-        "knowledge_search",
-        "get_knowledge_object",
-        "get_knowledge_memory",
-    ):
-        assert registry.resolve(name).name == name
-        handler = library.handlers[name]
-        if name == "page_search":
-            tool_input = _input(name, {"query": "电机"})
-        elif name == "knowledge_search":
-            tool_input = _input(name, {"query": "PID"})
-        elif name == "get_knowledge_object":
-            tool_input = _input(
-                name,
-                {
-                    "stable_id": build_stable_id(
-                        library.kb_uuid, KNOWLEDGE_OBJECT_STABLE_TYPE, library.object_id
-                    )
-                },
-            )
-        else:
-            tool_input = _input(
-                name,
-                {
-                    "stable_id": build_stable_id(
-                        library.kb_uuid,
-                        KNOWLEDGE_MEMORY_STABLE_TYPE,
-                        library.memory.id,
-                    )
-                },
-            )
-        result = handler(tool_input, ToolContext())
-        assert result.status in (ToolResultStatus.SUCCESS, ToolResultStatus.EMPTY)
-
-
-def test_hidden_write_audit_database_unchanged(library: SimpleNamespace) -> None:
-    database_path = Path(library.database.database_path)
-    before = hashlib.sha256(database_path.read_bytes()).hexdigest()
-
-    page = library.handlers["page_search"](
-        _input("page_search", {"query": "电机"}), ToolContext()
-    )
-    knowledge = library.handlers["knowledge_search"](
-        _input("knowledge_search", {"query": "PID"}), ToolContext()
-    )
-    object_result = library.handlers["get_knowledge_object"](
-        _input(
-            "get_knowledge_object",
+def _phase1_smoke_input(
+    name: str, library: SimpleNamespace
+) -> ToolInput:
+    if name == "page_search":
+        return _input(name, {"query": "电机"})
+    if name == "knowledge_search":
+        return _input(name, {"query": "PID"})
+    if name == "get_knowledge_object":
+        return _input(
+            name,
             {
                 "stable_id": build_stable_id(
                     library.kb_uuid, KNOWLEDGE_OBJECT_STABLE_TYPE, library.object_id
                 )
             },
-        ),
-        ToolContext(),
-    )
-    memory_result = library.handlers["get_knowledge_memory"](
-        _input(
-            "get_knowledge_memory",
+        )
+    if name == "get_knowledge_memory":
+        return _input(
+            name,
             {
                 "stable_id": build_stable_id(
                     library.kb_uuid,
@@ -989,16 +985,77 @@ def test_hidden_write_audit_database_unchanged(library: SimpleNamespace) -> None
                     library.memory.id,
                 )
             },
-        ),
-        ToolContext(),
+        )
+    if name == "inspect_provenance":
+        return _input(
+            name,
+            {
+                "stable_id": build_stable_id(
+                    library.kb_uuid, KNOWLEDGE_OBJECT_STABLE_TYPE, library.object_id
+                )
+            },
+        )
+    if name == "inspect_source_integrity":
+        return _input(
+            name,
+            {
+                "stable_id": build_stable_id(
+                    library.kb_uuid,
+                    KNOWLEDGE_SOURCE_STABLE_TYPE,
+                    library.source_link_id,
+                )
+            },
+        )
+    return _input(
+        name,
+        {
+            "stable_id": build_stable_id(
+                library.kb_uuid, EVIDENCE_STABLE_TYPE, library.evidence.id
+            )
+        },
     )
+
+
+def test_phase1_programmatic_smoke(library: SimpleNamespace) -> None:
+    registry = build_phase1_registry()
+    for name in (
+        "page_search",
+        "knowledge_search",
+        "get_knowledge_object",
+        "get_knowledge_memory",
+        "inspect_provenance",
+        "inspect_source_integrity",
+        "get_evidence",
+    ):
+        assert registry.resolve(name).name == name
+        result = library.handlers[name](
+            _phase1_smoke_input(name, library), ToolContext()
+        )
+        assert result.status in (ToolResultStatus.SUCCESS, ToolResultStatus.EMPTY)
+
+
+def test_hidden_write_audit_database_unchanged(library: SimpleNamespace) -> None:
+    database_path = Path(library.database.database_path)
+    before = hashlib.sha256(database_path.read_bytes()).hexdigest()
+
+    results: list[ToolResultStatus] = []
+    for name in (
+        "page_search",
+        "knowledge_search",
+        "get_knowledge_object",
+        "get_knowledge_memory",
+        "inspect_provenance",
+        "inspect_source_integrity",
+        "get_evidence",
+    ):
+        result = library.handlers[name](
+            _phase1_smoke_input(name, library), ToolContext()
+        )
+        results.append(result.status)
 
     after = hashlib.sha256(database_path.read_bytes()).hexdigest()
 
-    assert page.status is ToolResultStatus.SUCCESS
-    assert knowledge.status is ToolResultStatus.SUCCESS
-    assert object_result.status is ToolResultStatus.SUCCESS
-    assert memory_result.status is ToolResultStatus.SUCCESS
+    assert results == [ToolResultStatus.SUCCESS] * 7
     assert before == after
 
 
