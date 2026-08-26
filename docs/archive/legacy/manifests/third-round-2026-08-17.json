@@ -1,0 +1,324 @@
+{
+  "created_at": "2026-08-17T15:34:58.279263+08:00",
+  "updated_at": "2026-08-17T15:37:15.3386013+08:00",
+  "git_tracked": false,
+  "file_count": 45,
+  "total_bytes": 2019896.0,
+  "files": [
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\data\\markdown\\1\\page_0002.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\data\\markdown\\1\\page_0002.md",
+      "size_bytes": 18,
+      "sha256": "510A49E4F26364E7C899EFDFD598D774634F59E2DD789938DD688071D125DB84",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\data\\markdown\\1\\page_0003.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\data\\markdown\\1\\page_0003.md",
+      "size_bytes": 19,
+      "sha256": "C7A132B1A689C135A3F0130505E3F50AEB280C64C246F66CE75B1AADFC7F77FA",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b01-after1.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b01-after1.txt",
+      "size_bytes": 8027,
+      "sha256": "7B0F9C787D5C27CA734ACD69287D9FB25C5960150B47B1752286983FF1D4D7B6",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b01-mid.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b01-mid.txt",
+      "size_bytes": 8021,
+      "sha256": "1A5B3C3A6DAD42F89D8401A366C88BBC734F36661DEF59416A31AF6EACB5E1AF",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b01-pre-20260723.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b01-pre-20260723.txt",
+      "size_bytes": 8013,
+      "sha256": "500B796A854CA5BCDDC987D5D3AF3823FEA12041DDAD1ACEDD401B5F5FE5F71C",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b01-pre.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b01-pre.txt",
+      "size_bytes": 8005,
+      "sha256": "6FB66AAE102EBAFEB80F1B046804B0245533419BF11608329B247BC518814852",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b02-after.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b02-after.txt",
+      "size_bytes": 8505,
+      "sha256": "6814C7E00BD13C3F2F5A98B1EA0182C2DC419B6E3A6B5E0466BD8BE24C268615",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b02-pre.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b02-pre.txt",
+      "size_bytes": 8384,
+      "sha256": "5489E59A074F7CCA1A1B9ABB8397765071004A967F4E9A244E1E53BFC98518FD",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b02-verify.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b02-verify.txt",
+      "size_bytes": 3136,
+      "sha256": "5601FECBFC01CB2EEB305D9FA1585D66B37DEE2D44FEEB0AC580F6C2A7C0A4BC",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b03-after.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b03-after.txt",
+      "size_bytes": 8443,
+      "sha256": "EC3DD766217872499E10D208AD81D08263CED9BD0FE55E6DAC683FFCB26756FE",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b03-pre.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b03-pre.txt",
+      "size_bytes": 8503,
+      "sha256": "B4D5C08CC5C7F4BB513E51DAFDBEE75A026E2BE36D3BCDB79D579F53D9F6BAA0",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b03-verify.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b03-verify.txt",
+      "size_bytes": 503,
+      "sha256": "64450CBDE8E00F9559C4A9DD263EC6A004A84F2B56CF89620740A56254AFAB51",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b04-after.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b04-after.txt",
+      "size_bytes": 8460,
+      "sha256": "DE5DA92B6B19C0A0B5C59E2A223EF0F5FF91361B85BD637F98B24724FE20AA63",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b04-pre.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b04-pre.txt",
+      "size_bytes": 8441,
+      "sha256": "F061444ACEBD8A8BBACFCB2833F4DFBDB50D50B46ED712C41FC22393FFBB9822",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\b04-verify.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\b04-verify.txt",
+      "size_bytes": 3161,
+      "sha256": "6143750121AE3621223C373097E0AEC1895181D8EC49C17BA382458682E51FF0",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\compare_restore.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\compare_restore.py",
+      "size_bytes": 3077,
+      "sha256": "73F266A8650D73376A0A62AF6D7A6DD6E37ED693A442CB73CAD54EC0636FB6B4",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\handover-b01-to-codex.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\handover-b01-to-codex.md",
+      "size_bytes": 10161,
+      "sha256": "182082FBEE106BC05D129579EB1220FED1CFD15F7B36ECB21DAA53C4EC2A7383",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\run_snapshot_live.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\run_snapshot_live.py",
+      "size_bytes": 786,
+      "sha256": "FA16F452D187BB743D04E60C7B9152D88EC371B9A9A4BA05A7D239BAA2C6E254",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\snapshot.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\snapshot.py",
+      "size_bytes": 1908,
+      "sha256": "F98F27B037EBDFCFFD41F736C80D549CDBEBD7B0904B6EAA0207CC30EBFA265D",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.1.3-3a\\work\\start-8502.ps1",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.1.3-3a\\work\\start-8502.ps1",
+      "size_bytes": 1271,
+      "sha256": "E9B121487CA116F4C0399D465A0E202FEF60DAB9C43A5A5E64AC75067E760EE8",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.4.3-human-phase-a\\test-material\\generate_material.py",
+      "destination": "D:\\EKB-Historical-Archive\\legacy-scripts\\v0.4.3-controlled-material\\generate_material.py",
+      "size_bytes": 6260,
+      "sha256": "834F22CFDC648A4EF676905D34D096030F7E9B35F948B936E0A7AD22C2EC0B15",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-isolated\\v0.4.3-ui-amend-01\\seed_preview.py",
+      "destination": "D:\\EKB-Historical-Archive\\legacy-scripts\\v0.4.3-ui-amend-01\\seed_preview.py",
+      "size_bytes": 1639,
+      "sha256": "928DFB83A06A969D6ED505B7EB56C13E9147DD008C13D9D9EAB1EDCB86F74CEA",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-v0.2.2-manual-test\\v0.2.2-batch2-manual-test-results.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.2-manual-test\\v0.2.2-batch2-manual-test-results.md",
+      "size_bytes": 3132,
+      "sha256": "4DB864A8365E26BA0A3881029B2DA4A5F79C198508A8D908968703CACFDA0522",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-v0.2.2-manual-test\\ocr-manual-test.pdf",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.2-manual-test\\ocr-manual-test.pdf",
+      "size_bytes": 1804585,
+      "sha256": "3790B1D437BF2329A4A4A7F947C39C9E456506766488BE14A5E09D33FA36108D",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-v0.2.2-manual-test\\mt_drive.py",
+      "destination": "D:\\EKB-Historical-Archive\\legacy-scripts\\v0.2.2-manual-test\\mt_drive.py",
+      "size_bytes": 8249,
+      "sha256": "19DCF95E0B56DAE39016ED48EF6269EEC9546C33CAA62825BDD6EEDCEC4A3FDA",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-v031-rehearsal\\data\\markdown\\1\\page_0001.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.3.1-rehearsal\\markdown\\1\\page_0001.md",
+      "size_bytes": 15,
+      "sha256": "B7FE9BC16E932CF519569C9DD2C8440545586AB3641671247A9452ECC4580C12",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-v031-rehearsal\\data\\markdown\\4\\page_0021.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.3.1-rehearsal\\markdown\\4\\page_0021.md",
+      "size_bytes": 5,
+      "sha256": "D17F25ECFBCC7857F7BEBEA469308BE0B2580943E96D13A3AD98A13675C4BFC2",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-overnight\\v0.1.3-overnight-blocked.md",
+      "destination": "D:\\EKB-Historical-Archive\\legacy-reports\\v0.1.3-overnight-blocked.md",
+      "size_bytes": 3763,
+      "sha256": "FDA93C312FAC60923B71D8884AD6AB6A604980FFC0F354C5C981FD2C30F2B4E3",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-03-auto\\browser-console-warn-error.json",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-03-auto\\browser-console-warn-error.json",
+      "size_bytes": 42802,
+      "sha256": "F0D1590DF05B34D1BC09F0B3663F3152FB9BB137E44AA76925BB9D936AEC520F",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-09-auto\\s409_drive.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-09-auto\\s409_drive.py",
+      "size_bytes": 6424,
+      "sha256": "4FBA9026B73C307A3CC836D06A208633DA614B87E3C35CEC847CDED6C72F2375",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-10-auto\\s410_drive.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-10-auto\\s410_drive.py",
+      "size_bytes": 7401,
+      "sha256": "227425FF155BC57872481F711EE8658EBFC3507B7C84404DED6455F2F8784F94",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-11-codex\\engineering-evidence-package.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-11-codex\\engineering-evidence-package.md",
+      "size_bytes": 1453,
+      "sha256": "DE030FA610D96CA1169E26353C134E875016A46DC04CC665FA58FCBD285E67AD",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-11-codex\\s4-11-verification.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-11-codex\\s4-11-verification.md",
+      "size_bytes": 6319,
+      "sha256": "CED97933F0336BB63C7B54EE25F1E50416EB9B026A5E7D728DECAA61ED85B2AD",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-12-kimi\\s412_drive.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-12-kimi\\s412_drive.py",
+      "size_bytes": 4969,
+      "sha256": "50539AE6B92AEA4E3B37E46FCF67B495B91C93401341DCBD4953FA74DCFE7703",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-codex\\s4-13-verification.md",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-codex\\s4-13-verification.md",
+      "size_bytes": 5327,
+      "sha256": "3B436EE248F4B2A32407761B46330D2626A049C455A0B95FDD5AE94B4CF29738",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-codex\\s4-13.stderr.log",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-codex\\s4-13.stderr.log",
+      "size_bytes": 272,
+      "sha256": "11AEDE970FAEA783F894915F8BE37191469CD43774340CD523D3B16B93EF0CB1",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-codex\\s4-13.stdout.log",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-codex\\s4-13.stdout.log",
+      "size_bytes": 92,
+      "sha256": "02A21EFDFF849750F962753EB041752C564108E947840AFA4AA39AFA00E5C0BF",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-retest\\db-hashes-before-second.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-retest\\db-hashes-before-second.txt",
+      "size_bytes": 379,
+      "sha256": "D75D06B6EAACC956EE6C0737C18DBEB11C0D5303F3A8029FC18DDB64EE5F68EB",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-retest\\files-after-second.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-retest\\files-after-second.txt",
+      "size_bytes": 728,
+      "sha256": "8A9E44D65B86AFEDE6F19B04881961FD1C4DCF0189455720895774B9DB217C2F",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-retest\\files-before-second.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-retest\\files-before-second.txt",
+      "size_bytes": 728,
+      "sha256": "8A9E44D65B86AFEDE6F19B04881961FD1C4DCF0189455720895774B9DB217C2F",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-retest\\s413_retest_drive.py",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-retest\\s413_retest_drive.py",
+      "size_bytes": 5172,
+      "sha256": "74983E7810F017258530697C5D5FBF8F77472E004987C5FADD1C14DAD7F4F012",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-retest\\snapshot-after-second.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-retest\\snapshot-after-second.txt",
+      "size_bytes": 401,
+      "sha256": "780BC2A3C86EE7F2890A8C928360D53D2645CC5BF13206973C7042C9544971C1",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\records\\s4-13-retest\\snapshot-before-second.txt",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\records\\s4-13-retest\\snapshot-before-second.txt",
+      "size_bytes": 714,
+      "sha256": "1E5AD6B68817CB69460F1B056BE432B77D5FC6984D523DC677F1BB23B8C12E75",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\archive\\recovery-missed-20260728-073145\\evidence\\streamlit-terminal.log",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\archive\\recovery-missed-20260728-073145\\evidence\\streamlit-terminal.log",
+      "size_bytes": 1412,
+      "sha256": "BB9D2F2CB61E012942644BEA890ACD1C7CC8E71F660B9D43636860C130348B8C",
+      "verified": true
+    },
+    {
+      "original": "D:\\ekb-s4\\v0.2.3-s4-20260727\\archive\\recovery-missed-20260728-073145\\logs\\engineering-kb.log",
+      "destination": "D:\\EKB-Historical-Archive\\test-evidence\\v0.2.3-s4\\archive\\recovery-missed-20260728-073145\\logs\\engineering-kb.log",
+      "size_bytes": 813,
+      "sha256": "630B1E7BA19B6C5B2A08B16FAA28185961E8747D434B4478192A7133C0FC1243",
+      "verified": true
+    }
+  ]
+}

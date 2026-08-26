@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Engineering Knowledge Base v0.5.0：本地、单用户、离线优先的个人工程知识管理系统。">
+  <title>Engineering Knowledge Base v0.5.0</title>
+  <style>
+    :root { color-scheme: light; --ink:#172033; --muted:#5d6678; --line:#dce2ec; --blue:#2458d6; --soft:#f4f7fc; }
+    * { box-sizing:border-box; }
+    body { margin:0; font:16px/1.7 system-ui,"Microsoft YaHei",sans-serif; color:var(--ink); background:#fff; }
+    a { color:var(--blue); }
+    .wrap { width:min(1120px,calc(100% - 40px)); margin:auto; }
+    header { padding:84px 0 64px; background:linear-gradient(135deg,#eef3ff,#fafcff 58%,#edf9f7); border-bottom:1px solid var(--line); }
+    .eyebrow { color:var(--blue); font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    h1 { margin:.2em 0; font-size:clamp(2.3rem,7vw,5rem); line-height:1.05; }
+    h2 { margin:0 0 20px; font-size:clamp(1.7rem,4vw,2.6rem); }
+    h3 { margin:.2em 0; }
+    .lead { max-width:780px; font-size:1.2rem; color:var(--muted); }
+    .actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:28px; }
+    .button { display:inline-block; padding:10px 18px; border:1px solid var(--blue); border-radius:9px; text-decoration:none; font-weight:700; }
+    .primary { color:#fff; background:var(--blue); }
+    section { padding:64px 0; }
+    .grid { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; }
+    .card { padding:24px; border:1px solid var(--line); border-radius:14px; background:#fff; }
+    .card p,.muted { color:var(--muted); }
+    .facts { margin-top:32px; }
+    .shot { margin:28px 0 52px; }
+    .shot img { display:block; width:100%; height:auto; border:1px solid var(--line); border-radius:14px; box-shadow:0 16px 42px #1d35651f; }
+    .shot p { color:var(--muted); }
+    .soft { background:var(--soft); border-block:1px solid var(--line); }
+    pre { padding:22px; overflow:auto; border-radius:12px; background:#101827; color:#dce8ff; }
+    footer { padding:30px 0; color:var(--muted); border-top:1px solid var(--line); }
+    @media (max-width:760px) { .grid { grid-template-columns:1fr; } header,section { padding:44px 0; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <div class="eyebrow">Local-first · Windows · Single-user</div>
+      <h1>Engineering<br>Knowledge Base <span style="color:var(--blue)">v0.5.0</span></h1>
+      <p class="lead">把用户主动导入的工程 PDF 变成可阅读、可检索、可复核、可引用并可长期复用的个人工程知识资产。SQLite 与本地文件始终是事实来源，AI 只是可选增强。</p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/JZ-05T68/engineering-knowledge-base-src">查看源码</a>
+        <a class="button" href="./v0.5.0-release-summary.md">v0.5.0 发布摘要</a>
+        <a class="button" href="https://github.com/JZ-05T68/engineering-knowledge-base">GitHub 展示仓库</a>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="wrap">
+      <h2>Document → Understanding → Retrieval → Reuse</h2>
+      <div class="grid facts">
+        <article class="card"><h3>本地核心</h3><p>PDF、页面 PNG、Markdown、SQLite 与 FTS5 保存在用户电脑。正式服务只监听 127.0.0.1:8501。</p></article>
+        <article class="card"><h3>Evidence-first</h3><p>整页、文字选区与图片区域都保留文档、文件名、页码、来源哈希和人工确认边界。</p></article>
+        <article class="card"><h3>Optional AI</h3><p>默认 manual、无需 API Key。Qwen provider、embedding 与 Hybrid Retrieval 只有在显式配置和操作时介入。</p></article>
+      </div>
+    </div>
+  </section>
+
+  <section class="soft">
+    <div class="wrap">
+      <h2>v0.5.0 已实现</h2>
+      <div class="grid">
+        <article class="card"><h3>文档与阅读</h3><p>PDF 导入、SHA-256 去重、逐页渲染、文本层提取、本地 OCR、双栏阅读、Markdown 与结构化笔记。</p></article>
+        <article class="card"><h3>检索</h3><p>FTS5 lexical retrieval、page-level embedding 持久化、freshness、vector recall、RRF Hybrid 与 fallback。</p></article>
+        <article class="card"><h3>安全复用</h3><p>证据篮、来源确认、引用证据包、失效 fail-closed、文档删除保护、完整备份与恢复预检。</p></article>
+      </div>
+      <pre>production  127.0.0.1:8501  data/
+staging     127.0.0.1:8502  staging-data/
+AI default  manual           no API key required</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>v0.5.0 实际界面</h2>
+      <p class="muted">全部截图使用隔离的合成工程资料，不包含真实用户数据、凭据或机器绝对路径。</p>
+      <article class="shot"><h3>首页概览</h3><img src="../assets/home-overview.jpg" width="1280" height="720" alt="EKB v0.5.0 首页概览"></article>
+      <article class="shot"><h3>页面阅读与 Markdown 整理</h3><img src="../assets/page-reader.jpg" width="1280" height="720" loading="lazy" alt="EKB v0.5.0 双栏页面阅读器"></article>
+      <article class="shot"><h3>关键词检索与命中依据</h3><img src="../assets/keyword-search-results.jpg" width="1280" height="720" loading="lazy" alt="EKB v0.5.0 关键词检索结果"></article>
+      <article class="shot"><h3>Hybrid Retrieval 产品门控</h3><img src="../assets/hybrid-retrieval-mode.jpg" width="1280" height="720" loading="lazy" alt="EKB v0.5.0 AI 混合检索模式"></article>
+      <article class="shot"><h3>证据来源工作流</h3><img src="../assets/evidence-source-workflow.jpg" width="1280" height="720" loading="lazy" alt="EKB v0.5.0 证据篮与来源确认"></article>
+      <article class="shot"><h3>文档管理与删除安全边界</h3><img src="../assets/document-management.jpg" width="1280" height="720" loading="lazy" alt="EKB v0.5.0 文档管理"></article>
+    </div>
+  </section>
+
+  <section class="soft">
+    <div class="wrap">
+      <h2>验证与诚实边界</h2>
+      <div class="grid">
+        <article class="card"><h3>自动与人工 Gate</h3><p>Gate 2B 17/17 PASS；pytest 1399/1399；Ruff clean；首页与 13 个页面人工验收 PASS。</p></article>
+        <article class="card"><h3>数据完整性</h3><p>production health HTTP 200；SQLite schema v8；integrity ok；foreign key violations = 0。</p></article>
+        <article class="card"><h3>Retrieval</h3><p>最小 frozen 5-query Hybrid benchmark 为 5/5 PASS，但不代表所有工程领域质量。</p></article>
+      </div>
+      <p class="muted">当前仍是 page-level indexing；运行时 rerank 尚未接入；AI 不能代替关键词检索、来源核验或人工工程判断。</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>恢复边界</h2>
+      <p>GitHub 可恢复代码、脚本、依赖和配置方法；不会保存 .env、真实 Key、私人数据库、用户文档、页面图像、日志、PID、缓存或未脱敏备份。新电脑上的凭据必须由用户重新人工注入。</p>
+      <a class="button primary" href="https://github.com/JZ-05T68/engineering-knowledge-base-src/blob/main/docs/windows-recovery.md">Windows 灾备恢复说明</a>
+    </div>
+  </section>
+
+  <footer><div class="wrap">Engineering Knowledge Base · v0.5.0 public showcase · 2026-08-17</div></footer>
+</body>
+</html>

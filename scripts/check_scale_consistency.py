@@ -4,7 +4,7 @@ The checker never repairs, deletes or writes to the checked data: SQLite is
 opened with ``mode=ro`` + ``PRAGMA query_only``, and no file under the pages
 directory is touched beyond ``stat``.  Both ``--database`` and ``--pages-dir``
 are mandatory — the tool never guesses the formal paths — and any target
-inside the formal project ``D:/Projects/engineering-kb`` is refused outright.
+inside the formal project ``D:/Projects/ekb-dev`` is refused outright.
 Note: opening a WAL-mode database read-only may create transient ``-shm`` /
 ``-wal`` sidecar files (standard SQLite behavior, identical to the production
 ``read_database_summary`` diagnostics); the database file itself is never
@@ -49,7 +49,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from src.backup_service import BackupError, read_database_summary  # noqa: E402
 from src.diagnostic_service import _walk_diagnostic_files  # noqa: E402
 
-FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\engineering-kb")
+FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\ekb-dev")
 DETAIL_LIMIT: Final[int] = 20
 
 

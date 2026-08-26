@@ -5,7 +5,7 @@ import pipeline, ``Database`` queries, ``SearchService``, ``DiagnosticService``
 and ``BackupService`` — against an explicitly isolated project root, recording
 per-phase metrics through ``scripts/scale_metrics`` and per-phase facts as
 JSONL.  The probe implements no import logic of its own and never touches the
-formal data directory ``D:/Projects/engineering-kb``.
+formal data directory ``D:/Projects/ekb-dev``.
 
 Every subcommand is a separate process invocation, so "restart the isolated
 environment and re-read" is exercised by simply running the next command.
@@ -58,7 +58,7 @@ from src.migrations import SCHEMA_VERSION  # noqa: E402
 from src.pdf_service import PdfService  # noqa: E402
 from src.search_service import SearchService  # noqa: E402
 
-FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\engineering-kb")
+FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\ekb-dev")
 PROBE_PORT: Final[int] = 8502  # isolation range 8502-8512; never the formal 8501
 RANDOM_SEED: Final[int] = 20260726
 

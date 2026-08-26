@@ -31,7 +31,7 @@ from typing import Final
 
 PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
 DEFAULT_METRICS_PATH: Final[Path] = PROJECT_ROOT / "runtime" / "v023-scale" / "metrics.jsonl"
-FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\engineering-kb")
+FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\ekb-dev")
 
 
 class FormalPathError(ValueError):

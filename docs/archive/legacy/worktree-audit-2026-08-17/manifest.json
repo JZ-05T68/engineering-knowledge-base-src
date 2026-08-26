@@ -1,0 +1,2683 @@
+{
+  "archive_root": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17",
+  "created_at": "2026-08-17T12:39:41.1936223+08:00",
+  "git_tracked": false,
+  "file_count": 382,
+  "total_bytes": 4202388.0,
+  "files": [
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\AGENTS.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\AGENTS.md",
+      "size_bytes": 5535,
+      "sha256": "9394456DA15F21E89F2F5E13C497343F2EA47E7CD75F11187E41BBDBBBF000C3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\.workbuddy\\memory\\2026-07-28.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\.workbuddy\\memory\\2026-07-28.md",
+      "size_bytes": 2558,
+      "sha256": "E2AE7558A767EC24C9A7CADC2CADB44F2D9111DFAC19417DF291DD58B289699C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\docs\\v0.1.3-b-group-test-plan.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\docs\\v0.1.3-b-group-test-plan.md",
+      "size_bytes": 36417,
+      "sha256": "3CE7F8EA857F2BD513CB272EC811734939EAE6381D9F69CF4E9D1E97E2D85257",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\docs\\v0.1.3-b-group-test-results.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\docs\\v0.1.3-b-group-test-results.md",
+      "size_bytes": 17740,
+      "sha256": "23AC8BCFF1EF784955E54B6ED0BFD2A98F4F953EF8EFFD46839457CB8D031994",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\docs\\v0.1.3-baseline.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\docs\\v0.1.3-baseline.md",
+      "size_bytes": 12221,
+      "sha256": "A8D229A4F311AE4D31DD599BF0E76A0FE79E5D915E44B3E855E1D84BE6B68517",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\停止工程知识库-v0.3.0.bat",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\停止工程知识库-v0.3.0.bat",
+      "size_bytes": 358,
+      "sha256": "9B1A5CC543782F0F2521FEB81ADAA4B7D69B62C0B76FB0B4796FE8CA11AC48CB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\启动工程知识库-v0.3.0.bat",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\启动工程知识库-v0.3.0.bat",
+      "size_bytes": 358,
+      "sha256": "5B0B6B264F67791924386E395536F78516EFDBFA476A45E89D92543D49D919D9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\Projects\\engineering-kb\\查看运行状态-v0.3.0.bat",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\engineering-kb-retained-evidence\\查看运行状态-v0.3.0.bat",
+      "size_bytes": 355,
+      "sha256": "B944975F36383EA0861F5421304DB04DFD4432391FE8B97262385937E80F03DD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\test-assets\\v0.2.1-smoke-test.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\test-assets\\v0.2.1-smoke-test.pdf",
+      "size_bytes": 1688,
+      "sha256": "40DA61A02B7A7ED89CF1BD090CB52D7CAFC97BD99E8455DE247C382DD71CAD1B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\database\\.gitkeep",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\database\\.gitkeep",
+      "size_bytes": 2,
+      "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\database\\knowledge.db",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\database\\knowledge.db",
+      "size_bytes": 176128,
+      "sha256": "E1FA897509431F4A9ED5AF0D892F68D5009F16881D069CC9C245E4ABD4303D3A",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\database\\knowledge.db-shm",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\database\\knowledge.db-shm",
+      "size_bytes": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\database\\knowledge.db-wal",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\database\\knowledge.db-wal",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\markdown\\.gitkeep",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\markdown\\.gitkeep",
+      "size_bytes": 2,
+      "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\pages\\.gitkeep",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\pages\\.gitkeep",
+      "size_bytes": 2,
+      "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\pages\\1\\page_0001.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\pages\\1\\page_0001.png",
+      "size_bytes": 20912,
+      "sha256": "12126C6491699BE92EE2990B1ABE56E504B77A4563164C57715FD047F8DF7658",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\pages\\1\\page_0002.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\pages\\1\\page_0002.png",
+      "size_bytes": 13448,
+      "sha256": "C7043CD2619E744444E64410B91C50B3F7B6A098A435E0818C3F901F167A0282",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\pages\\1\\page_0003.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\pages\\1\\page_0003.png",
+      "size_bytes": 13549,
+      "sha256": "BA84A0554717EF997C87A77D8D8F578A70D9F38103DE0055FEF70989DA76B8F5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\raw\\.gitkeep",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\raw\\.gitkeep",
+      "size_bytes": 2,
+      "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\data\\raw\\40da61a02b7a7ed89cf1bd090cb52d7cafc97bd99e8455de247c382dd71cad1b_v0.2.1-smoke-test.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\data\\raw\\40da61a02b7a7ed89cf1bd090cb52d7cafc97bd99e8455de247c382dd71cad1b_v0.2.1-smoke-test.pdf",
+      "size_bytes": 1688,
+      "sha256": "40DA61A02B7A7ED89CF1BD090CB52D7CAFC97BD99E8455DE247C382DD71CAD1B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\logs\\.gitkeep",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\logs\\.gitkeep",
+      "size_bytes": 2,
+      "sha256": "7EB70257593DA06F682A3DDDA54A9D260D4FC514F645237F5CA74B08F8DA61A6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\logs\\engineering-kb.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\logs\\engineering-kb.log",
+      "size_bytes": 920,
+      "sha256": "AD8D727CAEFB7125D386F409F2DBEBF1CDB708A265CBA1B03A53554000D78416",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\logs\\streamlit-8502.err.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\logs\\streamlit-8502.err.log",
+      "size_bytes": 66,
+      "sha256": "64B9EBC4CBE759DF0281D7DFAACA11B5473F08D67F8C0945A2EEF746C9E1B54D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-isolated\\v0.2.1-manual\\logs\\streamlit-8502.out.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.1-manual\\logs\\streamlit-8502.out.log",
+      "size_bytes": 92,
+      "sha256": "02A21EFDFF849750F962753EB041752C564108E947840AFA4AA39AFA00E5C0BF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-overnight\\v0.1.3-code\\docs\\v0.1.3-overnight-code-report.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.1.3-overnight-code\\docs\\v0.1.3-overnight-code-report.md",
+      "size_bytes": 15105,
+      "sha256": "7637A8C351394523DD89A17CF269D5BEB5CFFCFB1C5FEE0B17024E860C011A39",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\README.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\README.md",
+      "size_bytes": 34854,
+      "sha256": "5B6F3D6BF14A87E19CA41EC5BED65BDDD6CB79CB793C7A238AF2F0E5FB6C51D8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\RELEASE_HISTORY.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\RELEASE_HISTORY.md",
+      "size_bytes": 12046,
+      "sha256": "6D627B5405137057BD861AD8C80B9120E97317C3E09D01A21DAF88AB621B95D1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\database\\knowledge.db",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\database\\knowledge.db",
+      "size_bytes": 237568,
+      "sha256": "F82DC86BF38157972FA5FCC421F9A745B05683090A7D4C6E54735B80FEAAA071",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\database\\knowledge.db-shm",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\database\\knowledge.db-shm",
+      "size_bytes": 32768,
+      "sha256": "FD4C9FDA9CD3F9AE7C962B0DDF37232294D55580E1AA165AA06129B8549389EB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\database\\knowledge.db-wal",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\database\\knowledge.db-wal",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0001.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0001.png",
+      "size_bytes": 16769,
+      "sha256": "CEBE9B8F49B4F29888ACBB1D2EEB3288FA504A566C6FFD153EE44C239DDC31BA",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0002.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0002.png",
+      "size_bytes": 10128,
+      "sha256": "AB1AF1D94DBD1AD83698CE966A0221BA969790C6595BA929955A5FD727F9CC6D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0003.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0003.png",
+      "size_bytes": 11789,
+      "sha256": "00C73EE4C2EC8E83CAE57EB103A1AB2F0F731725B8F43402E8FBCC8DF3017D6B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0004.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0004.png",
+      "size_bytes": 16173,
+      "sha256": "52E5C03232049BB3B2F3DD763BFE013BF058F3206D6C51FD8EDFF5C6F498815F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0005.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0005.png",
+      "size_bytes": 20375,
+      "sha256": "48F2BE6E958CD7972A95ACB907653E156B88F8656272E7DCF85F8CE6E58BFD6B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0006.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\1\\page_0006.png",
+      "size_bytes": 10969,
+      "sha256": "4565364862386ECBE402454F111ADB993DFA77E7EC69466FCDB98F468DDD50D9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0001.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0001.png",
+      "size_bytes": 16565,
+      "sha256": "F41A875DE561AC1C537E4BDD66220CF9BCB7B550CF89E04283F3EDEC57B5C92F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0002.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0002.png",
+      "size_bytes": 16733,
+      "sha256": "389C0E4D778751C4AE9CB6E9C07BB50DA68FF45B8B21D99FE2D0F1D4C5D95E39",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0003.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0003.png",
+      "size_bytes": 16779,
+      "sha256": "094C77DB4783CC749F325110281646EC8541DB0633DFBE92D7714C62154D4E21",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0004.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0004.png",
+      "size_bytes": 16638,
+      "sha256": "56A22046CA7E499695AF4BF0A8E1E2474740950F6C96A3E005350EE7C14897BE",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0005.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0005.png",
+      "size_bytes": 16735,
+      "sha256": "7E27862CEF6490E6FCC024B85E96BFD22E91AF237FF3709D14A56793DCB7D5A1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0006.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0006.png",
+      "size_bytes": 16797,
+      "sha256": "FA05152D7A018F191DFBA26B9937361CFE65E518472520BD5E81DDB61A6715BF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0007.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0007.png",
+      "size_bytes": 16629,
+      "sha256": "AB3BAD29C08E058552C33FB93184D00BB7D0C0C51C119BFACBF7066421E431F6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0008.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\2\\page_0008.png",
+      "size_bytes": 16500,
+      "sha256": "7B8AB4C252848125869F06A3DD7E02B5B8DFCCF62A572C8D7A13B48B3C5EBC05",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0001.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0001.png",
+      "size_bytes": 16898,
+      "sha256": "234661095597D94D09A92751610AAA1EA8EB74B8A52827A384E5276D7F370755",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0002.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0002.png",
+      "size_bytes": 17075,
+      "sha256": "F689EF4B3FC215DFD1724B1F35107F9A01241816381C9FC7EEB491F750B07DC7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0003.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0003.png",
+      "size_bytes": 17126,
+      "sha256": "5A74E7CBBB13BAFC8D362D66F05DDAA74BE4BD14B8CF6246827D84E4490B8F8D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0004.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0004.png",
+      "size_bytes": 16981,
+      "sha256": "FF675178AECD090A5F1A1DB4F308251065A1CC3F199F857A527A58F42C3F9E26",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0005.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0005.png",
+      "size_bytes": 17081,
+      "sha256": "DA54D3F024CBCA10D99593A69BDDF4589375A3A3462A893AD121C2BE8B88A3B9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0006.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0006.png",
+      "size_bytes": 17162,
+      "sha256": "9DFC95D5211F8315AEC271EB1B98103C03C7337ADFF7634C4A69178870AFEE50",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0007.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0007.png",
+      "size_bytes": 16975,
+      "sha256": "D169CABEE83D3ECAE6B0B4B406F69A31E0EEF75CCE2E3F834D185AA4B4B13706",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0008.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0008.png",
+      "size_bytes": 17161,
+      "sha256": "CB6362CC65C3FCF303878767FFB059FB6A63C7BC72417AF83698DDA8BD7F4573",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0009.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0009.png",
+      "size_bytes": 17146,
+      "sha256": "AADB669FC384B94006518B393C6CAF238BEB9E602A908F14840C7E5A649C4F3D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0010.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0010.png",
+      "size_bytes": 16961,
+      "sha256": "F8B38842F8DB27D74B5802630BF03FD4B55E3DB67015113692B8F9EBFD2C8E2E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0011.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0011.png",
+      "size_bytes": 16938,
+      "sha256": "CF8FE1EC1718C4B7A9A17B5D7C6C4BDD9CE9F84D9018145335CD1AD0C905DD9F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0012.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0012.png",
+      "size_bytes": 17183,
+      "sha256": "175FDB37E58946C9A0D58017F496717965BA9BF8D04606C905CDF3B57DCFCC68",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0013.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0013.png",
+      "size_bytes": 17238,
+      "sha256": "1D1AE6B733E06E05AFDB3DC869A1E6336A05D4DEBFD500782E3CAA99E0B6C37B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0014.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0014.png",
+      "size_bytes": 17079,
+      "sha256": "4B771B8B695DAB9E81D3BACE86AB7696509D14A776F700EB86AD234C167A0311",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0015.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0015.png",
+      "size_bytes": 17186,
+      "sha256": "97B715E9608C2B2A6F22C6C2536DA278DA72313BEE04ED593858963FA92002D4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0016.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0016.png",
+      "size_bytes": 17250,
+      "sha256": "92DC1E507812C8DE1E329D290DDE96D5E89BC83D32C77A9CF24154BECA30DE1B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0017.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0017.png",
+      "size_bytes": 17095,
+      "sha256": "18841C3BAFE6D098B17D1B66F874C342A345FD2EB3A67944E733BAA031E53B97",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0018.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0018.png",
+      "size_bytes": 17262,
+      "sha256": "4FB835B1A23BB59EC2991CD650FA2F2859CB50F8F08C143AB2AC480BD2DB09B0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0019.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0019.png",
+      "size_bytes": 17261,
+      "sha256": "00888948722E6052D40A33F3432BF7FBDC95BEE230FE43B0614A1A9FFE5A25E6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0020.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0020.png",
+      "size_bytes": 17128,
+      "sha256": "68D7710B8AED629F57A58687AE673FA4F0CE4F23A3D88D84BDE79290C7BC06DD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0021.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0021.png",
+      "size_bytes": 17184,
+      "sha256": "83CFC3B84E8DC417563EC59CDB11B724B3D1D37693402F7D956240C30DC146D1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0022.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0022.png",
+      "size_bytes": 17128,
+      "sha256": "467FB6F33396D09F0F65EA8397737D6D3B89A766A96B54D2D242762663E84FBE",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0023.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0023.png",
+      "size_bytes": 17387,
+      "sha256": "53B7816B26A340C2990A896BF4D00CA65DBF8263AD24F9CF5C85E98F1785F4CC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0024.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0024.png",
+      "size_bytes": 17247,
+      "sha256": "47F7FBD949045B62501B219A606526470EA800F74361CED0C36EBA63E3D1C767",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0025.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0025.png",
+      "size_bytes": 17355,
+      "sha256": "1A36A4525132F4DC0637476CA12C6337162F3E7258627F444B73A4677D32BF31",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0026.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0026.png",
+      "size_bytes": 17411,
+      "sha256": "ECA1A5687381B251ED615F4441AD805E9D6D128DCA99FA191BF20E318BCC4D7F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0027.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0027.png",
+      "size_bytes": 17267,
+      "sha256": "C0E24A4F2E8446DDBF8685B0472901E9191999B31C14A487DE93DE16A31B3A54",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0028.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0028.png",
+      "size_bytes": 17418,
+      "sha256": "1E7C9468AA2E0210E8347D9987993D92A190F99B7592543E79C728057D6FE381",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0029.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0029.png",
+      "size_bytes": 17428,
+      "sha256": "D5892B9E9A8574E4E90B34D9B32D77A28CA53E16EA0F1CFB7FD0305688FB3D8C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0030.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0030.png",
+      "size_bytes": 16465,
+      "sha256": "94A0C8C4EDA98DDB82D70A92F0D43F3CDE27BF37F157064BCC7BCBD2D3CE7A96",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0031.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0031.png",
+      "size_bytes": 17223,
+      "sha256": "B88FEC11123E02361732A3F5C1BF33EA48463516E9454B58D50AA8D40F629701",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0032.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0032.png",
+      "size_bytes": 17382,
+      "sha256": "404F253E056594F8D33AACEFF804F5B2DE57A098812A12DBB329872F9B7BEAD8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0033.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0033.png",
+      "size_bytes": 17182,
+      "sha256": "F420300DE81F76171FCD4AB745B9F455F7523AF9389F191F9808A7816EBF7074",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0034.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0034.png",
+      "size_bytes": 17295,
+      "sha256": "49AAB27B1F5A495D36529B39A328C8C0FC41B1CE5C950E22930278CDA60B97A0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0035.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0035.png",
+      "size_bytes": 17406,
+      "sha256": "36BC129E11674D51663BA651FFDBD7996614E75218247C456E1D2C5ED3902FE7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0036.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0036.png",
+      "size_bytes": 17462,
+      "sha256": "55AAE7D0AF5C05C751876BAB4D96A30D63B051C00F428447642526F5E3672BF7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0037.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0037.png",
+      "size_bytes": 17313,
+      "sha256": "E7D3F52521DF444E9895593227B58EC8E55CB7D653E0E844EF3F53450C2B93C0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0038.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0038.png",
+      "size_bytes": 17472,
+      "sha256": "1D15D094C673ECC5FB29EE4F9622C1ED84DA8DAC6A3E3E949E5444593345C8A6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0039.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0039.png",
+      "size_bytes": 17474,
+      "sha256": "87725801D571957B164FD394E154A8D71BDBC4B8129E256653C86E783B56915D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0040.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0040.png",
+      "size_bytes": 17046,
+      "sha256": "BC84F3BF1602E857ADC86C1674FA226EF2492B3238E27CD1818E006B68E93C27",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0041.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0041.png",
+      "size_bytes": 17071,
+      "sha256": "5BD31D0E90979B7B77DB840DB11CB2000976D0C67FBD6DE3C2891A746833DF75",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0042.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0042.png",
+      "size_bytes": 17251,
+      "sha256": "5BD8A05C6708D4F2933066A50AF9B81AE77422D32A907A1776BFF0DCD3687A42",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0043.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0043.png",
+      "size_bytes": 17307,
+      "sha256": "DDA28CAAF2708287E33C3F4EC45E1BC1BF8D8086C40A19DEEAA5D1AE3D2DA6BC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0044.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0044.png",
+      "size_bytes": 17042,
+      "sha256": "52107AA8BEE8718F069C4472DE69D271A845D418DC1D5E2C462D8DEB76BBDC51",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0045.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0045.png",
+      "size_bytes": 21725,
+      "sha256": "87696610FDE0B19F6BD91117B83856BBD1DFEF84A186DE26DC791947B1B9DCF9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0046.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0046.png",
+      "size_bytes": 17338,
+      "sha256": "948F50481314F97F3D3D8E2279E99F271E033DEDC390EA1062A630991488F465",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0047.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0047.png",
+      "size_bytes": 17181,
+      "sha256": "B1EBD5FD43CEB4A47662272E885A6908E162E7CAEE20DC61BFC0CAF2750C0CD0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0048.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0048.png",
+      "size_bytes": 17339,
+      "sha256": "2FD8F994222EE37C42FAA78C307824ABD699E7AD35973A67179B7461EE6896C7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0049.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0049.png",
+      "size_bytes": 17342,
+      "sha256": "82D0B9069F00560F151AD1D2FD1C1126CED0D54211515A2FA1E62F19B728A912",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0050.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0050.png",
+      "size_bytes": 17144,
+      "sha256": "1270F1E05AFAE9AF27F919C9DC2BA0BDE3D365368DCEE7BBEDC5E062CF96077E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0051.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0051.png",
+      "size_bytes": 17182,
+      "sha256": "E65CAAAB1312BC1D8E62F09DCA5E5E6D3A31C736FD89B23FBE91694A376BB851",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0052.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0052.png",
+      "size_bytes": 17349,
+      "sha256": "0F9021B97E4F4094C89E260FAC822ABDC75B613F9BF5EF8A808C62A028B62A76",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0053.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0053.png",
+      "size_bytes": 17412,
+      "sha256": "3655F1B8F1F00D2D6E7685973099AEED9C941E7B62B38992DB8B5922B6B3559E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0054.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0054.png",
+      "size_bytes": 17260,
+      "sha256": "4E7CBCB9AEFB8D07F7C75941F58C73C52CAD77D1A6D38CCAF548560BA14F3E40",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0055.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0055.png",
+      "size_bytes": 17124,
+      "sha256": "806B260C2A99F7B95D76D047F78FFEBA29A6F3B5172F9CF73AB9990A1C00D446",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0056.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0056.png",
+      "size_bytes": 17428,
+      "sha256": "D1D91368F1D247932127F7D47C286D335D0D2EF53CE924232751FE6355F28FE1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0057.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0057.png",
+      "size_bytes": 17276,
+      "sha256": "6F0705C71E6A8FEA09BF48F3654202A1588B25BB470689AB95100A1185C64C67",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0058.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0058.png",
+      "size_bytes": 17437,
+      "sha256": "A2BF0AD5FA444A40EB88220146DF044C785C49FD26CB2208F4F3049DFD5FB58E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0059.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0059.png",
+      "size_bytes": 17422,
+      "sha256": "4D7F9EFC4617009BE50DE70A0083A5ED0435948DE559B1EDAA8A0F104F10CA9D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0060.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0060.png",
+      "size_bytes": 16485,
+      "sha256": "4D9D257018F7E01B42C2269A7FCF2B1D4039E2433F578857A14560D32CC1518C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0061.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0061.png",
+      "size_bytes": 17247,
+      "sha256": "13B2C02E4AC6F344965B8DA1BB71FBE25FDA12475E401405493645103733D585",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0062.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0062.png",
+      "size_bytes": 17413,
+      "sha256": "39CF48AA5B59FF37C4F6AEEB565FB89FF1CA591CE6367074C92E61A70B5CD323",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0063.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0063.png",
+      "size_bytes": 17458,
+      "sha256": "24404F55408979BBA64F4B5BCF13488C9A41DA9E7F4A0B65EF058F3231A5C4B4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0064.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0064.png",
+      "size_bytes": 17335,
+      "sha256": "2E2C0E8B638A926D3CE1EA6D132F01E1440E46C292F9B56E741CEBEA56E69EA3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0065.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0065.png",
+      "size_bytes": 17424,
+      "sha256": "11A91768931493479C3D5EACE42C5CC731F51F9A47C75EEF191396381C4C5ADF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0066.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0066.png",
+      "size_bytes": 17197,
+      "sha256": "3196802692B77AFCFE5C4BEDBDA422B70540626A4CC8C0C07A7D186897FB8C8C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0067.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0067.png",
+      "size_bytes": 17343,
+      "sha256": "AC6606FE856052735018E4E52CAC28ADA352DBE2AD49F638EF828F517EF0EDD3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0068.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0068.png",
+      "size_bytes": 17497,
+      "sha256": "9C55FAB7ED8852F1B83993944E54E02723F5697CFE59E216D22CC86183EA88D6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0069.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0069.png",
+      "size_bytes": 17486,
+      "sha256": "59A8DFE121BA1E8E0FDC98E2B49D2999EEF82C4663398C54E6A8B7E3C173A225",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0070.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0070.png",
+      "size_bytes": 17044,
+      "sha256": "137C9A9CE03A41405E075DE965762FD7CE73EF228EFE3649C93F012BC21F80E7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0071.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0071.png",
+      "size_bytes": 17099,
+      "sha256": "E87F1635C99ED3DAC3B5B2174A118B1F457BD8243BDF6D8F01559D28847098E8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0072.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0072.png",
+      "size_bytes": 17253,
+      "sha256": "23415DFA1F26A077003A1E89CC8EA4DF83400E597E719B10F7456960D5833E00",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0073.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0073.png",
+      "size_bytes": 17306,
+      "sha256": "9136112AB8A34AE2A10A8EE6D1A56643F17A552A1C5D809BE143363489963938",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0074.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0074.png",
+      "size_bytes": 17173,
+      "sha256": "542D446FD92AF97E758C7D05E0611A7FD4F122B1023D803DB7CAE06AD2A27A2A",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0075.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0075.png",
+      "size_bytes": 17258,
+      "sha256": "76811AFE667BCED4C424B871ECA3BF7714FB41244B840FF4D33530E86F2827E1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0076.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0076.png",
+      "size_bytes": 17329,
+      "sha256": "4E2D0A61CBED58C83A253D76592099BBD29D7422954934F6E1C1CC83C3FA5D84",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0077.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0077.png",
+      "size_bytes": 17032,
+      "sha256": "7D0610B89A49BFAFF1F8F773B2D2D27EFAECF353B652FE1C10834BEC016966B1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0078.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0078.png",
+      "size_bytes": 17338,
+      "sha256": "63868FFD09E572CAF1AC9EE067E8AC5E847E5B5ADB7C408E0136861D6E9A10C5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0079.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0079.png",
+      "size_bytes": 17337,
+      "sha256": "C8A01E61BD938F9A6EC816BA596D64577E9B73055BE6AEA9D55889F64BC7AC8D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0080.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0080.png",
+      "size_bytes": 17212,
+      "sha256": "D709AC9F24C00A0D65566B769F0D2E4995BD47B79F86761B1E9C8F9A49AD00CB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0081.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0081.png",
+      "size_bytes": 17258,
+      "sha256": "D207CFC0E91A51F0C306610FE60A3CBD31F842087E55E09D1D80127409E67A7D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0082.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0082.png",
+      "size_bytes": 17418,
+      "sha256": "1574CCFC9644B40D50DEE61F73599CF0D4D6B97F38BB0E78212E330510CFEFC1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0083.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0083.png",
+      "size_bytes": 17473,
+      "sha256": "7CFFFA3F5BDD39FA69D6747D2CC99710FED11C7B7109DF9147BDA54B9181355D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0084.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0084.png",
+      "size_bytes": 17331,
+      "sha256": "21CB465195E0A370B9A880958E16B26A3BBFA170CCD9102F15CFAE259155B329",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0085.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0085.png",
+      "size_bytes": 17428,
+      "sha256": "654E1F3BF7C7853845EF3150CD14674093890BE539B7E470FC1334485E1D29AE",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0086.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0086.png",
+      "size_bytes": 17491,
+      "sha256": "3C591DC9DBE2EBF946C69A72122E6CA9867698302F6441FB24D32B51DC718614",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0087.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0087.png",
+      "size_bytes": 17351,
+      "sha256": "206BEFB352A5EF7FA7B26B449D402665843ABD0D9FA7FAC0D84171628E0CEF5D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0088.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0088.png",
+      "size_bytes": 17204,
+      "sha256": "008C25AD52E1A8710F48CD380E55E879F8DD860F4AC114A12E14220A3FFBA0CD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0089.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0089.png",
+      "size_bytes": 17500,
+      "sha256": "9DD21EC3AB76063A862FC14C4D2379E2944D45674768AE604D7C3E8ED8A91AC3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0090.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0090.png",
+      "size_bytes": 16512,
+      "sha256": "3A25A67A4172DDCFD25AB9B1124B3B097DBCA6F5335886EC4E0E1B0E3881ABAD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0091.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0091.png",
+      "size_bytes": 17259,
+      "sha256": "8A501F3A573399DB7DA626794F5E6AD7F5FC487553D2B12B67A0F347C7CE1637",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0092.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0092.png",
+      "size_bytes": 17420,
+      "sha256": "22B88F8E68679A67DC94462BFC7FCA3A941A7CD69F1903A47C6C6ED7577FE7EA",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0093.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0093.png",
+      "size_bytes": 17470,
+      "sha256": "2C5BA289526F542AC0E49E4D54E378D5CBB1A342F5E7F5507A7BA3C1F6E92445",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0094.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0094.png",
+      "size_bytes": 17335,
+      "sha256": "629110843E72950A7F6D26F8878AE65E25F5D05901174F7FA5800073BCD81DF1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0095.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0095.png",
+      "size_bytes": 17424,
+      "sha256": "AE4986D140A9A7DAAE311A66A9B061AF2E54D5CCAE0831BD6E8AE2EECD53304F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0096.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0096.png",
+      "size_bytes": 17491,
+      "sha256": "9AE83B6437C3C9621350DDC38D732282D151A97851B316EFB313E59D20A726F8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0097.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0097.png",
+      "size_bytes": 17354,
+      "sha256": "214C16FC4DD6140B9E7A482F9BAFB591BB06C7D29C0BB61F711ED95C0191D900",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0098.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0098.png",
+      "size_bytes": 17504,
+      "sha256": "150086125EB423B833B9B87C6BA2B87A996CBE7F2B60C1F6744B7FED618C8B94",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0099.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0099.png",
+      "size_bytes": 17199,
+      "sha256": "8DDEF4DEFE30D4D555D62D45303E3F25522185CB72521680C4840D272F99FF2E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0100.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0100.png",
+      "size_bytes": 17274,
+      "sha256": "89BE59040CACB1EF3E1C39601265FA1CE17028BC4D34D36A658FD60FF9CC9AA8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0101.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0101.png",
+      "size_bytes": 17033,
+      "sha256": "D8E409BBEB88ABE613A0F043EA4D64E9F0206967340B1D0AE19F0B87C82F3816",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0102.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0102.png",
+      "size_bytes": 17224,
+      "sha256": "964807035219A83C368EE6874CCBBEF705F6EA590801CC76E34D5EC9D71EE887",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0103.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0103.png",
+      "size_bytes": 17289,
+      "sha256": "305A5B5DAD475A1CCFE1A502BDF0CBB2725F5999618044A8F7381B9314AF9B4E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0104.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0104.png",
+      "size_bytes": 17147,
+      "sha256": "74BB1C0B656947CEB027352D23EED441385F90B2686CDD6316B925FE55EBF99B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0105.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0105.png",
+      "size_bytes": 17217,
+      "sha256": "07B0182401AD23580C26BA372FE06487F1F028D327F95BF90AF25D918A4F078D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0106.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0106.png",
+      "size_bytes": 17317,
+      "sha256": "0E66E6DF6E75E0A949F8E4A9328974049ACF1F7C9F6E0B0C84FA8C294F988C62",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0107.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0107.png",
+      "size_bytes": 17149,
+      "sha256": "D0F9575D41565FC32E1A652F6C8CD2DC433C7052C5D9E1D97FBDB473B1614F01",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0108.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0108.png",
+      "size_bytes": 17298,
+      "sha256": "83B3ABABAF75B88CAECBC69418132931D6E7562DDFF06C0F7909A12153AB0E92",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0109.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0109.png",
+      "size_bytes": 17305,
+      "sha256": "D6A5BE39527A2CAF9E05355B67C622949D9A6278BC0B0FCF5749455A5371E6AC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0110.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0110.png",
+      "size_bytes": 17271,
+      "sha256": "5157A062E5AF725F44AB9BB55C9ABA8FCE2B766A690008AE1CE6DF527CC1D208",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0111.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0111.png",
+      "size_bytes": 16974,
+      "sha256": "4C2F73C936C0A9F3515349904940886D1418FF6A9CE2DB24951624F8DF230ED9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0112.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0112.png",
+      "size_bytes": 17222,
+      "sha256": "BB885846BC2ED0EFFB52711C511C5B36B66F091C1D7DF126097A7932382CEBD6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0113.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0113.png",
+      "size_bytes": 17272,
+      "sha256": "07438F111A24E57537CF7445780647066D2D1DCABD322EEBFEE073D76C16CE10",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0114.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0114.png",
+      "size_bytes": 17126,
+      "sha256": "974DA0048DB466050A23570B6AFB8D9F398934BBED45E8BAE44846FB1C402D1E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0115.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0115.png",
+      "size_bytes": 17207,
+      "sha256": "E0805C32DEBA653FA441F7735AEEEA9A4A3D032D354F0D5D3123500139F42B9C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0116.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0116.png",
+      "size_bytes": 17316,
+      "sha256": "AB1F8A76C541F4C283B96FEFA99B3D1BE2A5B7FBB065FAC1FDD980C366D4E04A",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0117.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0117.png",
+      "size_bytes": 17112,
+      "sha256": "A9344F659E67AC90EC95E9AAEF332620306F0955C0C273E123029DC05409207E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0118.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0118.png",
+      "size_bytes": 17297,
+      "sha256": "3039537E05AA9D17D8655B41457BD50E30A5464E185B72C2310A2004CA02E80B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0119.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0119.png",
+      "size_bytes": 17305,
+      "sha256": "C6680D86853B57430847C64E94073FB6A0D9F42A31B8448F78A905BD7733CD41",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0120.png",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\pages\\3\\page_0120.png",
+      "size_bytes": 16614,
+      "sha256": "1CA3AF12F77510856446FBD8B90108E7B3FD8BA993D6460ABE7B28FB45E50248",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\raw\\5392213015d0d33243847a5ddfc7b6b66aa0adbb931484c9ca27b184aabd31fc_ordinary-8p.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\raw\\5392213015d0d33243847a5ddfc7b6b66aa0adbb931484c9ca27b184aabd31fc_ordinary-8p.pdf",
+      "size_bytes": 3689,
+      "sha256": "5392213015D0D33243847A5DDFC7B6B66AA0ADBB931484C9CA27B184AABD31FC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\raw\\8e74ec2308343948d1fe6b152ab3bf18b0a9d2f83497a3e578e6d15abc331cd0_mixed-6p.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\raw\\8e74ec2308343948d1fe6b152ab3bf18b0a9d2f83497a3e578e6d15abc331cd0_mixed-6p.pdf",
+      "size_bytes": 2483,
+      "sha256": "8E74EC2308343948D1FE6B152AB3BF18B0A9D2F83497A3E578E6D15ABC331CD0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\data\\raw\\e1060d05e6d54acc50ea77856dfb081965a9195e561ef54fa48a55a5877e1ed9_long-120p.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\data\\raw\\e1060d05e6d54acc50ea77856dfb081965a9195e561ef54fa48a55a5877e1ed9_long-120p.pdf",
+      "size_bytes": 49952,
+      "sha256": "E1060D05E6D54ACC50EA77856DFB081965A9195E561EF54FA48A55A5877E1ED9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\logs\\engineering-kb.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\logs\\engineering-kb.log",
+      "size_bytes": 1171,
+      "sha256": "C45FCCAB0BEF022C5EA04C8DACF097BC24B71A22373E313E65DA778635BFE1CF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\pdfs\\long-120p.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\pdfs\\long-120p.pdf",
+      "size_bytes": 49952,
+      "sha256": "E1060D05E6D54ACC50EA77856DFB081965A9195E561EF54FA48A55A5877E1ED9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\pdfs\\mixed-6p.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\pdfs\\mixed-6p.pdf",
+      "size_bytes": 2483,
+      "sha256": "8E74EC2308343948D1FE6B152AB3BF18B0A9D2F83497A3E578E6D15ABC331CD0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.0-foundation\\runtime\\v020-manual-test\\pdfs\\ordinary-8p.pdf",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.0-foundation\\runtime\\v020-manual-test\\pdfs\\ordinary-8p.pdf",
+      "size_bytes": 3689,
+      "sha256": "5392213015D0D33243847A5DDFC7B6B66AA0ADBB931484C9CA27B184AABD31FC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\wt-parent\\tests\\test_scale_metrics.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-nested-wt-parent\\tests\\test_scale_metrics.py",
+      "size_bytes": 5843,
+      "sha256": "65C2F9F219670815C2AB1D7CA470E6E0D830963C1A38B1A8AD707DB8ABC70CF8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\wt-parent\\tests\\test_scale_invariants.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-nested-wt-parent\\tests\\test_scale_invariants.py",
+      "size_bytes": 8594,
+      "sha256": "26E8A9F9ED75BE0C95FAA3108F36333F8382A49D5460EB76EEC98A6C2BEE8F25",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\backups\\release-v0.2.2-20260726-085647-b0eca447\\config\\settings.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\backups\\release-v0.2.2-20260726-085647-b0eca447\\config\\settings.json",
+      "size_bytes": 427,
+      "sha256": "B83D7BFDF491A7917694FA631696912EA857FBFFA0CFE7C16B25E651FB233458",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\backups\\release-v0.2.2-20260726-085647-b0eca447\\manifest.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\backups\\release-v0.2.2-20260726-085647-b0eca447\\manifest.json",
+      "size_bytes": 1418,
+      "sha256": "F882E441ACB63DE5F89375A2DBC49EB44C8D80DAD23D45E00265C1F4563A5EB5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\logs\\engineering-kb.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\logs\\engineering-kb.log",
+      "size_bytes": 442,
+      "sha256": "8F276CB981E2E9DDF59EE1F1BD1483C44AB76EB6FE5AA931A8AE101AC4E6FE52",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\logs\\service-manager.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\logs\\service-manager.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\logs\\ui-smoke-8502.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\logs\\ui-smoke-8502.log",
+      "size_bytes": 158,
+      "sha256": "8137091EFC25A24088A66AB94E595B6E40419A132887855C7A1B08EA1C4C623D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\build_summary.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\build_summary.py",
+      "size_bytes": 7169,
+      "sha256": "1364DE855A086D1DD92B4F539B1634F847150761FF90786FB46C4B2BDF4808CB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case01\\t25-result.json",
+      "size_bytes": 7106,
+      "sha256": "80EB4AB20CF8182F17BE28B95CF040C8FF9E44BD30D720486AEB731FF4BED4C0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case02\\t25-result.json",
+      "size_bytes": 6799,
+      "sha256": "85AA3C83B2D81D766321D80D80186FE28F9AD8BB52D62B7E8467A68B7381837E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case03\\t25-result.json",
+      "size_bytes": 7120,
+      "sha256": "9AE0D67587262F24CE6056EC173803B07F255B8674586E22139E941468493186",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case04\\t25-result.json",
+      "size_bytes": 6844,
+      "sha256": "762C6DF8FFC76350FBE32EA802A5FB77E5FA322FC3A31D356CC648D1D52DA8CC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case05\\t25-result.json",
+      "size_bytes": 6989,
+      "sha256": "51C25C2859C3459053C6138C64D4C9A88B9A8A41BF45AC850D653E07BD1772AC",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case06\\t25-result.json",
+      "size_bytes": 6902,
+      "sha256": "FD1E2BF63B9D98F7B5084239DD8CBD9C31B8BA936954878110973D966F9A9829",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case07\\t25-result.json",
+      "size_bytes": 7238,
+      "sha256": "E9B62CA293B8D94AD9EAAF2F5FD617567838701DE37F0E02330993676D8AC203",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case08\\t25-result.json",
+      "size_bytes": 7410,
+      "sha256": "39BEABC2641B0AEC82BF5E04BE055E5A40FB17B92F3FE3CD1AF50E92E7856301",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case09\\t25-result.json",
+      "size_bytes": 7327,
+      "sha256": "B5AA285B702A6EBEAE77F2D1819ED5F6D3572A38D40BE28C4D9F7301E01E8B84",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case10\\t25-result.json",
+      "size_bytes": 6978,
+      "sha256": "02F1A3F57C0102E9B495069B04B4BB56291D8901E67D2CC9925ABAB45E4D6B39",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case11\\t25-result.json",
+      "size_bytes": 6836,
+      "sha256": "243A45FFCBF07C5CEDD34B3A87606B7DD97E27DDB9B22734E8ACE0EA47818679",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case12\\t25-result.json",
+      "size_bytes": 6853,
+      "sha256": "1BB652BA5343DAE436C73BF946C4D9F32979D8060CE8911E753BDBD7D5737E90",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case13\\t25-result.json",
+      "size_bytes": 7077,
+      "sha256": "6D0AB3F1482DA4B28B3C5A4EF7935B7021B3D3CA9CE0EF35E25BBEEC6743CA7F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case14\\t25-result.json",
+      "size_bytes": 6829,
+      "sha256": "BFDAEAC91F88EA52B9D3A910F333FD60C73B596B611561F20EBA2414D8059769",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case15\\t25-result.json",
+      "size_bytes": 7155,
+      "sha256": "6F2DE4F82763B2F6AC2F0BFEA21D1532692BEEACD541D4253ADA7EFAA8BFA37E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case16\\t25-result.json",
+      "size_bytes": 6867,
+      "sha256": "CCC8DE7CF7476AAFE1A7682F02AA945EE4F3433702B2528B9675E1EA5AAC2C17",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case17\\t25-result.json",
+      "size_bytes": 6869,
+      "sha256": "B6BE2899629A579C316EB41F907FBBA4001A75A3E5BF3A6D66EAB874560C6EDB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case18\\t25-result.json",
+      "size_bytes": 7251,
+      "sha256": "B48F8D0B9C68D3E5E070AD5C7B7B1224E1FB2165B97B7B2A84CA3E21C2255663",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\t25-result.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\cases\\case19\\t25-result.json",
+      "size_bytes": 821,
+      "sha256": "DF829F94094B711967E4A9201000FB728DA73DCB1EACCF001E3D7227F1881520",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\fixture\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\fixture\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "44A7DBF93167917918DDC1E0594346A031FA2A9A0557CD972EA5A30A293A6486",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\fixture\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\fixture\\probe-results.jsonl",
+      "size_bytes": 505,
+      "sha256": "7D690A5A59F8CDD4A96D0238379BD572CA67CB3E77DBB3D6ECE1985DDEB78261",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\fixture\\t25-baseline.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\fixture\\t25-baseline.json",
+      "size_bytes": 6701,
+      "sha256": "302D7B2EDFA8B5C65DCF310A28A8F9D2CCAD1882EB61E8DB1FB0F9FDC78C4072",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\mkcase.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\mkcase.py",
+      "size_bytes": 1537,
+      "sha256": "08DDA722A1DA851B363A20346632A6432C87A8BF560810C3CB79499273A90CE4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\fault-injection\\runcase.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\fault-injection\\runcase.py",
+      "size_bytes": 1554,
+      "sha256": "4C82187BE655562491D664EE8298435BB1DBC6E06E8262E6D7CA48192B69648D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\clean-progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\clean-progress.txt",
+      "size_bytes": 11,
+      "sha256": "3FC97CE5CC2B0600526C2B0037691966F9A2689EB063813CECFCBBC9374152B4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\clean\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\clean\\metrics.jsonl",
+      "size_bytes": 618,
+      "sha256": "16D955F0BEC3113A424DF736AE228E008A4D3E41AEF6B49395FB9D7EE89DA63B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\clean\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\clean\\probe-results.jsonl",
+      "size_bytes": 511,
+      "sha256": "D0A40042430CE2836C4538292DA422F07E087AB6E1753E7A9967A12D2AA5C929",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\collect_facts.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\collect_facts.py",
+      "size_bytes": 4222,
+      "sha256": "4D38B3E02CA1588423F197B8AA7B66CA53416007860E9A5D22480065B1B0E400",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\facts-clean.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\facts-clean.json",
+      "size_bytes": 47013,
+      "sha256": "74A3D20AE5A865667A7E13FBA91B5E42E204AE540CE6D9580A2B625BE1BD4370",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\facts-killed-midstate.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\facts-killed-midstate.json",
+      "size_bytes": 16951,
+      "sha256": "1386CDE8C8AA4469924AE203763C73E0AF2C2086A683DA9727405CA82639F105",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\facts-killed-recovered.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\facts-killed-recovered.json",
+      "size_bytes": 47090,
+      "sha256": "7F791368CF71B6491E658C1D1D7F4390203A2817F864EEF9EC638DEE101B4D6E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\kill_target.ps1",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\kill_target.ps1",
+      "size_bytes": 781,
+      "sha256": "B24921E6AE82ED4F58BD4E9061FD03F0A699BBF55FC6C2DE3F291ACDF7CA3B32",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\killed-progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\killed-progress.txt",
+      "size_bytes": 10,
+      "sha256": "67498FF013F556EB5A1BCECDD2CAF1D33B61299ACA01980A82C25EB9D88AADD2",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\killed\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\killed\\metrics.jsonl",
+      "size_bytes": 620,
+      "sha256": "BE90A944AF3DAF8A5149860F0A29B2F4E4241FE6BCEA10DEB448887861F6CA10",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\killed\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\killed\\probe-results.jsonl",
+      "size_bytes": 515,
+      "sha256": "D9BBD1381132BF0F577682B0D623038792E99F295975148369E0626D5010E9AD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\recovery-progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\recovery-progress.txt",
+      "size_bytes": 11,
+      "sha256": "3FC97CE5CC2B0600526C2B0037691966F9A2689EB063813CECFCBBC9374152B4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\run_kill_experiment.sh",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\run_kill_experiment.sh",
+      "size_bytes": 2158,
+      "sha256": "EA8BC6AD5B2C9C11C3044A70F761A19AC9208AFBA5429106F241108A160A39E6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\summary.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\summary.md",
+      "size_bytes": 4945,
+      "sha256": "1DCC173777DED2079B0390B458A0D7EE3F83B21B135063879FC4552F991A665E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\t25-clean.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\t25-clean.json",
+      "size_bytes": 6715,
+      "sha256": "6005655A8DA39E9D609737CE7F447D3A0F3AC612B2C5F52B27A4BEE8990D49EA",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\kill-recovery\\t25-killed.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\kill-recovery\\t25-killed.json",
+      "size_bytes": 6716,
+      "sha256": "0A67E5B725ACE77963B64601997C946EDD5B54251CBC3FF188A7F69BCDD4CDC1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\perf\\smoke-old\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\perf\\smoke-old\\metrics.jsonl",
+      "size_bytes": 540,
+      "sha256": "15C714B9C077B29EA848C193B20D40D96BB160A557BB8AFFA1FBE79EF7B67C22",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\perf\\smoke-old\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\perf\\smoke-old\\probe-results.jsonl",
+      "size_bytes": 493,
+      "sha256": "4B57F25A3A26269E66B78EBE486B2BA7D960D1CB063FC5E93E68502518392829",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\ruff.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\ruff.txt",
+      "size_bytes": 19,
+      "sha256": "82B3E6A6C090A57601D22943BD23FCA9218D1031DBE5A7B754092F9A156B4F18",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case1000\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case1000\\metrics.jsonl",
+      "size_bytes": 617,
+      "sha256": "8FC4E585883B874DD957642468954D913C77C375B6E1CC270B51AB4DDB157348",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case1000\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case1000\\probe-results.jsonl",
+      "size_bytes": 1488,
+      "sha256": "A66D020F4345F73194987AC5E8201537FA9782029FBA56C9128F72D818063FA4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case1000\\t25-console.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case1000\\t25-console.log",
+      "size_bytes": 2960,
+      "sha256": "5D6C370508181FB5463E67CA4C84A7B975C8B90CD577418033B91CB3652301E8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case1000\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case1000\\t25-invariants.json",
+      "size_bytes": 6714,
+      "sha256": "3BF80F0C1A3EEB28C4078B6871821858D2690DAADD1195C668F41DBD92434AEF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case300\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case300\\metrics.jsonl",
+      "size_bytes": 616,
+      "sha256": "BE543C52CFBD20FF118125CE81C0C8CB55A6BB4A47A78596AEEB7214309F7E29",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case300\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case300\\probe-results.jsonl",
+      "size_bytes": 1471,
+      "sha256": "DE720D9BBB99EDCE28278CDE5A3DA0CC757A7444913F75E97613C5A2B7B71316",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case300\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case300\\t25-invariants.json",
+      "size_bytes": 6700,
+      "sha256": "06171A1DAEEB5B4FF54BD9D96C888381FB6EC9D7651A94CDF3376AA800699ADD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case3000\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case3000\\metrics.jsonl",
+      "size_bytes": 619,
+      "sha256": "78EBB13A8C1593557CC3A6E9A73D1707849DADE9C6EF733714F1A93BC74D8DCB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case3000\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case3000\\probe-results.jsonl",
+      "size_bytes": 1492,
+      "sha256": "9139382DEF1A436DA493D21DBBC5B4CC5210BF149A88360CDCC588F854DF275A",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case3000\\t25-console.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case3000\\t25-console.log",
+      "size_bytes": 2960,
+      "sha256": "62540FD8F15B8A846FA638E89B8C82709FB8CC6F4A80C52AD11847C4CAA1F9DE",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\case3000\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\case3000\\t25-invariants.json",
+      "size_bytes": 6714,
+      "sha256": "AB220EAAA0AA547E39EA66CF1D02E5A74DB039EE823F82EAE97F00C4A49F3D90",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\audit-s3c\\scale-rerun\\summary.md",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\audit-s3c\\scale-rerun\\summary.md",
+      "size_bytes": 5972,
+      "sha256": "CD09427E0CB82571B07FDCBDDC3256089C93695D5F096793C5D5AAB92400D5EA",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\audit-kill.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\audit-kill.log",
+      "size_bytes": 2246,
+      "sha256": "8206B0A6E9182099CD316E05107EA3CB1660F09E7E7B38B65F7356FBACD9CB05",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\audit-scenarios.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\audit-scenarios.log",
+      "size_bytes": 9618,
+      "sha256": "EDF0BD10A6C26962FBA9DF8A49287BEA14BFCA8DB571A9A72905006A04165EA5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\audit_kill_child.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\audit_kill_child.py",
+      "size_bytes": 1661,
+      "sha256": "7F78A09A466889387ACB290634938845DD1A0D0BFE53EDE653BE3484B66C819B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\audit_kill_parent.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\audit_kill_parent.py",
+      "size_bytes": 9941,
+      "sha256": "884394806ECACC81649A39DE5E7E381513A3E27A37E099ADE006C3DC62917F2F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\audit_scenarios.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\audit_scenarios.py",
+      "size_bytes": 18122,
+      "sha256": "F42426546DC49E5B82CBE08EF7DF26F7C2103232EA96EC7A868CC0C94E990011",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\work\\s8\\backups\\ekb-v0.2.2-20260726-191049-279756\\config\\settings.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\work\\s8\\backups\\ekb-v0.2.2-20260726-191049-279756\\config\\settings.json",
+      "size_bytes": 592,
+      "sha256": "6A4DC8987771E817405520BB74449397DABCCC11555EF7B687F1756D0F8298F5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-audit\\work\\s8\\backups\\ekb-v0.2.2-20260726-191049-279756\\manifest.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-audit\\work\\s8\\backups\\ekb-v0.2.2-20260726-191049-279756\\manifest.json",
+      "size_bytes": 3812,
+      "sha256": "D01171F432DE70FAACF3FFD5D09DE91BB461C8714A014DCED80AD99123B2B7EF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-kill-probe\\perf_timing.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-kill-probe\\perf_timing.py",
+      "size_bytes": 2054,
+      "sha256": "AB18E044B5EEEE94D5E2040EA6E139545723B9C151A6825B80051A80CA26332E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-kill-probe\\probe-result.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-kill-probe\\probe-result.log",
+      "size_bytes": 3882,
+      "sha256": "82C3CB1D34BE02A35FB57EB59D69FD02CC58DC408C01A3ADA18A740261664611",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-kill-probe\\probe_child.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-kill-probe\\probe_child.py",
+      "size_bytes": 1828,
+      "sha256": "7D267DBB66AC536C0FFE86007141738E1846855858D94338DEE6C873BB5BF187",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3b-p1-kill-probe\\probe_parent.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3b-p1-kill-probe\\probe_parent.py",
+      "size_bytes": 10559,
+      "sha256": "00214D5833386BA9D687AD78A4BCA84957237454C4B6A5DBC90C234E9AC828C5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\fault_injection_audit.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\fault_injection_audit.py",
+      "size_bytes": 17059,
+      "sha256": "016E11BC491A7942E9C096D26B72F1228DA845B17C5EFC334BF7E0C57D068F62",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\headD-1000-1\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\headD-1000-1\\metrics.jsonl",
+      "size_bytes": 617,
+      "sha256": "F82C9D26EAD047AD322115241C89E95A5E9EDB4E742FF3BE837FCFDB44F174D6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\headD-1000-1\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\headD-1000-1\\probe-results.jsonl",
+      "size_bytes": 519,
+      "sha256": "3813E93E3E343C60874FA6F7EC3823C4C50CA0EF21638829CEBC6904B52BC036",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\headD-300-1\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\headD-300-1\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "A2EEFB7E783D14A9E01CEB6134BEABCB161C9F0800D3EFA2F6140296618CC835",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\headD-300-1\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\headD-300-1\\probe-results.jsonl",
+      "size_bytes": 516,
+      "sha256": "7B4315C8786F3FC44979ACCFD4422B765E3A0C20888FDAB34AD6F22CC0F19C85",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\oldD-1000-1\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\oldD-1000-1\\metrics.jsonl",
+      "size_bytes": 544,
+      "sha256": "D81F240A9810DA16D7F0647B9A2F8E267A75C7A07F6DA60CBF817EB25631EE77",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\oldD-1000-1\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\oldD-1000-1\\probe-results.jsonl",
+      "size_bytes": 520,
+      "sha256": "832CF913E4E371D4F536E6AA6AB18EC3F76F33F4ED5D3EFCC90F4E19411EA75A",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\oldD-1000-2\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\oldD-1000-2\\metrics.jsonl",
+      "size_bytes": 544,
+      "sha256": "260DB11C77DDBCC7E0B952A1C97C67DCA1435DF74B4FE211CDB7771033D44C59",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\oldD-1000-2\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\oldD-1000-2\\probe-results.jsonl",
+      "size_bytes": 519,
+      "sha256": "5EF7565640A7565AB59725E87CAE96435FB1F21E65BD8064481F166FB7A1BD09",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\oldD-300-1\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\oldD-300-1\\metrics.jsonl",
+      "size_bytes": 543,
+      "sha256": "E5ED0A799FCFDD4CFE15FE00CC8C1EAE8C0A97168FACD6430231B0C322F531AD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\s3c-audit\\oldD-300-1\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\s3c-audit\\oldD-300-1\\probe-results.jsonl",
+      "size_bytes": 516,
+      "sha256": "757A0B2FF817D95F8C46E4776183F75BEC6036E45F4D4C982BBB5D25C12425A8",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-baseline-pytest.xml",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-baseline-pytest.xml",
+      "size_bytes": 59795,
+      "sha256": "433B3DD1ABAE35FFDD2E372E76509A35E9F86DDB1E60F423763F1E531F3573E2",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-s2-pytest.xml",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-s2-pytest.xml",
+      "size_bytes": 64312,
+      "sha256": "0E5FEA4F52B58EEDDB8DC533A2145750C55D5E574F38674F15C64E2141DF4EF3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\metrics.jsonl",
+      "size_bytes": 1641,
+      "sha256": "C25CA69280AFD524FBFD9B19E37DCE43F725805790241F546124480F0739F038",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int-err.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int-err.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int-oneshot\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int-oneshot\\metrics.jsonl",
+      "size_bytes": 553,
+      "sha256": "8C1F0E4F511A650DE44494ED2BF388E9A8F5F5172C35215F2F93E81BC5F8A658",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int-oneshot\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int-oneshot\\probe-results.jsonl",
+      "size_bytes": 508,
+      "sha256": "832F23EB64233DBAFF4F8DB8F7D3B82338A7006C995440D4937F7D4078DC62DA",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int-out.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int-out.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int\\metrics.jsonl",
+      "size_bytes": 1947,
+      "sha256": "BA9CCFD53527FD72B01621ED5EAD132443437DB5B58D69A60BEEAD613784E810",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int\\probe-results.jsonl",
+      "size_bytes": 4177,
+      "sha256": "E491A7AF477E538974DFBBF788330FA79D09C68B0BB677ACADCA9B45A3A3F559",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int\\progress.txt",
+      "size_bytes": 8,
+      "sha256": "2D39086DB2D0078D44586A7C23A71AD1BBCC487184564F79A9DBD5737361FA54",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2-err.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2-err.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2-oneshot\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2-oneshot\\metrics.jsonl",
+      "size_bytes": 554,
+      "sha256": "8B9EFD745C6913851263D49AB8A0A114566ACC1AB5BDAE9FCF41B166033AAF0F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2-oneshot\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2-oneshot\\probe-results.jsonl",
+      "size_bytes": 508,
+      "sha256": "EFA2CEC7DE3A7D9005D92C2C3DF6A5E33FBB4903DE28DE40602503426364DFD5",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2-out.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2-out.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2\\metrics.jsonl",
+      "size_bytes": 552,
+      "sha256": "F62B24A67FC17E0024B57FAE39B3DFB327CAF57058195E7D615B55D5645FF9D1",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2\\probe-results.jsonl",
+      "size_bytes": 1878,
+      "sha256": "1D6D92664CCC67E74D9F5A5E135E0FD4252B7192474ED3B798F0EB9E167B418E",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case-int2\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case-int2\\progress.txt",
+      "size_bytes": 8,
+      "sha256": "017C467C32073E8393C7B50E0AF066547747018830D917B79820DA27CAF3A024",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case1000\\backups\\ekb-v0.2.2-20260726-164422-798812\\config\\settings.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case1000\\backups\\ekb-v0.2.2-20260726-164422-798812\\config\\settings.json",
+      "size_bytes": 607,
+      "sha256": "B4EBE5F1ECCEE7BFE520F2FBD72BB8E2D66554F6A43C422D064B9E0B8A720945",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case1000\\backups\\ekb-v0.2.2-20260726-164422-798812\\manifest.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case1000\\backups\\ekb-v0.2.2-20260726-164422-798812\\manifest.json",
+      "size_bytes": 191691,
+      "sha256": "02283958BC998904A6F71D2BCB91391822BC4B71139D69FE6CE39AC320536C6D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case1000\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case1000\\metrics.jsonl",
+      "size_bytes": 2681,
+      "sha256": "3D45656EC4BA81843455147B29649BC184423B6BCF9B7EB2CDAE9890AAF3C2F7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case1000\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case1000\\probe-results.jsonl",
+      "size_bytes": 8335,
+      "sha256": "9233561D0EA787AD0CEB595FEDA35DA40292FADB0721DFD1919423D7059A21FE",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case300\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case300\\metrics.jsonl",
+      "size_bytes": 543,
+      "sha256": "AD90AF0321AEF25446F1919431F14F51E02357187DFC4979A760C66D039F469C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case300\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case300\\probe-results.jsonl",
+      "size_bytes": 3139,
+      "sha256": "63ECD0289ED2D7C0852881BD98D9D77BFAA8CB80F8626C3314019EA176D242CB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case300r\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case300r\\metrics.jsonl",
+      "size_bytes": 548,
+      "sha256": "4C814D47192E4484C7D952ADC3C0E438E88D8FDB28458802E2CD01359D47F7B3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case300r\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case300r\\probe-results.jsonl",
+      "size_bytes": 1225,
+      "sha256": "12614E7C6038B1391B7B6A9F3F3416651DE5F25E327C9FBAD1EDAAB3D3B84605",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case50\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case50\\metrics.jsonl",
+      "size_bytes": 1082,
+      "sha256": "6F02A64A06342EE85D7C56D5D5003425194C2993EE25F07BAA0E01B825222A9C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case50\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case50\\probe-results.jsonl",
+      "size_bytes": 3079,
+      "sha256": "3495F2A24C1F858C5C698E45685969D1BAE8A5C76EAC455BD058C8197E5B6AF2",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case50r\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case50r\\metrics.jsonl",
+      "size_bytes": 544,
+      "sha256": "860FC9A06F2CD76BCCE74928F3FC640241260B34DF844C033CAE446B1054CBA3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3a\\case50r\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3a\\case50r\\probe-results.jsonl",
+      "size_bytes": 1219,
+      "sha256": "6CA8145DA32FB3DE02E3D891CA402945E40C76717EBBD9C517FBAA0CA7B884A3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000\\final-snapshot.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000\\final-snapshot.json",
+      "size_bytes": 45362,
+      "sha256": "BD3F6677974B47DB843D609770A4DD0CDFD62D699CD18D13F5955D274A539F8D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000\\metrics.jsonl",
+      "size_bytes": 621,
+      "sha256": "AF81955377F2A90C6112887DCB2F9F31C3EF248423EF6DAC257DE40705E1360B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000\\probe-results.jsonl",
+      "size_bytes": 4707,
+      "sha256": "3335D0F8DF2B285DE7FBCB49FCF6DB2659A3C0AC9C0B104DE026E5AB6C38E8E9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000\\progress.txt",
+      "size_bytes": 11,
+      "sha256": "3FC97CE5CC2B0600526C2B0037691966F9A2689EB063813CECFCBBC9374152B4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000\\t25-invariants.json",
+      "size_bytes": 6700,
+      "sha256": "81D0212557577A3C62F0D1A3F9891AA515997458E232807204E6842B355173BF",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k-err.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k-err.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k-out.log",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k-out.log",
+      "size_bytes": 0,
+      "sha256": "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\clean-compare.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\clean-compare.txt",
+      "size_bytes": 880,
+      "sha256": "6311BD6C8A1C9125EF42695ED036B0BB0999C52235D68F1B465F7F43810FF4D3",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\final-snapshot.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\final-snapshot.json",
+      "size_bytes": 45523,
+      "sha256": "17C1F60136BDE29599B309A010E7DBE866AD9D30286A80237E5698DFA3C86377",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\intermediate-snapshot.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\intermediate-snapshot.json",
+      "size_bytes": 13026,
+      "sha256": "4726A6316A22088CE7DC94CBC75FD8DEA8E305D5F3FBCB9D947E0F3F21C0C2EB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\metrics.jsonl",
+      "size_bytes": 629,
+      "sha256": "A647628ECDEBBF75683AF26D9C7D49F4D685F90F85ADC44B550EB03BD2A7BA88",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\probe-results.jsonl",
+      "size_bytes": 513,
+      "sha256": "094505EDEE2AD5AD7C6BC3FAFFE35ED26FFC05849E2347DB8BB54C51FCAF8755",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\progress-resume.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\progress-resume.txt",
+      "size_bytes": 11,
+      "sha256": "3FC97CE5CC2B0600526C2B0037691966F9A2689EB063813CECFCBBC9374152B4",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\progress.txt",
+      "size_bytes": 10,
+      "sha256": "629EE0ABD20B72E19912A8BC14B13F3CB3712BFAB665901FD183CCE793C6A8C2",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case1000k\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case1000k\\t25-invariants.json",
+      "size_bytes": 6701,
+      "sha256": "C8D34CEDDC3F6AF0073559651D68C765F97C198BD03E94B01592AE773CA660E9",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case2000\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case2000\\metrics.jsonl",
+      "size_bytes": 620,
+      "sha256": "70968BDDF694870E17D3882909FBBCA856FEE2ED6231A64D92686DB3884B5F0D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case2000\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case2000\\probe-results.jsonl",
+      "size_bytes": 4724,
+      "sha256": "F284DE98284E625B843EDE30BB5F3099A8DCC938478A776DB00747BC0B58E545",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case2000\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case2000\\progress.txt",
+      "size_bytes": 11,
+      "sha256": "9219B92EEDD70B5D59E9B757F49844C022D2EC6ACB61AE43750FE54964961C5F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case2000\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case2000\\t25-invariants.json",
+      "size_bytes": 6700,
+      "sha256": "D86CAD47E8442A10E5FC82AB36960B466EFD12D51CDCCE171449922CDB0383A7",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300\\metrics.jsonl",
+      "size_bytes": 1078,
+      "sha256": "4CEE0FB12F35F14F9BD207F96A82ABD9E0A41EC987E06AAF269A21B228D5B5EB",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300\\probe-results.jsonl",
+      "size_bytes": 5965,
+      "sha256": "A07E67D281045642A17357EF1DB4B84ED384C536B21E3847EC9F6AE5601DA7AD",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300\\progress.txt",
+      "size_bytes": 9,
+      "sha256": "81153747D81C56607E1023890BDA172B70BE3FC322B52174423D2350F1D1AE10",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300\\t25-invariants.json",
+      "size_bytes": 6686,
+      "sha256": "1695E379697F3AC1EE3868AD7A6DC39CE99D2ECDEA185404AFC31BBC93C393E0",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case3000\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case3000\\metrics.jsonl",
+      "size_bytes": 621,
+      "sha256": "19019FFA4DA2A47C6E079E35055CBAEDA504734957FC6299C33CF55D44EB653B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case3000\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case3000\\probe-results.jsonl",
+      "size_bytes": 4725,
+      "sha256": "8F4A92D6C22690B5F680C91483AA46AADC535F7F641B80AA6AC32A83A860FDE2",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case3000\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case3000\\progress.txt",
+      "size_bytes": 11,
+      "sha256": "DCD6469669AB8D51219D55E40D6159B17D5239E52BE5398DE994DFE358C0A94C",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case3000\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case3000\\t25-invariants.json",
+      "size_bytes": 6700,
+      "sha256": "AED7A35923207FDBCC21D6C14D1B777B2F8C3D8D467C051F4F82E81CE293C47B",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300r\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300r\\metrics.jsonl",
+      "size_bytes": 619,
+      "sha256": "C919140D6DD45CD1F5E4993EB14592CD3DCC96489752FE3C57992F255AE16525",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300r\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300r\\probe-results.jsonl",
+      "size_bytes": 4509,
+      "sha256": "2FDB469982F422E6BACEE9710BC6A5087395163D139691ADF652A8E6691FA067",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300r\\progress.txt",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300r\\progress.txt",
+      "size_bytes": 9,
+      "sha256": "81153747D81C56607E1023890BDA172B70BE3FC322B52174423D2350F1D1AE10",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case300r\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case300r\\t25-invariants.json",
+      "size_bytes": 6687,
+      "sha256": "34D88F6A999F7F237C95F5FAFEA4AC3378E56F173998EE018C794EAABF8D3B70",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case50\\metrics.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case50\\metrics.jsonl",
+      "size_bytes": 614,
+      "sha256": "068A3C21F300A4268F43A6ECDD15EB58ADD1CB1CBA85D8260320931C0B670F49",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case50\\probe-results.jsonl",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case50\\probe-results.jsonl",
+      "size_bytes": 3294,
+      "sha256": "041DC32F40E4F7BC9E3737F4F8A8B64743CA059F8030D7D94914A948B00082E6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\case50\\t25-invariants.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\case50\\t25-invariants.json",
+      "size_bytes": 6676,
+      "sha256": "0A131FFD70098214F35CED2E3CD23360D8BBA7B39B73180307378A44FB80D12F",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\compare_kill_recovery.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\compare_kill_recovery.py",
+      "size_bytes": 2122,
+      "sha256": "85BD88BF5963B3159978E752C044DA559D2D0EFBD9DCF034065154E875743D8D",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\pdfs\\manifest.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\pdfs\\manifest.json",
+      "size_bytes": 2721,
+      "sha256": "902218E3775196D2D88251ABE7346B2F7F2CCD3BC630FB51DB455C6A3BAAF3C6",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\scratch\\inspect_fts.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\scratch\\inspect_fts.py",
+      "size_bytes": 1249,
+      "sha256": "517D5C1413398371578FD45D19CE43A7553ED43AA4EE22F108D1AE8EBF9FB931",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\scratch\\write_manifest.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\scratch\\write_manifest.py",
+      "size_bytes": 1495,
+      "sha256": "F1E5D85B2C1BFB4F3E6854037199228D58DA4368F7E57B023BD4F99CA48AA544",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\s3c\\snapshot_library.py",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\s3c\\snapshot_library.py",
+      "size_bytes": 4905,
+      "sha256": "09FFF92429CA3A7708E8AC7E0C5B0D51ACAD23019AE04BB4DB0D4FD7BF3C4A09",
+      "verified": true
+    },
+    {
+      "original_path": "D:\\ekb-v0.2.2\\runtime\\v023-scale\\smoke\\consistency.json",
+      "archive_path": "D:\\EKB-Historical-Archive\\worktree-audit-2026-08-17\\v0.2.2-audit-evidence\\runtime\\v023-scale\\smoke\\consistency.json",
+      "size_bytes": 2741,
+      "sha256": "646C28CF7E6A8ED3512FAF0606E2812D997FDC3EB2C486546EBD7D6044B5E4B3",
+      "verified": true
+    }
+  ]
+}

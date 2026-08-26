@@ -1,7 +1,7 @@
 """Generate deterministic synthetic PDFs for v0.2.3 scale testing.
 
 A-level synthetic material: generated at runtime, never committed to Git, and
-never written into the formal data directory ``D:/Projects/engineering-kb``.
+never written into the formal data directory ``D:/Projects/ekb-dev``.
 Page text is a pure function of the document id, page number and text-length
 target, so identical arguments produce identical page text across runs.
 
@@ -25,7 +25,7 @@ from typing import Final
 import pymupdf
 
 PROJECT_ROOT: Final[Path] = Path(__file__).resolve().parents[1]
-FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\engineering-kb")
+FORMAL_PROJECT_ROOT: Final[Path] = Path(r"D:\Projects\ekb-dev")
 
 PAGE_WIDTH: Final[float] = 595
 PAGE_HEIGHT: Final[float] = 842
