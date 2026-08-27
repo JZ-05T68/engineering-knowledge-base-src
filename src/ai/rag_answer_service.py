@@ -97,8 +97,13 @@ class RagAnswerService:
         *,
         model: str | None = None,
         source_feature: str = "rag_answer",
+        max_completion_tokens: int | None = None,
     ) -> AuditedAIOutput:
-        """Answer ``query`` strictly from ``package``, or raise fail-closed."""
+        """Answer ``query`` strictly from ``package``, or raise fail-closed.
+
+        ``max_completion_tokens`` is an optional vendor-neutral output cap;
+        ``None`` preserves the provider's default (backward compatible).
+        """
 
         if not package.items:
             raise RagAnswerError("空上下文：没有可用知识，拒绝生成 AI 回答。")
@@ -114,11 +119,16 @@ class RagAnswerService:
             result = provider.complete(
                 prompt,
                 model=model,
+                max_completion_tokens=max_completion_tokens,
                 source_feature=source_feature,
                 target_refs=target_refs,
             )
         else:
-            result = provider.complete(prompt, model=model)
+            result = provider.complete(
+                prompt,
+                model=model,
+                max_completion_tokens=max_completion_tokens,
+            )
 
         warnings = tuple(warning.message for warning in package.warnings)
         if not warnings and any(not item.source_anchors for item in package.items):
