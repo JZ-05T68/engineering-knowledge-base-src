@@ -48,6 +48,10 @@ class HostedSettings(BaseSettings):
     runtime_profile: Literal[RuntimeProfile.HOSTED]
     data_root: Path
     ai_api_key: SecretStr = Field(default=SecretStr(""), repr=False)
+    # Same token units as Local. Zero disables one period; readiness rejects
+    # both periods being unlimited. No budget accounting is implemented here.
+    ai_daily_token_budget: int = Field(default=0, ge=0)
+    ai_monthly_token_budget: int = Field(default=0, ge=0)
 
     def __init__(self, **values: Any) -> None:
         # Force this before BaseSettings instantiates its sources: excluding a

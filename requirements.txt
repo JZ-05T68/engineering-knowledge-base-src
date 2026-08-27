@@ -6,9 +6,13 @@ PyMuPDF
 Pillow
 python-dotenv
 pydantic-settings
+fastapi
+uvicorn
 jieba
 rapidfuzz
 rapidocr>=3.9.2,<4
 onnxruntime>=1.27.0,<2
 pytest
+# In-process FastAPI/Starlette TestClient transport (tests only).
+httpx
 ruff
