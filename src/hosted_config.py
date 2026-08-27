@@ -6,13 +6,17 @@ or check AI readiness. Those responsibilities belong to later work packages.
 
 from __future__ import annotations
 
+import re
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import (
     BaseSettings,
+    NoDecode,
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     SettingsError,
@@ -52,6 +56,11 @@ class HostedSettings(BaseSettings):
     # both periods being unlimited. No budget accounting is implemented here.
     ai_daily_token_budget: int = Field(default=0, ge=0)
     ai_monthly_token_budget: int = Field(default=0, ge=0)
+    agent_rate_limit_per_minute: int = Field(default=10, ge=1)
+    source_rate_limit_per_minute: int = Field(default=60, ge=1)
+    max_active_agent_runs: int = Field(default=4, ge=1, le=8)
+    cors_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
+    trusted_proxy_cidrs: Annotated[tuple[str, ...], NoDecode] = ()
 
     def __init__(self, **values: Any) -> None:
         # Force this before BaseSettings instantiates its sources: excluding a
@@ -103,6 +112,77 @@ class HostedSettings(BaseSettings):
         if profile is not RuntimeProfile.HOSTED:
             raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.RUNTIME_PROFILE_MISMATCH)
         return profile
+
+    @field_validator(
+        "agent_rate_limit_per_minute",
+        "source_rate_limit_per_minute",
+        "max_active_agent_runs",
+        mode="before",
+    )
+    @classmethod
+    def _security_integer(cls, value: object) -> int:
+        if type(value) is int:
+            return value
+        if isinstance(value, str) and re.fullmatch(r"[0-9]+", value):
+            return int(value)
+        raise ValueError("Security limits must be positive integers")
+
+    @field_validator("cors_allowed_origins", "trusted_proxy_cidrs", mode="before")
+    @classmethod
+    def _security_list(cls, value: object) -> tuple[str, ...]:
+        if isinstance(value, str):
+            if not value.strip():
+                return ()
+            value = tuple(item.strip() for item in value.split(","))
+        if not isinstance(value, (tuple, list)) or any(
+            not isinstance(item, str) or not item for item in value
+        ):
+            raise ValueError("Security allowlist must contain explicit entries")
+        return tuple(dict.fromkeys(value))
+
+    @field_validator("trusted_proxy_cidrs")
+    @classmethod
+    def _proxy_networks(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if any("%" in value for value in values):
+            raise ValueError("Scoped proxy networks are not supported")
+        return tuple(dict.fromkeys(str(ip_network(value)) for value in values))
+
+    @field_validator("cors_allowed_origins")
+    @classmethod
+    def _explicit_origins(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        for value in values:
+            if any(ord(char) <= 32 or ord(char) >= 127 for char in value) or any(
+                marker in value for marker in ("*", "?", "#", "\\", "%")
+            ):
+                raise ValueError("CORS requires explicit HTTP origins")
+            parsed = urlsplit(value)
+            host = parsed.hostname
+            if (
+                parsed.scheme not in {"http", "https"}
+                or not host
+                or parsed.path
+                or parsed.username is not None
+                or parsed.password is not None
+            ):
+                raise ValueError("CORS requires an origin without credentials or path")
+            if parsed.port is not None and not 1 <= parsed.port <= 65535:
+                raise ValueError("Invalid origin port")
+            if parsed.netloc.endswith(":"):
+                raise ValueError("Invalid origin port")
+            try:
+                address = ip_address(host)
+            except ValueError:
+                if len(host) > 253 or not all(
+                    re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?", label)
+                    for label in host.split(".")
+                ):
+                    raise ValueError("Invalid origin hostname") from None
+                loopback = host == "localhost"
+            else:
+                loopback = address.is_loopback
+            if parsed.scheme == "http" and not loopback:
+                raise ValueError("HTTP origins are restricted to explicit loopback development")
+        return values
 
     @field_validator("data_root", mode="before")
     @classmethod

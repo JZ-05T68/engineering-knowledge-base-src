@@ -21,6 +21,107 @@ from src.runtime_profile import (
 )
 
 
+def test_security_defaults_are_bounded(tmp_path: Path) -> None:
+    settings = hosted.HostedSettings(runtime_profile="hosted", data_root=tmp_path)
+    assert settings.agent_rate_limit_per_minute == 10
+    assert settings.source_rate_limit_per_minute == 60
+    assert settings.max_active_agent_runs == 4
+    assert settings.cors_allowed_origins == ()
+    assert settings.trusted_proxy_cidrs == ()
+
+
+@pytest.mark.parametrize("field", ["agent_rate_limit_per_minute", "source_rate_limit_per_minute"])
+@pytest.mark.parametrize("value", [0, -1, True, 1.5, "", "unlimited", "1.0"])
+def test_invalid_security_rate_fails_closed(tmp_path: Path, field: str, value: object) -> None:
+    with pytest.raises(RuntimeConfigurationError):
+        hosted.HostedSettings(runtime_profile="hosted", data_root=tmp_path, **{field: value})
+
+
+@pytest.mark.parametrize("value", [0, 9, -1, True, "", "1.5"])
+def test_invalid_active_run_config_fails_closed(tmp_path: Path, value: object) -> None:
+    with pytest.raises(RuntimeConfigurationError):
+        hosted.HostedSettings(
+            runtime_profile="hosted", data_root=tmp_path, max_active_agent_runs=value
+        )
+
+
+@pytest.mark.parametrize("value", [1, 4, 8])
+def test_valid_active_run_range(tmp_path: Path, value: int) -> None:
+    settings = hosted.HostedSettings(
+        runtime_profile="hosted", data_root=tmp_path, max_active_agent_runs=value
+    )
+    assert settings.max_active_agent_runs == value
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "*",
+        "null",
+        "example.com",
+        "https://*.example.com",
+        "https://example.com/path",
+        "https://example.com/",
+        "https://example.com?q=x",
+        "https://example.com?",
+        "https://example.com#x",
+        "https://example.com#",
+        "https://user:pass@example.com",
+        "file:///tmp/x",
+        "http://example.com",
+        "https://example.com:0",
+        "https://example.com:65536",
+        "https://example.com:",
+        "https://evil\n.example.com",
+        "https://bad_host.example",
+        "https://example.com,,https://demo.example.com",
+    ],
+)
+def test_invalid_cors_origin_fails_closed(tmp_path: Path, origin: str) -> None:
+    with pytest.raises(RuntimeConfigurationError) as caught:
+        hosted.HostedSettings(
+            runtime_profile="hosted", data_root=tmp_path, cors_allowed_origins=origin
+        )
+    assert origin not in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "cidr",
+    [
+        "*",
+        "garbage",
+        "10.0.0.0/33",
+        "2001:db8::/129",
+        "10.0.0.1/24",
+        "fe80::1%eth0",
+        "10.0.0.0/8,,::1",
+    ],
+)
+def test_invalid_proxy_config_fails_closed(tmp_path: Path, cidr: str) -> None:
+    with pytest.raises(RuntimeConfigurationError):
+        hosted.HostedSettings(
+            runtime_profile="hosted", data_root=tmp_path, trusted_proxy_cidrs=cidr
+        )
+
+
+def test_security_env_only_allowlists(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("EKB_DATA_ROOT", str(tmp_path))
+    monkeypatch.setenv("EKB_AGENT_RATE_LIMIT_PER_MINUTE", "12")
+    monkeypatch.setenv("EKB_SOURCE_RATE_LIMIT_PER_MINUTE", "70")
+    monkeypatch.setenv("EKB_MAX_ACTIVE_AGENT_RUNS", "8")
+    origins = (
+        "https://example.com, https://demo.example.com,http://localhost:5173,http://[::1]:8000"
+    )
+    monkeypatch.setenv("EKB_CORS_ALLOWED_ORIGINS", origins)
+    monkeypatch.setenv("EKB_TRUSTED_PROXY_CIDRS", "10.0.0.0/8,2001:db8::/32,127.0.0.1")
+    settings = hosted.load_hosted_settings()
+    assert settings.agent_rate_limit_per_minute == 12
+    assert settings.source_rate_limit_per_minute == 70
+    assert settings.max_active_agent_runs == 8
+    assert settings.cors_allowed_origins == tuple(item.strip() for item in origins.split(","))
+    assert settings.trusted_proxy_cidrs == ("10.0.0.0/8", "2001:db8::/32", "127.0.0.1/32")
+
+
 @pytest.fixture(autouse=True)
 def _isolated_no_io(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     for name in tuple(os.environ):

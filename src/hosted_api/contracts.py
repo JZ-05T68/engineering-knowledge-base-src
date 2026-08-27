@@ -42,6 +42,9 @@ class PublicError(PublicDTO):
         "citation_invalid",
         "budget_exceeded",
         "internal_failure",
+        "request_too_large",
+        "rate_limited",
+        "concurrency_limited",
     ]
     message: StrictStr
 
@@ -58,6 +61,9 @@ _ERROR_MESSAGES = {
     "citation_invalid": "答案引用校验失败。",
     "budget_exceeded": "AI 调用被预算限制拒绝。",
     "internal_failure": "服务处理请求失败。",
+    "request_too_large": "请求正文超过允许的字节大小。",
+    "rate_limited": "请求过于频繁，请稍后再试。",
+    "concurrency_limited": "当前 Agent 执行已满，请稍后再试。",
 }
 
 

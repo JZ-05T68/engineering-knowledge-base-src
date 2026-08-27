@@ -9,16 +9,20 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
-from uuid import uuid4
+from ipaddress import ip_network
+from threading import BoundedSemaphore
+from time import monotonic
 
 from fastapi import FastAPI, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
 from starlette.exceptions import HTTPException
+from starlette.middleware.cors import CORSMiddleware
 
 from src.hosted.application import HostedDependencies
 from src.hosted.readiness import ReadinessReason
+from src.hosted.security import RateLimiter
 from src.hosted_api.contracts import (
     AgentRunRequest,
     AgentRunResponse,
@@ -29,8 +33,9 @@ from src.hosted_api.contracts import (
     project_agent_response,
     project_readiness,
     project_source,
-    public_error,
 )
+from src.hosted_api.errors import failure_response, request_id
+from src.hosted_api.security import IngressSecurityMiddleware, RequestIdentityMiddleware
 from src.hosted_config import HostedSettings
 from src.models import ContextItemType
 from src.runtime_profile import (
@@ -45,14 +50,11 @@ LOGGER = logging.getLogger(__name__)
 
 
 def _request_id(request: Request) -> str:
-    if not hasattr(request.state, "request_id"):
-        request.state.request_id = str(uuid4())
-    return request.state.request_id
+    return request_id(request.scope)
 
 
 def _failure(request: Request, status: int, code: str) -> JSONResponse:
-    payload = HTTPFailure(request_id=_request_id(request), error=public_error(code))
-    return JSONResponse(status_code=status, content=payload.model_dump(mode="json"))
+    return failure_response(request.scope, status, code)
 
 
 class _SafeRoute(APIRoute):
@@ -78,7 +80,12 @@ class _SafeRoute(APIRoute):
         return safe_handler
 
 
-def create_hosted_app(*, settings: HostedSettings, dependencies: HostedDependencies) -> FastAPI:
+def create_hosted_app(
+    *,
+    settings: HostedSettings,
+    dependencies: HostedDependencies,
+    security_clock: Callable[[], float] = monotonic,
+) -> FastAPI:
     """Build transport only, requiring exact process Hosted opt-in even in tests.
 
     Configuration is supplied by the trusted caller (normally load_hosted_settings).
@@ -95,6 +102,31 @@ def create_hosted_app(*, settings: HostedSettings, dependencies: HostedDependenc
         raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.RUNTIME_PROFILE_MISMATCH)
     app = FastAPI(title="EKB Hosted Agent API", version="0.6.0", debug=False)
     app.router.route_class = _SafeRoute
+    limiter = RateLimiter(
+        settings.agent_rate_limit_per_minute,
+        settings.source_rate_limit_per_minute,
+        clock=security_clock,
+    )
+    agent_slots = BoundedSemaphore(settings.max_active_agent_runs)
+    # Per-app state, never a global singleton or client-selectable dependency.
+    app.state.rate_limiter = limiter
+    app.state.agent_slots = agent_slots
+    # add_middleware prepends. Actual ingress order is explicitly:
+    # RequestIdentity -> CORS -> peer/rate/body -> DTO/readiness -> Agent admission.
+    app.add_middleware(
+        IngressSecurityMiddleware,
+        limiter=limiter,
+        trusted_proxies=tuple(ip_network(cidr) for cidr in settings.trusted_proxy_cidrs),
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_allowed_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Content-Type"],
+        expose_headers=["X-Correlation-ID"],
+    )
+    app.add_middleware(RequestIdentityMiddleware)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -121,6 +153,8 @@ def create_hosted_app(*, settings: HostedSettings, dependencies: HostedDependenc
         response_model=AgentRunResponse,
         responses={
             422: {"model": HTTPFailure},
+            413: {"model": HTTPFailure},
+            429: {"model": HTTPFailure},
             503: {"model": HTTPFailure},
             500: {"model": HTTPFailure},
         },
@@ -146,7 +180,12 @@ def create_hosted_app(*, settings: HostedSettings, dependencies: HostedDependenc
         # correlation_id is transport metadata only. It never enters AgentRequest.
         if payload.correlation_id is not None:
             response.headers["X-Correlation-ID"] = payload.correlation_id
-        result = dependencies.agent_service.run(agent_request, dependencies.decision_provider)
+        if not agent_slots.acquire(blocking=False):
+            return _failure(request, 429, "concurrency_limited")
+        try:
+            result = dependencies.agent_service.run(agent_request, dependencies.decision_provider)
+        finally:
+            agent_slots.release()
         return project_agent_response(result, request_id)
 
     @app.get(
@@ -155,6 +194,8 @@ def create_hosted_app(*, settings: HostedSettings, dependencies: HostedDependenc
         responses={
             422: {"model": HTTPFailure},
             404: {"model": HTTPFailure},
+            413: {"model": HTTPFailure},
+            429: {"model": HTTPFailure},
             503: {"model": HTTPFailure},
             500: {"model": HTTPFailure},
         },
