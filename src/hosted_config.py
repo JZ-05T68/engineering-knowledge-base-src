@@ -6,12 +6,14 @@ or check AI readiness. Those responsibilities belong to later work packages.
 
 from __future__ import annotations
 
+import os
 import re
 from ipaddress import ip_address, ip_network
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Annotated, Any, Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, SecretStr, ValidationError, field_validator
 from pydantic_settings import (
@@ -61,6 +63,10 @@ class HostedSettings(BaseSettings):
     max_active_agent_runs: int = Field(default=4, ge=1, le=8)
     cors_allowed_origins: Annotated[tuple[str, ...], NoDecode] = ()
     trusted_proxy_cidrs: Annotated[tuple[str, ...], NoDecode] = ()
+    # Optional for transport-only DI. Explicit storage bootstrap requires identity.
+    demo_db_artifact: Path | None = Field(default=None, repr=False)
+    demo_db_sha256: str | None = Field(default=None, repr=False)
+    demo_kb_uuid: str | None = None
 
     def __init__(self, **values: Any) -> None:
         # Force this before BaseSettings instantiates its sources: excluding a
@@ -112,6 +118,34 @@ class HostedSettings(BaseSettings):
         if profile is not RuntimeProfile.HOSTED:
             raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.RUNTIME_PROFILE_MISMATCH)
         return profile
+
+    @field_validator("demo_db_artifact", mode="before")
+    @classmethod
+    def _artifact_path(cls, value: object) -> Path | None:
+        if value is None:
+            return None
+        if not isinstance(value, (str, Path)) or not str(value).strip() or "\0" in str(value):
+            raise ValueError("Invalid demo artifact path")
+        # Keep symlink spelling for the storage validator; never resolve it away.
+        return Path(value).absolute()
+
+    @field_validator("demo_db_sha256", mode="before")
+    @classmethod
+    def _artifact_digest(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", value):
+            raise ValueError("Demo digest must be a complete SHA-256")
+        return value.lower()
+
+    @field_validator("demo_kb_uuid", mode="before")
+    @classmethod
+    def _artifact_uuid(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        if not isinstance(value, str) or str(UUID(value)) != value:
+            raise ValueError("Demo identity must be a canonical UUID")
+        return value
 
     @field_validator(
         "agent_rate_limit_per_minute",
@@ -226,15 +260,8 @@ def load_hosted_settings() -> HostedSettings:
     return HostedSettings()
 
 
-def validate_hosted_startup(settings: HostedSettings) -> None:
-    """Validate WP1 paths without mkdir, DB access, AI, or other network I/O.
-
-    The configured root must already exist. Existing database/log directories
-    must be usable; absent children are left for WP4. A unique create/write/close
-    probe is immediately removed in each existing directory. No persistent file
-    is opened or overwritten. This is not a complete readiness check or sandbox.
-    """
-
+def validate_hosted_paths(settings: HostedSettings) -> None:
+    """Observe WP1 containment/type policy without writing a readiness probe."""
     if settings.runtime_profile is not RuntimeProfile.HOSTED:
         raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.RUNTIME_PROFILE_MISMATCH)
     try:
@@ -242,7 +269,10 @@ def validate_hosted_startup(settings: HostedSettings) -> None:
         if not root.is_dir() or root.resolve() != root:
             raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.DATA_ROOT_NOT_USABLE)
         for path in (
-            settings.database_dir, settings.database_path, settings.logs_dir, settings.log_path
+            settings.database_dir,
+            settings.database_path,
+            settings.logs_dir,
+            settings.log_path,
         ):
             resolved = path.resolve()
             if not resolved.is_relative_to(root) or resolved.is_relative_to(PROJECT_ROOT.resolve()):
@@ -252,6 +282,25 @@ def validate_hosted_startup(settings: HostedSettings) -> None:
                 continue
             if not directory.is_dir():
                 raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.DATA_ROOT_NOT_USABLE)
+            if not os.access(directory, os.R_OK | os.W_OK | os.X_OK):
+                raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.DATA_ROOT_NOT_USABLE)
+    except (OSError, ValueError, RuntimeError):
+        raise RuntimeConfigurationError(
+            RuntimeConfigurationErrorCode.DATA_ROOT_NOT_USABLE
+        ) from None
+
+
+def validate_hosted_startup(settings: HostedSettings) -> None:
+    """Explicit WP1 startup write probes; never called by HTTP readiness.
+
+    Root must exist; absent children remain absent. WP4 creates only database/logs.
+    No DB connection, migration or persistent file write occurs here.
+    """
+    validate_hosted_paths(settings)
+    try:
+        for directory in (settings.data_root, settings.database_dir, settings.logs_dir):
+            if not directory.exists():
+                continue
             with NamedTemporaryFile(prefix=".ekb-wp1-", dir=directory) as probe:
                 probe.write(b"ekb")
                 probe.flush()

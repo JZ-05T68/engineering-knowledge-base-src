@@ -10,7 +10,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
-from src.hosted_config import HostedSettings, validate_hosted_startup
+from src.hosted.storage_validation import reject_links, require_regular_file, sidecars
+from src.hosted_config import HostedSettings, validate_hosted_paths
 from src.migrations import SCHEMA_VERSION
 from src.runtime_profile import (
     RuntimeConfigurationError,
@@ -28,6 +29,7 @@ class ReadinessReason(StrEnum):
     AI_NOT_CONFIGURED = "ai_not_configured"
     BUDGET_NOT_CONFIGURED = "budget_not_configured"
     COMPOSITION_UNAVAILABLE = "composition_unavailable"
+    STORAGE_INVALID = "storage_invalid"
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,17 +55,26 @@ class ReadinessChecker(Protocol):
 
 
 def check_hosted_database(path: Path) -> ReadinessReason | None:
-    """Probe only the configured existing SQLite file with mode=ro.
+    """Observe a quiescent DB without creating SQLite sidecars.
 
     Schema authority is schema_migrations, not PRAGMA user_version. No Database
     construction, initialization, backup, journal change, or content scan occurs.
-    SQLite may manage WAL shared-memory sidecars; WP4 owns their runtime wiring.
+    Existing WAL/SHM/journal means this fallback cannot safely observe the file:
+    formal WP4 runtime uses its bootstrap-owned live observer connection instead.
+    immutable=1 is used only when there is no WAL to ignore. No active runtime
+    should use this fallback in place of HostedStorage.readiness_reason.
     """
 
     try:
         if not path.is_file():
             return ReadinessReason.DATABASE_UNAVAILABLE
-        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
+        reject_links(path)
+        require_regular_file(path)
+        if any(item.exists() or item.is_symlink() for item in sidecars(path)):
+            return ReadinessReason.DATABASE_UNAVAILABLE
+        with closing(
+            sqlite3.connect(path.as_uri() + "?mode=ro&immutable=1", uri=True, timeout=1)
+        ) as db:
             try:
                 version = db.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0]
             except sqlite3.Error:
@@ -75,17 +86,17 @@ def check_hosted_database(path: Path) -> ReadinessReason | None:
             row = db.execute("SELECT kb_uuid FROM knowledge_base_meta WHERE id = 1").fetchone()
             if row is None:
                 return ReadinessReason.DATABASE_UNAVAILABLE
-    except (OSError, ValueError, sqlite3.Error):
+    except (OSError, ValueError, RuntimeError, sqlite3.Error):
         return ReadinessReason.DATABASE_UNAVAILABLE
     return None
 
 
 @dataclass(frozen=True, slots=True)
 class HostedReadiness:
-    """Compose WP1 path validation with DB, key and finite-budget checks.
+    """Compose observation-only path/DB checks with key and finite budget.
 
-    WP1 retains its unique temporary write/cleanup probe; no persistent files
-    or DB rows are written. The DB check is injectable for later WP4 composition.
+    Write probes belong to explicit startup. With formal demo identity settings,
+    inject the WP4 storage observer; never silently use a quiescent DB fallback.
     """
 
     settings: HostedSettings
@@ -95,11 +106,16 @@ class HostedReadiness:
         reasons: list[ReadinessReason] = []
         try:
             require_runtime_profile(RuntimeProfile.HOSTED)
-            validate_hosted_startup(self.settings)
+            validate_hosted_paths(self.settings)
         except RuntimeConfigurationError:
             reasons.append(ReadinessReason.RUNTIME_INVALID)
         else:
-            database_reason = self.database_check(self.settings.database_path)
+            database_reason = (
+                ReadinessReason.STORAGE_INVALID
+                if self.settings.demo_kb_uuid is not None
+                and self.database_check is check_hosted_database
+                else self.database_check(self.settings.database_path)
+            )
             if database_reason is not None:
                 reasons.append(database_reason)
         if not self.settings.ai_api_key.get_secret_value().strip():

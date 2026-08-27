@@ -83,7 +83,7 @@ def test_readiness_v12_is_readonly_and_health_has_no_io(
     statements = []
 
     def readonly_connect(path: str, **kwargs: object):
-        assert path == settings.database_path.as_uri() + "?mode=ro"
+        assert path == settings.database_path.as_uri() + "?mode=ro&immutable=1"
         assert kwargs["uri"] is True
         connections.append(path)
         db = original_connect(path, **kwargs)
@@ -101,11 +101,9 @@ def test_readiness_v12_is_readonly_and_health_has_no_io(
     assert len(connections) == 1
     assert all(statement.startswith("SELECT ") for statement in statements)
     assert hashlib.sha256(settings.database_path.read_bytes()).hexdigest() == before
-    # SQLite mode=ro can create WAL/SHM sidecars for an existing WAL database.
-    # They are not migrations or application DB writes; WP4 owns WAL wiring.
-    added = set(settings.data_root.rglob("*")) - files
-    assert added <= {Path(str(settings.database_path) + suffix) for suffix in ("-wal", "-shm")}
-    assert not files - set(settings.data_root.rglob("*"))
+    # WP4 tightens this probe: a quiescent snapshot creates no sidecars; live WAL
+    # must be observed through the explicit bootstrap-owned storage connection.
+    assert set(settings.data_root.rglob("*")) == files
     agent.run.assert_not_called()
 
 
