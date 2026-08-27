@@ -24,10 +24,11 @@ from src.config import STAGING_ENV_VAR, staging_settings
 
 
 @pytest.fixture(autouse=True)
-def _reset_active_settings(monkeypatch: pytest.MonkeyPatch):
-    """Ensure every test starts and ends in production management mode."""
+def _reset_active_settings(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Keep management state and default staging writes isolated per test."""
 
     monkeypatch.setattr(manager, "_ACTIVE_SETTINGS", None)
+    monkeypatch.setattr(config, "DEFAULT_STAGING_ROOT", tmp_path / "staging-data")
     yield
 
 

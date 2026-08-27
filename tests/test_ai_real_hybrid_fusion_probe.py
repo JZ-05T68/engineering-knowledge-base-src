@@ -48,6 +48,9 @@ def _isolate_probe_settings(
     )
     monkeypatch.setattr(probe, "get_settings", lambda: settings)
     monkeypatch.setattr(probe, "staging_settings", lambda: settings)
+    monkeypatch.setattr(
+        probe, "_production_database_path", lambda: tmp_path / "production" / "knowledge.db"
+    )
 
 
 def _search_result(page_id: int) -> SearchResult:

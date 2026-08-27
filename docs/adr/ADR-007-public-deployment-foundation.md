@@ -152,6 +152,20 @@ startup / readiness FAIL，不退回 unrestricted local behavior。
 
 **Reason:** fail-closed 是公网安全底线。
 
+**Runtime/Profile clarification（WP1，maintainer 明确冻结）：**
+
+- `EKB_RUNTIME_PROFILE` 环境变量完全不存在 → `RuntimeProfile.LOCAL`，这是
+  Local backward-compatibility default，不要求现有 Streamlit/BAT/VBS/developer
+  workflow 新增环境变量。
+- 精确值 `local` → LOCAL；精确值 `hosted` → HOSTED。
+- 变量存在但为空、纯空白、未知值、大小写变体（如 `LOCAL`、`Local`、`HOSTED`、
+  `Hosted`）一律 INVALID / FAIL CLOSED，绝不回退 LOCAL。
+- 不 strip-and-guess、不做 alias/fuzzy matching、不推断云环境。
+- 只有变量 **ABSENCE** 获得 LOCAL 默认；Hosted entry 必须显式
+  `EKB_RUNTIME_PROFILE=hosted`。选中 Hosted 后，缺失/非法 Hosted 配置不得回退 Local。
+
+这是对“Local 默认不变”与“Hosted 显式 opt-in”的细节澄清，不改变其它架构决策。
+
 **Consequences:** Hosted target runtime = Linux（container）；Windows BAT/VBS/
 service_manager/diagnostic = LOCAL_ONLY；repository 在 Hosted 只读；持久卷
 REQUIRED。

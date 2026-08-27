@@ -10,6 +10,8 @@ from typing import Final, Literal
 from pydantic import Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from src.runtime_profile import RuntimeProfile, require_runtime_profile
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OFFICIAL_HOST: Final[str] = "127.0.0.1"
 OFFICIAL_PORT: Final[int] = 8501
@@ -91,6 +93,12 @@ class Settings(BaseSettings):
     ai_daily_token_budget: int = Field(default=0, ge=0)
     ai_monthly_token_budget: int = Field(default=0, ge=0)
 
+    @property
+    def runtime_profile(self) -> RuntimeProfile:
+        """Local configuration remains distinct from Hosted server settings."""
+
+        return RuntimeProfile.LOCAL
+
     def ensure_directories(self) -> None:
         """Create all writable local directories without removing existing data."""
 
@@ -108,8 +116,8 @@ class Settings(BaseSettings):
 
 
 @lru_cache(maxsize=1)
-def get_settings() -> Settings:
-    """Return one cached, official-endpoint settings instance for the process."""
+def _get_local_settings() -> Settings:
+    """Cache the existing Local configuration after the entrypoint guard."""
 
     try:
         settings = Settings()
@@ -119,6 +127,17 @@ def get_settings() -> Settings:
         ) from exc
     require_official_endpoint(settings.host, settings.port)
     return settings
+
+
+def get_settings() -> Settings:
+    """Guard the Local entrypoint even on cache hits, preserving Local defaults."""
+
+    require_runtime_profile(RuntimeProfile.LOCAL)
+    return _get_local_settings()
+
+
+# Preserve the existing public cache reset hook used by developer/test workflows.
+get_settings.cache_clear = _get_local_settings.cache_clear
 
 
 def staging_settings(root: Path | None = None) -> Settings:
@@ -138,6 +157,7 @@ def staging_settings(root: Path | None = None) -> Settings:
     affecting production.
     """
 
+    require_runtime_profile(RuntimeProfile.LOCAL)
     staging_root = Path(root) if root is not None else DEFAULT_STAGING_ROOT
     data_dir = staging_root / "data"
     database_dir = data_dir / "database"
@@ -168,6 +188,7 @@ def runtime_settings() -> Settings:
     behavior is unchanged when the flag is absent.
     """
 
+    require_runtime_profile(RuntimeProfile.LOCAL)
     if os.environ.get(STAGING_ENV_VAR) == "1":
         return staging_settings()
     return get_settings()
