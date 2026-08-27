@@ -93,11 +93,14 @@ class ToolResultContextMapper:
     def _map_single_item(
         self, data: Mapping[str, object], references: Sequence[ToolReference]
     ) -> ContextItem | None:
-        stable_id = _first_text(data, "stable_id")
-        if not stable_id and references:
-            stable_id = references[0].stable_id
-        if not stable_id:
+        data_stable_id = _first_text(data, "stable_id")
+        if not references:
             return None
+        stable_id = references[0].stable_id
+        if data_stable_id and data_stable_id != stable_id:
+            raise KnowledgeContextError(
+                "ToolResult lineage 校验失败：data.stable_id 与 reference 不一致。"
+            )
         context_type = _context_type(stable_id)
         if context_type is None:
             return None
@@ -135,7 +138,12 @@ class ToolResultContextMapper:
     def _item_from_row(
         self, reference: ToolReference, row: Mapping[str, object]
     ) -> ContextItem | None:
-        stable_id = _first_text(row, "stable_id") or reference.stable_id
+        row_stable_id = _first_text(row, "stable_id")
+        stable_id = reference.stable_id
+        if row_stable_id and row_stable_id != stable_id:
+            raise KnowledgeContextError(
+                "ToolResult lineage 校验失败：result stable_id 与 reference 不一致。"
+            )
         context_type = _context_type(stable_id)
         if context_type is None:
             return None

@@ -26,6 +26,7 @@ from src.agent.decision import (
     parse_decision,
 )
 from src.agent.execution import (
+    MAX_AGENT_REQUEST_CHARS,
     AgentDecision,
     AgentDecisionKind,
     AgentExecutionError,
@@ -70,6 +71,7 @@ __all__ = [
     "DecisionParseError",
     "DecisionProvider",
     "FinalAnswerStage",
+    "MAX_AGENT_REQUEST_CHARS",
     "MAX_DECISION_OUTPUT_CHARS",
     "ModelDecisionProvider",
     "SingleStepAgentExecutor",

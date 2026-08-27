@@ -189,7 +189,11 @@ def internal_failure_result(
     safe_message: str = "工具执行失败",
 ) -> ToolResult:
     """Map an unexpected exception to a safe INTERNAL_FAILURE result."""
-    LOGGER.exception("Tool %s 执行失败", tool_name)
+    LOGGER.error(
+        "Tool %s 执行失败：error_type=%s",
+        tool_name,
+        type(exc).__name__,
+    )
     return failed_result(
         tool_name,
         ToolErrorCode.INTERNAL_FAILURE,

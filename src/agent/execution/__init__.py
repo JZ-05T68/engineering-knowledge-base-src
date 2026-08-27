@@ -8,6 +8,7 @@ schema v13 live here.
 """
 
 from src.agent.execution.contracts import (
+    MAX_AGENT_REQUEST_CHARS,
     AgentDecision,
     AgentDecisionKind,
     AgentExecutionError,
@@ -33,6 +34,7 @@ __all__ = [
     "AgentRequest",
     "AgentRuntimeTrace",
     "DecisionProvider",
+    "MAX_AGENT_REQUEST_CHARS",
     "SingleStepAgentExecutor",
     "build_single_step_executor",
 ]

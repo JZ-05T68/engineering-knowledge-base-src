@@ -580,8 +580,11 @@ class AuditedAIProvider:
         )
         try:
             self._ledger.record(record)
-        except Exception:
-            LOGGER.exception("AI 调用台账写入失败（不影响本次调用结果）")
+        except Exception as exc:
+            LOGGER.error(
+                "AI 调用台账写入失败（不影响本次调用结果）：error_type=%s",
+                type(exc).__name__,
+            )
 
 
 def _elapsed_ms(started: float) -> int:

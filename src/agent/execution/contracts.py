@@ -31,6 +31,7 @@ from typing import Protocol, runtime_checkable
 from src.agent.tools.contracts import ToolResult
 
 MAX_TOOL_NAME_LENGTH = 100
+MAX_AGENT_REQUEST_CHARS = 120_000
 
 
 class AgentDecisionKind(StrEnum):
@@ -73,6 +74,14 @@ class AgentRequest:
 
     request_id: str | None = None
     text: str = ""
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.text, str):
+            raise TypeError("AgentRequest.text 必须是字符串")
+        if len(self.text) > MAX_AGENT_REQUEST_CHARS:
+            raise ValueError(
+                f"AgentRequest.text 超过大小限制（{MAX_AGENT_REQUEST_CHARS} 字符）"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,6 +235,7 @@ __all__ = [
     "AgentRequest",
     "AgentRuntimeTrace",
     "DecisionProvider",
+    "MAX_AGENT_REQUEST_CHARS",
     "new_run_id",
     "utc_timestamp",
 ]

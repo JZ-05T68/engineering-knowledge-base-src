@@ -96,10 +96,13 @@ class SingleStepAgentExecutor:
         decision_call_count = 0
 
         try:
+            decision_call_count = 1
             decision = provider.decide(request)
-            decision_call_count += 1
         except Exception as exc:
-            LOGGER.exception("Agent decision provider 执行失败")
+            LOGGER.error(
+                "Agent decision provider 执行失败：error_type=%s",
+                type(exc).__name__,
+            )
             return self._fail(
                 run_id=run_id,
                 request=request,
@@ -216,7 +219,11 @@ class SingleStepAgentExecutor:
             )
             tool_call_count = 1
         except Exception as exc:
-            LOGGER.exception("Tool handler 意外抛错：%s", tool_name)
+            LOGGER.error(
+                "Tool handler 意外抛错：tool=%s error_type=%s",
+                tool_name,
+                type(exc).__name__,
+            )
             return self._fail(
                 run_id=run_id,
                 request=request,
@@ -229,6 +236,22 @@ class SingleStepAgentExecutor:
                     code=AgentExecutionErrorCode.TOOL_EXECUTION_FAILED,
                     message="工具执行失败",
                     detail=type(exc).__name__,
+                ),
+            )
+
+        if not isinstance(tool_result, ToolResult):
+            return self._fail(
+                run_id=run_id,
+                request=request,
+                started_at=started_at,
+                started_monotonic=started_monotonic,
+                decision=decision,
+                decision_call_count=decision_call_count,
+                tool_call_count=tool_call_count,
+                error=AgentExecutionError(
+                    code=AgentExecutionErrorCode.TOOL_EXECUTION_FAILED,
+                    message="工具返回了无效的结构化结果",
+                    detail=type(tool_result).__name__,
                 ),
             )
 

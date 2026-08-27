@@ -177,11 +177,16 @@ class FinalAnswerStage:
                 trace=execution.trace,
             )
         except AIUnavailableError as exc:
-            message = str(exc)
+            unavailable_message = str(exc)
             code = (
                 AgentResponseErrorCode.BUDGET_EXCEEDED
-                if "预算" in message
+                if "预算" in unavailable_message
                 else AgentResponseErrorCode.PROVIDER_UNAVAILABLE
+            )
+            message = (
+                "Final Answer 调用被预算限制拒绝。"
+                if code is AgentResponseErrorCode.BUDGET_EXCEEDED
+                else "Final Answer 服务不可用。"
             )
             return AgentResponse(
                 status=AgentResponseStatus.FAILED,
@@ -199,7 +204,7 @@ class FinalAnswerStage:
                 warnings=tool_result.warnings,
                 error=AgentResponseError(
                     code=AgentResponseErrorCode.FINAL_ANSWER_FAILED,
-                    message=str(exc),
+                    message="Final Answer 模型调用失败。",
                     detail=exc.error_class,
                 ),
                 trace=execution.trace,
