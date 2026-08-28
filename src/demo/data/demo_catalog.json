@@ -1,0 +1,258 @@
+{
+  "demo_version": "0.6.1",
+  "mode": "mock_demo",
+  "kb_uuid": "0e6b1de5-0000-4000-8000-000000000001",
+  "honesty_note": "预置离线演示数据（mock_demo）：不是真实 AI 输出，不是已批准比赛语料，不包含真实生产资料。integrity_state/demo_note 为演示预置状态，不是实时核验结果。",
+  "presets": [
+    {
+      "preset_id": "A",
+      "role": "main",
+      "scenario": "A_grounded",
+      "question": "PID 调整时，比例项与积分项分别影响什么？",
+      "expected_fixture": "success_grounded_a",
+      "expected_cited_sources": [
+        "0e6b1de5-0000-4000-8000-000000000001:page:1",
+        "0e6b1de5-0000-4000-8000-000000000001:page:2"
+      ],
+      "expected_warning_state": "none",
+      "expected_viewer_state": "grounded 答案 + 2 条来源卡片（调试手册第 12/13 页），来源抽屉显示标题、页码与 anchor 标签",
+      "expected_narrative": "提问 → Agent 检索页面资料 → grounded 答案 → 逐条来源检查"
+    },
+    {
+      "preset_id": "B",
+      "role": "main",
+      "scenario": "B_historical",
+      "question": "编码器接线错误导致 PID 震荡的那次问题，最终是怎么定位和解决的？",
+      "expected_fixture": "partial_warning_b",
+      "expected_cited_sources": [
+        "0e6b1de5-0000-4000-8000-000000000001:knowledge_memory:1"
+      ],
+      "expected_warning_state": "generic_limitation",
+      "expected_viewer_state": "grounded 答案 + 1 条知识记忆卡片（root cause / 定位 / 处理 / 复用条件），顶部显示通用来源限制提示",
+      "expected_narrative": "历史工程经验复用；同时诚实提示该记录的来源存在限制"
+    },
+    {
+      "preset_id": "C",
+      "role": "main",
+      "scenario": "C_integrity",
+      "question": "检查知识对象「伺服驱动调试指南」的来源是否仍然可信。",
+      "expected_fixture": "integrity_warning_c",
+      "expected_cited_sources": [
+        "0e6b1de5-0000-4000-8000-000000000001:knowledge_object:1"
+      ],
+      "expected_warning_state": "generic_limitation",
+      "expected_viewer_state": "知识对象卡片带完整性状态「已变化（changed）」与演示预置说明，明确该状态是预置演示数据",
+      "expected_narrative": "来源完整性检查：不把过期来源静默当作可靠事实"
+    },
+    {
+      "preset_id": "A2",
+      "role": "backup",
+      "scenario": "A_grounded",
+      "question": "变频器参数设置有哪些注意事项？",
+      "expected_fixture": "success_grounded_a2",
+      "expected_cited_sources": [
+        "0e6b1de5-0000-4000-8000-000000000001:page:3"
+      ],
+      "expected_warning_state": "none",
+      "expected_viewer_state": "grounded 答案 + 1 条页面来源卡片（变频器指南第 5 页）",
+      "expected_narrative": "备用主问题：同场景 A，单来源"
+    },
+    {
+      "preset_id": "EMPTY",
+      "role": "backup",
+      "scenario": "empty",
+      "question": "知识库里有关于机器学习模型部署的内容吗？",
+      "expected_fixture": "empty_result",
+      "expected_cited_sources": [],
+      "expected_warning_state": "none",
+      "expected_viewer_state": "无证据诚实空态：明确说明未找到可支持资料，不显示任何引用",
+      "expected_narrative": "超纲问题 → 诚实无证据，不编造答案（信任叙事）"
+    },
+    {
+      "preset_id": "REHEARSAL_FAILED",
+      "role": "rehearsal",
+      "scenario": "failed_safe",
+      "question": "（演示排练）触发一次工具失败的安全状态。",
+      "expected_fixture": "failed_safe",
+      "expected_cited_sources": [],
+      "expected_warning_state": "none",
+      "expected_viewer_state": "failed 安全态：封闭错误文案「知识库工具执行失败。」+ 重试/切模式入口",
+      "expected_narrative": "排练失败链路；不是评委主叙事题目"
+    }
+  ],
+  "sources": [
+    {
+      "stable_id": "0e6b1de5-0000-4000-8000-000000000001:page:1",
+      "source_type": "page",
+      "title": "PID 控制器调试手册",
+      "label": "第 12 页",
+      "anchor_label": "PID 控制器调试手册 · 第 12 页",
+      "integrity_state": null,
+      "demo_note": null
+    },
+    {
+      "stable_id": "0e6b1de5-0000-4000-8000-000000000001:page:2",
+      "source_type": "page",
+      "title": "PID 控制器调试手册",
+      "label": "第 13 页",
+      "anchor_label": "PID 控制器调试手册 · 第 13 页",
+      "integrity_state": null,
+      "demo_note": null
+    },
+    {
+      "stable_id": "0e6b1de5-0000-4000-8000-000000000001:page:3",
+      "source_type": "page",
+      "title": "变频器参数设置指南",
+      "label": "第 5 页",
+      "anchor_label": "变频器参数设置指南 · 第 5 页",
+      "integrity_state": null,
+      "demo_note": null
+    },
+    {
+      "stable_id": "0e6b1de5-0000-4000-8000-000000000001:knowledge_memory:1",
+      "source_type": "knowledge_memory",
+      "title": "编码器接线错误导致 PID 震荡的问题解决记录",
+      "label": "问题解决",
+      "anchor_label": "编码器接线错误导致 PID 震荡的问题解决记录",
+      "integrity_state": null,
+      "demo_note": null
+    },
+    {
+      "stable_id": "0e6b1de5-0000-4000-8000-000000000001:knowledge_object:1",
+      "source_type": "knowledge_object",
+      "title": "伺服驱动调试指南",
+      "label": "原理",
+      "anchor_label": "完整性检查目标",
+      "integrity_state": "changed",
+      "demo_note": "演示预置状态：该对象登记的 2 个来源中有 1 个在指纹捕获后发生了变化（changed）。该状态来自演示数据，不是实时核验结果。"
+    }
+  ],
+  "responses": {
+    "success_grounded_a": {
+      "request_id": "",
+      "status": "completed",
+      "answer": "比例项（P）决定系统对当前偏差的响应强度：增益偏大会引起震荡，偏小则响应迟缓【来源 #1】。积分项（I）用于消除稳态误差，但积分作用过强会带来超调和积分饱和，需要与抗积分饱和措施配合整定【来源 #2】。\n\n以上结论仅基于当前知识库引用的页面内容；请通过来源卡片核对原始页面。",
+      "grounded": true,
+      "citations": [
+        "0e6b1de5-0000-4000-8000-000000000001:page:1",
+        "0e6b1de5-0000-4000-8000-000000000001:page:2"
+      ],
+      "warnings": [],
+      "error": null,
+      "mode": "mock_demo",
+      "citations_detail": [
+        {
+          "display_index": 1,
+          "stable_id": "0e6b1de5-0000-4000-8000-000000000001:page:1",
+          "anchor_label": "PID 控制器调试手册 · 第 12 页",
+          "source_type": "page",
+          "title": "PID 控制器调试手册",
+          "label": "第 12 页"
+        },
+        {
+          "display_index": 2,
+          "stable_id": "0e6b1de5-0000-4000-8000-000000000001:page:2",
+          "anchor_label": "PID 控制器调试手册 · 第 13 页",
+          "source_type": "page",
+          "title": "PID 控制器调试手册",
+          "label": "第 13 页"
+        }
+      ]
+    },
+    "success_grounded_a2": {
+      "request_id": "",
+      "status": "completed",
+      "answer": "知识库中的变频器参数设置指南指出：修改参数前应记录原始值，逐项调整并在调整后进行试运行验证；不同品牌变频器的参数编号与含义不同，不能凭记忆直接套用【来源 #1】。\n\n请通过来源卡片核对该页原文。",
+      "grounded": true,
+      "citations": [
+        "0e6b1de5-0000-4000-8000-000000000001:page:3"
+      ],
+      "warnings": [],
+      "error": null,
+      "mode": "mock_demo",
+      "citations_detail": [
+        {
+          "display_index": 1,
+          "stable_id": "0e6b1de5-0000-4000-8000-000000000001:page:3",
+          "anchor_label": "变频器参数设置指南 · 第 5 页",
+          "source_type": "page",
+          "title": "变频器参数设置指南",
+          "label": "第 5 页"
+        }
+      ]
+    },
+    "partial_warning_b": {
+      "request_id": "",
+      "status": "completed",
+      "answer": "根据知识记忆中的问题解决记录：该次 PID 震荡的根因是伺服编码器接线错误导致速度反馈异常；定位方式是分段排查反馈回路，并在驱动器侧对比实际转速与指令转速；处理方式是重新按接线图压接编码器电缆并更换受损屏蔽层，处理后震荡消失。该结论仅在同样的接线规范下可复用【来源 #1】。",
+      "grounded": true,
+      "citations": [
+        "0e6b1de5-0000-4000-8000-000000000001:knowledge_memory:1"
+      ],
+      "warnings": [
+        "来源存在限制，请核对引用资料。"
+      ],
+      "error": null,
+      "mode": "mock_demo",
+      "citations_detail": [
+        {
+          "display_index": 1,
+          "stable_id": "0e6b1de5-0000-4000-8000-000000000001:knowledge_memory:1",
+          "anchor_label": "编码器接线错误导致 PID 震荡的问题解决记录",
+          "source_type": "knowledge_memory",
+          "title": "编码器接线错误导致 PID 震荡的问题解决记录",
+          "label": "问题解决"
+        }
+      ]
+    },
+    "integrity_warning_c": {
+      "request_id": "",
+      "status": "completed",
+      "answer": "该知识对象目前登记 2 个来源，其中 1 个来源的完整性状态为「已变化（changed）」：来源内容在该对象捕获指纹之后发生了变化。EKB 不会把过期来源静默当作可靠事实，因此该对象的内容应结合最新原文重新核对后再采信【来源 #1】。",
+      "grounded": true,
+      "citations": [
+        "0e6b1de5-0000-4000-8000-000000000001:knowledge_object:1"
+      ],
+      "warnings": [
+        "来源存在限制，请核对引用资料。"
+      ],
+      "error": null,
+      "mode": "mock_demo",
+      "citations_detail": [
+        {
+          "display_index": 1,
+          "stable_id": "0e6b1de5-0000-4000-8000-000000000001:knowledge_object:1",
+          "anchor_label": "完整性检查目标",
+          "source_type": "knowledge_object",
+          "title": "伺服驱动调试指南",
+          "label": "原理"
+        }
+      ]
+    },
+    "empty_result": {
+      "request_id": "",
+      "status": "completed",
+      "answer": "没有在当前知识库中找到可支持该问题的资料。",
+      "grounded": false,
+      "citations": [],
+      "warnings": [],
+      "error": null,
+      "mode": "mock_demo",
+      "citations_detail": []
+    },
+    "failed_safe": {
+      "request_id": "",
+      "status": "failed",
+      "answer": "",
+      "grounded": false,
+      "citations": [],
+      "warnings": [],
+      "error": {
+        "code": "tool_failed",
+        "message": "知识库工具执行失败。"
+      },
+      "mode": "mock_demo",
+      "citations_detail": []
+    }
+  }
+}
