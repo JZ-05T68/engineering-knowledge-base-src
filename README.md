@@ -158,22 +158,19 @@ Page / Object / Memory Retrieval
 
 ## 发布验证
 
-v0.6.0 发布候选验证（2026-08-28 候选审计）包括：
+v0.6.0 发布验证（候选审计 + 最终发布检查）：
 
-- 全量 pytest：**2636 passed / 4 skipped，exit 0**（约 11 分钟）；
-- Ruff：**PASS**；
-- `git diff --check`：**clean**；
-- schema v12：Hosted 存储与 Local 路径保持 exact-v12 校验，本候选无 migration；
-- 生产数据库 `data/database/knowledge.db`：候选审计期间仅以只读方式记录
-  SHA-256 `d116933c70e134622381372fe624ff228b22a8166216d87a550b80f8cece6f98`
-  （该值随正常使用变化，发布时由 release_check 重新核对）；
-- 已知 warning：Starlette TestClient 依赖 deprecation warning（记录在案）。
+- 最终发布检查 `scripts/release_check.py`（2026-08-29）：**PASS（exit 0，20/20 项）**，
+  含监听验收（`127.0.0.1:8501`，health HTTP 200）、生产数据库完整性 / 外键 /
+  schema v7–v12 不变量、README 对等与经验证的发布备份；
+- 正式发布全量 pytest：**2640 tests，全部通过，exit 0**（release_check 计数显示为
+  2641 属已记录的显示误差，非阻塞，留作维护项）；
+- Ruff：**PASS**；`git diff --check`：**clean**；
+- 发布 tag：`v0.6.0` → `bb1a4207af5bf70e0fbf0f5607c396e06bddfc8d`；
+- 生产数据库在发布检查前后 SHA-256 与大小一致，未被发布检查修改；
+- 公开部署状态：**DEFERRED**（2026-08-28 维护者 scope 决策，非发布门槛）。
 
-`scripts/release_check.py` 未在候选审计期间运行（它会打开正式数据库并创建备份，
-需维护者授权的发布窗口执行）；其版本预期已对齐 0.6.0。正式监听验收
-（`127.0.0.1:8501`，health HTTP 200）在发布窗口由 release_check 或人工验收完成。
-
-这些数字记录发布候选基线，不代表所有工程领域、语料或查询都已获得同等质量保证。
+这些数字记录发布基线，不代表所有工程领域、语料或查询都已获得同等质量保证。
 
 ## 版本演进
 
@@ -336,7 +333,7 @@ v0.5.2 尚未实现 Agent、工具调用、自动经验学习、后台知识改�
 | 版本线 | 主题 | 状态 |
 | --- | --- | --- |
 | **v0.5.x** | Knowledge Foundation | v0.5.3 完成可审计 AI 接入、台账、导出与备份升级。 |
-| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation 与托管部署基础（WP1–WP5）已完成并进入发布收尾；实际公网部署由维护者决策推迟出发布门槛（WP6A PARTIAL/PAUSED，WP6B NOT STARTED）。v0.6.1 Competition Demo Experience 准备工件已就绪，待 v0.6.0 发布后激活。Agent 自主选择和工具调用从这一阶段才开始。 |
+| **v0.6.x** | Agent Foundation | **v0.6.0 已正式发布（RELEASED / CLOSED，tag `v0.6.0`，2026-08-29）**；实际公网部署 DEFERRED（WP6A PARTIAL/PAUSED，WP6B NOT STARTED）。v0.6.1 Competition Demo Experience 已激活，进入正式开发。Agent 自主选择和工具调用从这一阶段才开始。 |
 | **v0.7.x** | Personal Experience Agent | 未来规划；尚未实现。从这一阶段才开始使用用户长期经验。 |
 | **v0.8.x** | Agent Reliability | 未来规划；尚未实现。处理 Agent 错误行为与可靠性。 |
 | **v0.9.x** | Agent Hardening | 未来规划；尚未实现。处理长期运行、成本、上下文、记忆污染、Eval 与工程硬化。 |

@@ -153,25 +153,22 @@ The system may extract metadata, render pages, detect text layers, mark pages fo
 
 ## Release Validation
 
-The v0.6.0 release candidate validation (2026-08-28 candidate audit) includes:
+v0.6.0 release validation (candidate audit + final release check):
 
-- full pytest: **2636 passed / 4 skipped, exit 0** (about 11 minutes);
-- Ruff: **PASS**;
-- `git diff --check`: **clean**;
-- schema v12: hosted storage and local paths keep exact-v12 validation; this candidate adds no
-  migration;
-- production database `data/database/knowledge.db`: read-only SHA-256 recorded during the
-  candidate audit as
-  `d116933c70e134622381372fe624ff228b22a8166216d87a550b80f8cece6f98`
-  (the value changes with normal use; release_check re-verifies it at release time);
-- known warning: the Starlette TestClient dependency deprecation warning (recorded).
+- Final release check `scripts/release_check.py` (2026-08-29): **PASS (exit 0, 20/20 checks)**,
+  including listener acceptance (`127.0.0.1:8501`, health HTTP 200), production database
+  integrity / foreign keys / schema v7–v12 invariants, README parity and a verified release
+  backup;
+- Official release full pytest: **2640 tests, all passed, exit 0** (the 2641 count displayed by
+  release_check is a recorded display artifact, non-blocking, deferred as a maintenance item);
+- Ruff: **PASS**; `git diff --check`: **clean**;
+- Release tag: `v0.6.0` → `bb1a4207af5bf70e0fbf0f5607c396e06bddfc8d`;
+- The production database kept an identical SHA-256 and size before and after the release check;
+  it was not modified by the release procedure;
+- Public deployment status: **DEFERRED** (2026-08-28 maintainer scope decision, not a release
+  gate).
 
-`scripts/release_check.py` was not run during the candidate audit (it opens the production
-database and creates a backup, requiring a maintainer-authorized release window); its version
-expectations are aligned to 0.6.0. The official listener acceptance (`127.0.0.1:8501`, health
-HTTP 200) is completed in the release window by release_check or manual acceptance.
-
-These numbers record the release-candidate baseline and do not imply equal quality guarantees for every engineering domain, corpus or query.
+These numbers record the release baseline and do not imply equal quality guarantees for every engineering domain, corpus or query.
 
 ## Version History
 
@@ -357,7 +354,7 @@ v0.6.0 capabilities and boundaries.
 | Version line | Theme | Status |
 | --- | --- | --- |
 | **v0.5.x** | Knowledge Foundation | v0.5.3 completes audited AI integration, ledger, exports and backup upgrade. |
-| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation and the hosted deployment foundation (WP1–WP5) are complete and in release closure; actual public deployment was deferred out of the release gate by the maintainer (WP6A PARTIAL/PAUSED, WP6B NOT STARTED). v0.6.1 Competition Demo Experience artifacts are prepared and activate after the v0.6.0 release. Agent autonomy and tool calling begin here only. |
+| **v0.6.x** | Agent Foundation | **v0.6.0 is officially released (RELEASED / CLOSED, tag `v0.6.0`, 2026-08-29)**; actual public deployment is DEFERRED (WP6A PARTIAL/PAUSED, WP6B NOT STARTED). v0.6.1 Competition Demo Experience is activated and in formal development. Agent autonomy and tool calling begin here only. |
 | **v0.7.x** | Personal Experience Agent | Planned, not implemented. Long-term user experience is used from here only. |
 | **v0.8.x** | Agent Reliability | Planned, not implemented. Handles Agent misbehavior and reliability. |
 | **v0.9.x** | Agent Hardening | Planned, not implemented. Handles long-running operation, cost, context, memory pollution, Eval and engineering hardening. |
