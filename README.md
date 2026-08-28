@@ -298,7 +298,7 @@ v0.5.2 尚未实现 Agent、工具调用、自动经验学习、后台知识改�
 | 版本线 | 主题 | 状态 |
 | --- | --- | --- |
 | **v0.5.x** | Knowledge Foundation | v0.5.3 完成可审计 AI 接入、台账、导出与备份升级。 |
-| **v0.6.x** | Agent Foundation | 未来规划；尚未实现。Agent 自主选择和工具调用从这一阶段才开始。 |
+| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation 与托管/公开部署基础已实现但**未发布**（公开部署暂停）。维护者已插入 v0.6.1 比赛演示体验（Competition Demo Experience）。Agent 自主选择和工具调用从这一阶段才开始。 |
 | **v0.7.x** | Personal Experience Agent | 未来规划；尚未实现。从这一阶段才开始使用用户长期经验。 |
 | **v0.8.x** | Agent Reliability | 未来规划；尚未实现。处理 Agent 错误行为与可靠性。 |
 | **v0.9.x** | Agent Hardening | 未来规划；尚未实现。处理长期运行、成本、上下文、记忆污染、Eval 与工程硬化。 |

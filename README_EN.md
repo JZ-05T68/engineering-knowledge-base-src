@@ -311,7 +311,7 @@ v0.5.3 capabilities and boundaries.
 | Version line | Theme | Status |
 | --- | --- | --- |
 | **v0.5.x** | Knowledge Foundation | v0.5.3 completes audited AI integration, ledger, exports and backup upgrade. |
-| **v0.6.x** | Agent Foundation | Planned, not implemented. Agent autonomy and tool calling begin here only. |
+| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation and the hosted/public deployment foundation are implemented but unreleased (public deployment paused). The maintainer inserted v0.6.1 Competition Demo Experience. Agent autonomy and tool calling begin here only. |
 | **v0.7.x** | Personal Experience Agent | Planned, not implemented. Long-term user experience is used from here only. |
 | **v0.8.x** | Agent Reliability | Planned, not implemented. Handles Agent misbehavior and reliability. |
 | **v0.9.x** | Agent Hardening | Planned, not implemented. Handles long-running operation, cost, context, memory pollution, Eval and engineering hardening. |
