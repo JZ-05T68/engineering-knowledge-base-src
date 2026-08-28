@@ -128,7 +128,15 @@ def test_text_selection_evidence_stays_unchanged_path(tmp_path: Path) -> None:
 # --- T3 区域证据 ---------------------------------------------------------------
 
 
-def test_region_evidence_measures_real_png_and_validates_anchor(tmp_path: Path) -> None:
+def test_region_evidence_measures_real_png_and_validates_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # WP5 keeps Pillow local to image processing; the real Local path must still
+    # invoke its decoder and preserve dimensions, hashes and geometry.
+    from unittest.mock import Mock
+
+    image_open = Mock(wraps=Image.open)
+    monkeypatch.setattr(Image, "open", image_open)
     database, service, document_id, page_ids = _library(tmp_path)
     basket = service.default_basket()
     page_id = page_ids[0]
@@ -142,6 +150,7 @@ def test_region_evidence_measures_real_png_and_validates_anchor(tmp_path: Path) 
     assert item.evidence_type is EvidenceType.IMAGE_REGION
     assert item.evidence_text == ""
     assert (item.region_image_width, item.region_image_height) == PAGE_SIZE
+    assert image_open.call_count >= 1
     assert item.region_image_sha256 == expected_sha256
     assert (item.region_x0, item.region_y0, item.region_x1, item.region_y1) == (
         5,

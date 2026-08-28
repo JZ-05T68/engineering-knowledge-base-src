@@ -15,8 +15,6 @@ from io import BytesIO
 from pathlib import Path
 from typing import Protocol
 
-from PIL import Image
-
 from src.models import (
     Document,
     EvidenceBasket,
@@ -928,6 +926,8 @@ def _read_page_image_info(image_path: Path) -> tuple[int, int, str]:
         raise EvidenceSourceError(f"页面图像缺失：{image_path}")
     try:
         data = image_path.read_bytes()
+        from PIL import Image
+
         with Image.open(BytesIO(data)) as image:
             image.load()
             width, height = image.size

@@ -100,7 +100,10 @@ def create_hosted_app(
         or settings.runtime_profile is not RuntimeProfile.HOSTED
     ):
         raise RuntimeConfigurationError(RuntimeConfigurationErrorCode.RUNTIME_PROFILE_MISMATCH)
-    app = FastAPI(title="EKB Hosted Agent API", version="0.6.0", debug=False)
+    app = FastAPI(
+        title="EKB Hosted Agent API", version="0.6.0", debug=False,
+        docs_url=None, redoc_url=None, openapi_url=None,
+    )
     app.router.route_class = _SafeRoute
     limiter = RateLimiter(
         settings.agent_rate_limit_per_minute,

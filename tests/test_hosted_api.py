@@ -114,10 +114,6 @@ def test_factory_is_lazy_and_exposes_only_four_business_routes(setup: SimpleName
         ("/ready", ("GET",)),
         ("/v0.6/agent/run", ("POST",)),
         ("/v0.6/sources/{stable_id}", ("GET",)),
-        ("/openapi.json", ("GET", "HEAD")),
-        ("/docs", ("GET", "HEAD")),
-        ("/docs/oauth2-redirect", ("GET", "HEAD")),
-        ("/redoc", ("GET", "HEAD")),
     }
 
 

@@ -1,0 +1,33 @@
+# Deny by default; only source Python and the two build inputs may enter context.
+**
+!Dockerfile
+!requirements-hosted.txt
+!src/
+!src/**/
+!src/**/*.py
+
+# Explicit privacy exclusions remain last, even under allowed source directories.
+**/.git
+**/.env*
+**/data
+**/backups
+**/logs
+**/runtime
+**/staging-data
+**/tests
+**/.venv
+**/venv
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.db-journal
+**/*.sqlite*
+**/*.pdf
+**/*.png
+**/*.jpg
+**/*.jpeg
+**/*.webp
+**/*.md

@@ -54,6 +54,14 @@ class HostedSettings(BaseSettings):
     runtime_profile: Literal[RuntimeProfile.HOSTED]
     data_root: Path
     ai_api_key: SecretStr = Field(default=SecretStr(""), repr=False)
+    # Server authority only. Match Local model metadata without loading Local settings.
+    ai_llm_model: str = "qwen3.7-plus"
+    ai_llm_model_hard: str = "qwen3.8-max"
+    ai_embedding_model: str = "qwen3.7-text-embedding"
+    ai_rerank_model: str = "qwen3-rerank"
+    ai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
+    ai_max_extra_attempts: int = Field(default=0, ge=0, le=2)
+    hosted_port: int = Field(default=8000, ge=1, le=65535)
     # Same token units as Local. Zero disables one period; readiness rejects
     # both periods being unlimited. No budget accounting is implemented here.
     ai_daily_token_budget: int = Field(default=0, ge=0)
@@ -151,6 +159,8 @@ class HostedSettings(BaseSettings):
         "agent_rate_limit_per_minute",
         "source_rate_limit_per_minute",
         "max_active_agent_runs",
+        "ai_max_extra_attempts",
+        "hosted_port",
         mode="before",
     )
     @classmethod
