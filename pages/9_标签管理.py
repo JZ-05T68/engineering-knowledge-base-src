@@ -10,7 +10,7 @@ from src.runtime import application_database
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="标签管理｜工程知识库 v0.5.3", page_icon="🏷️", layout="wide")
+st.set_page_config(page_title="标签管理｜工程知识库 v0.6.0", page_icon="🏷️", layout="wide")
 st.title("标签管理")
 st.caption("同名标签会自动复用；删除标签只删除关联，不删除文档、页面或笔记。")
 

@@ -6,7 +6,7 @@ import streamlit as st
 
 from src.runtime import application_settings
 
-st.set_page_config(page_title="运行说明｜工程知识库 v0.5.3", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="运行说明｜工程知识库 v0.6.0", page_icon="⚙️", layout="wide")
 st.title("设置与运行说明")
 
 settings = application_settings()
@@ -38,14 +38,15 @@ st.markdown(
 """
 )
 st.info(
-    "v0.5.0 不包含账号、登录、云同步、向量数据库或联网必需功能。"
+    "v0.6.0 不包含账号、登录、云同步或联网必需功能。"
     "AI 默认为手动模式：未配置 API Key 时全部原有功能离线可用，"
-    "可选的 Qwen API 接入默认关闭，且不会在后台自动发起请求。"
+    "可选的 Qwen API 接入默认关闭，不会在后台自动发起请求，"
+    "Agent 也不会自动执行任何多步操作。"
 )
 st.caption(
-    "当前数据库为 schema v7。已有 schema v6 数据库升级时会先创建一致性备份，再将既有证据"
-    "保留为未确认的文字选区证据，并增加整页、文字选区、图片区域三类证据与人工确认状态。"
-    "更早的 schema 会按版本顺序迁移；正式恢复只接受与当前版本兼容且同为 schema v7 的完整备份。"
+    "当前数据库为 schema v12（含 AI 调用台账、AI 输出锚点与知识关联表）。"
+    "已有旧 schema 数据库升级时会先创建一致性备份，再按版本顺序纯增量迁移；"
+    "正式恢复只接受与当前版本兼容且同为 schema v12 的完整备份。"
 )
 if st.button("🛡️ 打开系统维护、备份与诊断", use_container_width=True):
     st.switch_page("pages/12_系统维护.py")

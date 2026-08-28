@@ -1,4 +1,4 @@
-"""Unified v0.5.3 release-readiness checks with clear process exit status."""
+"""Unified v0.6.0 release-readiness checks with clear process exit status."""
 
 from __future__ import annotations
 
@@ -40,7 +40,7 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
-EXPECTED_VERSION: Final[str] = "0.5.3"
+EXPECTED_VERSION: Final[str] = "0.6.0"
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
@@ -693,10 +693,10 @@ def readme_parity_check(project_root: Path) -> CheckResult:
     readme = _safe_read(project_root / "README.md")
     readme_en = _safe_read(project_root / "README_EN.md")
     issues: list[str] = []
-    if not readme.startswith("# Engineering Knowledge Base v0.5.3"):
-        issues.append("README.md 标题版本不是 v0.5.3")
-    if not readme_en.startswith("# Engineering Knowledge Base v0.5.3"):
-        issues.append("README_EN.md 标题版本不是 v0.5.3")
+    if not readme.startswith("# Engineering Knowledge Base v0.6.0"):
+        issues.append("README.md 标题版本不是 v0.6.0")
+    if not readme_en.startswith("# Engineering Knowledge Base v0.6.0"):
+        issues.append("README_EN.md 标题版本不是 v0.6.0")
     zh_headings = re.findall(r"(?m)^## .+", readme)
     en_headings = re.findall(r"(?m)^## .+", readme_en)
     if len(zh_headings) != len(en_headings):

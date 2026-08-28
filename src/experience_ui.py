@@ -13,6 +13,7 @@ import logging
 
 import streamlit as st
 
+from src import __version__
 from src.ai.experience_model_service import (
     ExperienceModelError,
     ExperienceModelService,
@@ -133,7 +134,7 @@ def render_experience_section(database: Database) -> None:
             st.warning("所选知识均已失效或被排除，无法整理。")
             return
         packager = KnowledgeContextPackager(
-            kb_uuid=database.get_knowledge_base_uuid(), app_version="0.5.3"
+            kb_uuid=database.get_knowledge_base_uuid(), app_version=__version__
         )
         try:
             package = packager.build(items, question=task)

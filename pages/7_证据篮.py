@@ -17,7 +17,7 @@ from src.runtime import application_evidence_basket_service
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="证据篮｜工程知识库 v0.5.3", page_icon="🧺", layout="wide")
+st.set_page_config(page_title="证据篮｜工程知识库 v0.6.0", page_icon="🧺", layout="wide")
 st.title("证据篮")
 st.caption("持久收集多个页面的具体选区，核对来源后按当前顺序生成 Markdown 证据包。")
 

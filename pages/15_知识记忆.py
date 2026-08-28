@@ -15,7 +15,7 @@ from src.runtime import (
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="知识记忆｜工程知识库 v0.5.3", page_icon="🧭", layout="wide")
+st.set_page_config(page_title="知识记忆｜工程知识库 v0.6.0", page_icon="🧭", layout="wide")
 st.title("知识记忆")
 st.caption("记录问题解决过程、经验和决策；知识对象的变更会自动留痕。")
 
