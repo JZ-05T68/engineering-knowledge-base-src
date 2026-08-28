@@ -1,4 +1,4 @@
-# Engineering Knowledge Base v0.5.3
+# Engineering Knowledge Base v0.6.0
 
 [简体中文](README.md) | [English](README_EN.md)
 
@@ -52,12 +52,45 @@ Source ── Fingerprint ──> Knowledge Object ── Revision ──> 可�
 | **Retrieval** | 在页面资料、知识对象和知识记忆之间提供本地检索与来源回链。 |
 | **AI 能力** | 可审计、引用约束、按需触发的可选增强层，不替代本地事实来源和人工确认。 |
 
+## v0.6.0 — Agent Foundation
+
+v0.6.0 在 v0.5.3 可审计 AI 接入之上，建立 Agent Foundation 与托管部署基础：本地单步只读
+Agent、冻结的公开 HTTP 合同与容器化打包。**实际公网部署已由维护者于 2026-08-28 决策推迟
+出本发布门槛；本版本不包含、也不声称任何公网部署完成。**
+
+当前能力包括：
+
+- **单步只读 Agent**：一次请求内 Decision → 0/1 个 Tool → Final Answer；无循环、无多步
+  规划、Agent 自主重试为 0；逻辑模型调用不超过 2 次。
+- **7 个 READ_ONLY Tool**：`page_search`、`knowledge_search`、`get_knowledge_object`、
+  `get_knowledge_memory`、`inspect_provenance`、`inspect_source_integrity`、`get_evidence`；
+  Registry 只允许只读工具，未知或越权工具一律 fail-closed。
+- **rag_answer 是 Final Answer Stage 而非 Tool**：最终回答只能基于 Tool 证据生成，并复用
+  既有引用校验；未知、伪造、越界引用不显示半成品回答。
+- **来源完整性语义**：`inspect_source_integrity` 只读取已捕获的来源指纹状态
+  （valid / changed / missing / unknown），不刷新、不重算、不写库；过期来源不会被静默当作
+  可靠事实。
+- **Hosted HTTP Agent API（WP2）**：`/health`、`/ready`、`POST /v0.6/agent/run`、
+  `GET /v0.6/sources/{stable_id}`；公开 DTO 冻结，错误使用封闭文案目录，不暴露内部
+  trace、ToolResult、token 用量或模型原始响应。
+- **Hosted 安全边界（WP3）**：限流与并发上限、请求体上限、CORS 精确来源、预算拒绝、
+  错误净化；密钥只存在于服务端环境，不进入日志或响应。
+- **Hosted 存储安全（WP4）**：独立 Hosted SQLite 引导与 schema v12 exact 校验，
+  拒绝符号链接与 sidecar；不复用 Local 生产数据库。
+- **部署打包（WP5）**：Linux 容器与 non-root（UID/GID 10001）运行时打包，集成测试通过；
+  云上实际部署验证保持 PAUSED。
+- **本地运行不变**：正式服务固定绑定 `127.0.0.1:8501`；AI 默认手动模式，无 API Key 时
+  全部离线基础功能保持不变；Agent 能力不改变任何既有本地工作流。
+
+明确边界：Agent 无写能力、无自主重试、无长期会话记忆；无公网 Agent（WP6A PARTIAL /
+PAUSED，WP6B NOT STARTED）；实际公网部署为推迟项（DEFERRED），恢复需维护者明确决策。
+
 ## v0.5.3 — 可审计 AI 接入
 
 v0.5.3 在 v0.5.2 Knowledge Foundation 之上，为用户明确选定或检索出的本地知识增加可审计、
 引用约束、按需触发的 AI 辅助能力，同时补齐 AI 调用台账、结构化导出和旧备份升级。
 
-当前能力包括：
+该版本能力包括：
 
 - **ContextItem 与 KnowledgeContextPackage**：页面、知识对象、知识记忆和证据统一投影为只读
   ContextItem，并打包为带引用、来源、生命周期和排除信息的上下文包。
@@ -125,22 +158,27 @@ Page / Object / Memory Retrieval
 
 ## 发布验证
 
-v0.5.3 发布门禁以 `scripts/release_check.py` 与 Phase 7 报告为准，至少包括：
+v0.6.0 发布候选验证（2026-08-28 候选审计）包括：
 
-- 全量 pytest：**1762+ tests collected，exit 0**；
+- 全量 pytest：**2636 passed / 4 skipped，exit 0**（约 11 分钟）；
 - Ruff：**PASS**；
 - `git diff --check`：**clean**；
-- schema v12 备份/恢复逐字段 roundtrip；
-- 生产数据库：`data/database/knowledge.db`；
-- 生产数据库 SHA-256：`59caf2cfc5e80d197ca02a64b702ea6d06b7c4eb66e02c7fefa272403a4c0ad9`；
-- 正式运行验收：`127.0.0.1:8501`，health HTTP 200。
+- schema v12：Hosted 存储与 Local 路径保持 exact-v12 校验，本候选无 migration；
+- 生产数据库 `data/database/knowledge.db`：候选审计期间仅以只读方式记录
+  SHA-256 `d116933c70e134622381372fe624ff228b22a8166216d87a550b80f8cece6f98`
+  （该值随正常使用变化，发布时由 release_check 重新核对）；
+- 已知 warning：Starlette TestClient 依赖 deprecation warning（记录在案）。
+
+`scripts/release_check.py` 未在候选审计期间运行（它会打开正式数据库并创建备份，
+需维护者授权的发布窗口执行）；其版本预期已对齐 0.6.0。正式监听验收
+（`127.0.0.1:8501`，health HTTP 200）在发布窗口由 release_check 或人工验收完成。
 
 这些数字记录发布候选基线，不代表所有工程领域、语料或查询都已获得同等质量保证。
 
 ## 版本演进
 
 以下内容恢复各历史版本的正式范围与当时边界。v0.0.x 依据仓库中已关闭的同名 milestone，
-v0.1.0 起同时由 tag、CHANGELOG 和发布记录交叉校验；这些历史条目不是当前 v0.5.3 能力说明。
+v0.1.0 起同时由 tag、CHANGELOG 和发布记录交叉校验；这些历史条目不是当前 v0.6.0 能力说明。
 
 ### v0.0.1 — 初始本地工程知识库 MVP
 
@@ -291,14 +329,14 @@ Knowledge Object 和 Knowledge Memory 建立独立 SQLite FTS5 索引、同步�
 rebuild 路径，从而形成可回到本地来源核验的个人知识检索底座。
 
 v0.5.2 尚未实现 Agent、工具调用、自动经验学习、后台知识改写或云同步；Agent Foundation 从 v0.6.x
-才开始进入范围。当前 v0.5.3 的正式能力与边界见上文独立章节。
+才开始进入范围。当前 v0.6.0 的正式能力与边界见上文独立章节。
 
 ## Roadmap
 
 | 版本线 | 主题 | 状态 |
 | --- | --- | --- |
 | **v0.5.x** | Knowledge Foundation | v0.5.3 完成可审计 AI 接入、台账、导出与备份升级。 |
-| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation 与托管/公开部署基础已实现但**未发布**（公开部署暂停）。维护者已插入 v0.6.1 比赛演示体验（Competition Demo Experience）。Agent 自主选择和工具调用从这一阶段才开始。 |
+| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation 与托管部署基础（WP1–WP5）已完成并进入发布收尾；实际公网部署由维护者决策推迟出发布门槛（WP6A PARTIAL/PAUSED，WP6B NOT STARTED）。v0.6.1 Competition Demo Experience 准备工件已就绪，待 v0.6.0 发布后激活。Agent 自主选择和工具调用从这一阶段才开始。 |
 | **v0.7.x** | Personal Experience Agent | 未来规划；尚未实现。从这一阶段才开始使用用户长期经验。 |
 | **v0.8.x** | Agent Reliability | 未来规划；尚未实现。处理 Agent 错误行为与可靠性。 |
 | **v0.9.x** | Agent Hardening | 未来规划；尚未实现。处理长期运行、成本、上下文、记忆污染、Eval 与工程硬化。 |
@@ -384,6 +422,8 @@ git diff --check
 
 - [CHANGELOG](CHANGELOG.md)
 - [v0.5.x Roadmap](docs/v0.5.x-roadmap.md)
+- [v0.6.0 Release Notes（中文）](docs/v0.6.0-release-notes.md)
+- [v0.6.0 Release Notes（英文）](docs/v0.6.0-release-notes-en.md)
 - [v0.5.3 Release Notes（中文）](docs/v0.5.3-release-notes.md)
 - [v0.5.3 Release Notes（英文）](docs/v0.5.3-release-notes-en.md)
 - [Windows 恢复与环境重建](docs/windows-recovery.md)

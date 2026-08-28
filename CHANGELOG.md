@@ -1,5 +1,72 @@
 # 变更记录
 
+## v0.6.0 — Agent Foundation
+
+发布日期：2026-08-29 ~ 2026-08-30 目标窗口（以 GitHub Release 实际发布日为准）。
+
+在 v0.5.3 之上建立 Agent Foundation 与托管部署基础：本地单步只读 Agent、冻结的公开 HTTP
+合同与容器化打包。**自本版本起，实际公网部署不再是发布门槛**（2026-08-28 维护者 scope
+决策）：公开部署状态保持 WP6A PARTIAL / PAUSED、WP6B NOT STARTED，实际公开暴露推迟
+（DEFERRED），本版本不声明任何公网部署完成。
+
+### 变更
+
+- 应用版本推进至 0.6.0；数据库保持 **schema v12**，不新增 migration。
+- **Agent 单步执行内核（Phase 2A）**：一次请求内 Decision → 0/1 Tool → Final Answer；
+  决策、工具与最终回答各 ≤1，无循环、无多步规划、Agent 自主重试 = 0；运行 trace 仅存
+  进程内存，不落库、不外发。
+- **7 个 READ_ONLY Tool（Phase 1）**：`page_search`、`knowledge_search`、
+  `get_knowledge_object`、`get_knowledge_memory`、`inspect_provenance`、
+  `inspect_source_integrity`、`get_evidence`；Registry 只允许 READ_ONLY，未知、越权与
+  非只读工具一律 fail-closed。
+- **Model Decision Provider（Phase 2B）**：把 vendor-neutral AI 契约适配为结构化决策；
+  解析失败、越界或伪造决策不进入执行内核。
+- **Final Answer Stage（Phase 2C）**：`rag_answer` 不是 Tool；最终回答只基于 Tool 证据与
+  KnowledgeContextPackage 生成，复用既有引用校验；未知、伪造、越界引用 fail-closed，
+  不显示半成品回答；无证据时诚实返回"未找到可支持资料"。
+- **可靠性集成（Phase 2D）**：错误分类与安全文案传播、预算/限流/超时处理、晚到与重复
+  请求防护；独立可靠性 Gate 文档记录结论。
+- **来源完整性语义**：`inspect_source_integrity` 只读取已捕获的来源指纹状态
+  （valid / changed / missing / unknown），不刷新、不重算、不写库；过期来源不会被静默
+  当作可靠事实。
+- **Hosted Runtime Profile（WP1）**：独立 Hosted 运行档；禁止与 Local 运行时混用或
+  自动回退。
+- **Hosted HTTP Agent API（WP2）**：`/health`、`/ready`、`POST /v0.6/agent/run`、
+  `GET /v0.6/sources/{stable_id}`；冻结公开 DTO（`AgentRunResponse`、`SourceResponse`、
+  `HTTPFailure`）与封闭错误文案目录；不暴露内部 trace、ToolResult、token 用量或模型
+  原始响应。
+- **Hosted 安全边界（WP3）**：限流与并发上限、请求体上限、CORS 精确来源、预算拒绝、
+  空代理信任默认；错误净化，密钥只存在于服务端环境，不进入日志、响应或测试快照。
+- **Hosted 存储安全（WP4）**：独立 Hosted SQLite 引导、schema v12 exact 校验、符号链接
+  与 sidecar 拒绝；不读写 Local 生产数据库。
+- **部署打包（WP5）**：Linux 容器与 non-root（UID/GID 10001）运行时打包，集成测试通过；
+  云上实际部署验证保持 PAUSED。
+- **比赛演示准备工件（v0.6.1 前置准备，随本线入库）**：`src/demo/` deterministic demo
+  fixtures 与 mock contract、`tests/test_demo_contract.py`。这是 v0.6.1
+  Competition Demo Experience 的准备工件，只读、无网络、无 AI、无生产 DB 依赖，
+  不影响任何运行时行为。
+
+### 安全边界与已知限制
+
+- Agent 不能写入任何知识资产；无多步循环、无自主重试、无长期会话记忆；
+- HTTP 层不公开内部 trace、ToolResult、token 用量或模型原始响应；演示/展示 UI 不得
+  伪造内部推理过程；
+- 无公网 Agent：WP6A PARTIAL / PAUSED，WP6B NOT STARTED，Public Agent exposed = NO；
+- 实际比赛/公开语料人工审批仍 PENDING；
+- AI 是可选层，无 API Key 时全部离线基础功能可用；
+- 已知事项：Starlette TestClient 依赖 deprecation warning（记录在案，不盲升依赖）；
+  Windows 平台部分 symlink 相关测试按环境 skip。
+
+### 公开部署状态（2026-08-28 维护者决策）
+
+- 原 v0.6.0 规划要求实际公网部署完成方可发布；维护者于 2026-08-28 变更发布标准，
+  实际公开暴露从 v0.6.0 发布门槛推迟（DEFERRED）。理由：Agent Foundation 已完成；
+  Hosted Deployment Foundation WP1–WP5 已完成；Pre-Public Deployment Gate 已达
+  CONDITIONAL_GO / HIGH；实际云验证被平台问题独立阻塞；比赛演示开发优先级更高。
+- 这是发布 scope 决策，**不是部署验收结论**：WP6A 仍为 PARTIAL / PAUSED，
+  WP6B 仍未启动，本版本不包含任何公网部署声明。
+- 恢复部署按既有暂停记录与 `docs/v0.6.0-release-closure-inventory.md` §8 的锚点执行。
+
 ## v0.5.3 — 可审计 AI 接入
 
 发布日期：2026-08-26。

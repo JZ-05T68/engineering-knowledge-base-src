@@ -1,4 +1,4 @@
-# Engineering Knowledge Base v0.5.3
+# Engineering Knowledge Base v0.6.0
 
 [Chinese](README.md) | [English](README_EN.md)
 
@@ -50,11 +50,49 @@ Source ── Fingerprint ──> Knowledge Object ── Revision ──> audit
 | **Retrieval** | Provides local retrieval and source links across pages, knowledge objects and knowledge memories. |
 | **AI capability** | An optional, auditable, citation-constrained, on-demand enhancement layer that never replaces local facts or human confirmation. |
 
+## v0.6.0 — Agent Foundation
+
+v0.6.0 builds on the v0.5.3 audited AI integration by establishing the Agent Foundation and the
+hosted deployment foundation: a local single-step read-only Agent, a frozen public HTTP contract
+and container packaging. **Actual public-cloud deployment was deferred out of this release gate by
+the maintainer on 2026-08-28; this release neither includes nor claims any public deployment.**
+
+Current capabilities:
+
+- **Single-step read-only Agent**: one request runs Decision → 0/1 Tool → Final Answer; no loops,
+  no multi-step planning, zero Agent-autonomous retries, at most two logical model calls.
+- **7 READ_ONLY tools**: `page_search`, `knowledge_search`, `get_knowledge_object`,
+  `get_knowledge_memory`, `inspect_provenance`, `inspect_source_integrity`, `get_evidence`;
+  the registry admits read-only tools only, and unknown or disallowed tools fail closed.
+- **rag_answer is the Final Answer Stage, not a Tool**: the final answer is generated only from
+  Tool evidence and reuses the existing citation validation; unknown, forged or out-of-range
+  citations never surface as a half-finished answer.
+- **Source integrity semantics**: `inspect_source_integrity` reads already-captured fingerprint
+  states (valid / changed / missing / unknown) without refreshing, recomputing or writing; stale
+  sources are never silently treated as reliable facts.
+- **Hosted HTTP Agent API (WP2)**: `/health`, `/ready`, `POST /v0.6/agent/run`,
+  `GET /v0.6/sources/{stable_id}`; the public DTOs are frozen, errors use a closed message
+  catalog, and internal traces, ToolResults, token usage or raw model responses are never exposed.
+- **Hosted security boundary (WP3)**: rate and concurrency limits, request body cap, exact CORS
+  origins, budget rejection and error sanitization; keys exist only server-side and never enter
+  logs or responses.
+- **Hosted storage safety (WP4)**: an independent hosted SQLite bootstrap with exact schema-v12
+  validation, symlink and sidecar rejection; the Local production database is never reused.
+- **Deployment packaging (WP5)**: Linux container and non-root (UID/GID 10001) runtime packaging
+  with passing integration tests; actual cloud deployment validation remains PAUSED.
+- **Local operation unchanged**: the official service binds to `127.0.0.1:8501` only; AI defaults
+  to manual mode, and without an API Key every offline core feature keeps working; the Agent
+  changes no existing local workflow.
+
+Explicit boundaries: the Agent cannot write, has no autonomous retries and no long-term session
+memory; there is no public Agent (WP6A PARTIAL / PAUSED, WP6B NOT STARTED); actual public
+deployment is a deferred item (DEFERRED) that resumes only with an explicit maintainer decision.
+
 ## v0.5.3 — Audited AI Integration
 
 v0.5.3 builds on the v0.5.2 Knowledge Foundation by adding auditable, citation-constrained, on-demand AI assistance over knowledge that the user explicitly selects or retrieves, together with an AI call ledger, structured exports and legacy backup upgrade.
 
-Current capabilities:
+Version capabilities:
 
 - **ContextItem and KnowledgeContextPackage**: pages, knowledge objects, knowledge memories and evidence are projected into read-only ContextItems and packaged with citations, sources, lifecycle and exclusion information.
 - **Two retrieval scopes**: page-material search and personal-knowledge search remain offline-first with unchanged default behavior.
@@ -115,15 +153,23 @@ The system may extract metadata, render pages, detect text layers, mark pages fo
 
 ## Release Validation
 
-The v0.5.3 release gate is defined by `scripts/release_check.py` and the Phase 7 report, including at least:
+The v0.6.0 release candidate validation (2026-08-28 candidate audit) includes:
 
-- full pytest: **1762+ tests collected, exit 0**;
+- full pytest: **2636 passed / 4 skipped, exit 0** (about 11 minutes);
 - Ruff: **PASS**;
 - `git diff --check`: **clean**;
-- schema v12 backup/restore field-by-field roundtrip;
-- production database: `data/database/knowledge.db`;
-- production database SHA-256: `59caf2cfc5e80d197ca02a64b702ea6d06b7c4eb66e02c7fefa272403a4c0ad9`;
-- official acceptance: `127.0.0.1:8501`, health HTTP 200.
+- schema v12: hosted storage and local paths keep exact-v12 validation; this candidate adds no
+  migration;
+- production database `data/database/knowledge.db`: read-only SHA-256 recorded during the
+  candidate audit as
+  `d116933c70e134622381372fe624ff228b22a8166216d87a550b80f8cece6f98`
+  (the value changes with normal use; release_check re-verifies it at release time);
+- known warning: the Starlette TestClient dependency deprecation warning (recorded).
+
+`scripts/release_check.py` was not run during the candidate audit (it opens the production
+database and creates a backup, requiring a maintainer-authorized release window); its version
+expectations are aligned to 0.6.0. The official listener acceptance (`127.0.0.1:8501`, health
+HTTP 200) is completed in the release window by release_check or manual acceptance.
 
 These numbers record the release-candidate baseline and do not imply equal quality guarantees for every engineering domain, corpus or query.
 
@@ -131,7 +177,7 @@ These numbers record the release-candidate baseline and do not imply equal quali
 
 The entries below restore the formal scope and boundaries of each earlier release. The v0.0.x entries follow the
 repository's closed milestones; releases from v0.1.0 onward are also cross-checked against tags, the changelog and
-release records. These historical entries are not the current v0.5.3 capability statement.
+release records. These historical entries are not the current v0.6.0 capability statement.
 
 ### v0.0.1 — Initial Local Knowledge Base MVP
 
@@ -304,14 +350,14 @@ local sources for verification.
 
 v0.5.2 did not implement an Agent, tool calling, automatic experience learning, background knowledge rewriting or
 cloud synchronization. Agent Foundation enters scope only from v0.6.x. See the dedicated section above for the current
-v0.5.3 capabilities and boundaries.
+v0.6.0 capabilities and boundaries.
 
 ## Roadmap
 
 | Version line | Theme | Status |
 | --- | --- | --- |
 | **v0.5.x** | Knowledge Foundation | v0.5.3 completes audited AI integration, ledger, exports and backup upgrade. |
-| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation and the hosted/public deployment foundation are implemented but unreleased (public deployment paused). The maintainer inserted v0.6.1 Competition Demo Experience. Agent autonomy and tool calling begin here only. |
+| **v0.6.x** | Agent Foundation | v0.6.0 Agent Foundation and the hosted deployment foundation (WP1–WP5) are complete and in release closure; actual public deployment was deferred out of the release gate by the maintainer (WP6A PARTIAL/PAUSED, WP6B NOT STARTED). v0.6.1 Competition Demo Experience artifacts are prepared and activate after the v0.6.0 release. Agent autonomy and tool calling begin here only. |
 | **v0.7.x** | Personal Experience Agent | Planned, not implemented. Long-term user experience is used from here only. |
 | **v0.8.x** | Agent Reliability | Planned, not implemented. Handles Agent misbehavior and reliability. |
 | **v0.9.x** | Agent Hardening | Planned, not implemented. Handles long-running operation, cost, context, memory pollution, Eval and engineering hardening. |
@@ -395,6 +441,8 @@ The release commit and tag closure may use verified-backup and stopped-service m
 
 - [CHANGELOG](CHANGELOG.md)
 - [v0.5.x Roadmap](docs/v0.5.x-roadmap.md)
+- [v0.6.0 Release Notes (Chinese)](docs/v0.6.0-release-notes.md)
+- [v0.6.0 Release Notes (English)](docs/v0.6.0-release-notes-en.md)
 - [v0.5.3 Release Notes (Chinese)](docs/v0.5.3-release-notes.md)
 - [v0.5.3 Release Notes (English)](docs/v0.5.3-release-notes-en.md)
 - [Windows recovery and environment rebuild](docs/windows-recovery.md)
