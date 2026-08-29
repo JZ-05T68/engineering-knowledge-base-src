@@ -94,6 +94,18 @@ def _note_count(database: Database) -> int:
         return connection.execute("SELECT COUNT(*) FROM notes").fetchone()[0]
 
 
+def _knowledge_source_rows(database: Database) -> list[tuple[int, str, int]]:
+    with sqlite3.connect(database.database_path) as connection:
+        return [
+            (int(row[0]), str(row[1]), int(row[2]))
+            for row in connection.execute(
+                "SELECT knowledge_object_id, source_type, source_id "
+                "FROM knowledge_object_sources "
+                "ORDER BY knowledge_object_id, source_type, source_id"
+            ).fetchall()
+        ]
+
+
 def _fail_write_commits(monkeypatch: pytest.MonkeyPatch) -> None:
     """Make write transactions roll back at commit time; reads stay intact."""
 
@@ -652,6 +664,66 @@ def test_delete_missing_note_raises(env: dict) -> None:
         env["service"].delete_note(31337)
 
 
+def test_delete_note_cleans_all_ko_links_and_preserves_unrelated_sources(
+    env: dict,
+) -> None:
+    database: Database = env["database"]
+    service: NoteService = env["service"]
+    target = service.create_document_note(1, "目标笔记").note
+    other = service.create_document_note(1, "保留笔记").note
+    _seed_evidence(database)
+    first_ko = database.create_knowledge_object(
+        kind="fact", title="对象一", content="引用多个来源"
+    )
+    second_ko = database.create_knowledge_object(
+        kind="fact", title="对象二", content="也引用目标笔记"
+    )
+
+    database.add_knowledge_object_source(
+        knowledge_object_id=first_ko.id,
+        source_type="note",
+        source_id=target.id,
+    )
+    database.add_knowledge_object_source(
+        knowledge_object_id=second_ko.id,
+        source_type="note",
+        source_id=target.id,
+    )
+    database.add_knowledge_object_source(
+        knowledge_object_id=first_ko.id,
+        source_type="note",
+        source_id=other.id,
+    )
+    # document/page/evidence ids intentionally collide numerically with target.id.
+    for source_type in ("document", "page", "evidence"):
+        database.add_knowledge_object_source(
+            knowledge_object_id=first_ko.id,
+            source_type=source_type,
+            source_id=target.id,
+        )
+
+    service.delete_note(target.id)
+
+    with pytest.raises(NoteNotFoundError):
+        service.get_note(target.id)
+    assert service.get_note(other.id).note.id == other.id
+    assert database.get_knowledge_object(first_ko.id) is not None
+    assert database.get_knowledge_object(second_ko.id) is not None
+    assert _knowledge_source_rows(database) == [
+        (first_ko.id, "document", target.id),
+        (first_ko.id, "evidence", target.id),
+        (first_ko.id, "note", other.id),
+        (first_ko.id, "page", target.id),
+    ]
+    with sqlite3.connect(database.database_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM knowledge_object_sources "
+            "WHERE source_type = 'note' AND source_id = ?",
+            (target.id,),
+        ).fetchone()[0] == 0
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
 # --- I. database failures ---------------------------------------------------------
 
 
@@ -674,10 +746,24 @@ def test_update_failure_rolls_back(env: dict, monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_delete_failure_rolls_back(env: dict, monkeypatch: pytest.MonkeyPatch) -> None:
+    database: Database = env["database"]
     service: NoteService = env["service"]
     note = service.create_page_note(1, "删不掉").note
+    knowledge_object = database.create_knowledge_object(
+        kind="fact", title="保留关系", content="删除失败时关系也必须保留"
+    )
+    database.add_knowledge_object_source(
+        knowledge_object_id=knowledge_object.id,
+        source_type="note",
+        source_id=note.id,
+    )
     _fail_write_commits(monkeypatch)
     with pytest.raises(NoteWriteError):
         service.delete_note(note.id)
     monkeypatch.undo()
     assert service.get_note(note.id).note == note
+    assert _knowledge_source_rows(database) == [
+        (knowledge_object.id, "note", note.id)
+    ]
+    with sqlite3.connect(database.database_path) as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []

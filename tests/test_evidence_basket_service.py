@@ -61,6 +61,34 @@ def _library(tmp_path: Path) -> tuple[Database, EvidenceBasketService, int, list
     return database, EvidenceBasketService(database), document.id, page_ids
 
 
+def _create_knowledge_object(database: Database, title: str) -> int:
+    return database.create_knowledge_object(
+        kind="fact", title=title, content="来源生命周期回归测试"
+    ).id
+
+
+def _link_source(
+    database: Database, knowledge_object_id: int, source_type: str, source_id: int
+) -> None:
+    database.add_knowledge_object_source(
+        knowledge_object_id=knowledge_object_id,
+        source_type=source_type,
+        source_id=source_id,
+    )
+
+
+def _knowledge_source_rows(database: Database) -> list[tuple[int, str, int]]:
+    with sqlite3.connect(database.database_path) as connection:
+        return [
+            (int(row[0]), str(row[1]), int(row[2]))
+            for row in connection.execute(
+                "SELECT knowledge_object_id, source_type, source_id "
+                "FROM knowledge_object_sources "
+                "ORDER BY knowledge_object_id, source_type, source_id"
+            ).fetchall()
+        ]
+
+
 def test_create_add_multiple_prevent_duplicate_and_restore_after_restart(
     tmp_path: Path,
 ) -> None:
@@ -202,6 +230,174 @@ def test_note_reorder_delete_clear_and_parameterized_user_text(tmp_path: Path) -
     assert [(item.id, item.position) for item in service.list_items()] == [(first.id, 1)]
     assert service.clear() == 1
     assert service.list_items() == []
+
+
+def test_remove_item_cleans_all_ko_links_and_preserves_unrelated_sources(
+    tmp_path: Path,
+) -> None:
+    database, service, document_id, page_ids = _library(tmp_path)
+    default = service.default_basket()
+    other_basket = service.create_basket("其他篮")
+    target = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[0],
+        evidence_text="液压泵需要定期检查压力和温度。",
+    )
+    same_basket = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[1],
+        evidence_text="阀组安装后应执行泄漏测试。",
+    )
+    cross_basket = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[0],
+        evidence_text="禁止超压",
+        basket_id=other_basket.id,
+    )
+    first_ko = _create_knowledge_object(database, "对象一")
+    second_ko = _create_knowledge_object(database, "对象二")
+    _link_source(database, first_ko, "evidence", target.id)
+    _link_source(database, second_ko, "evidence", target.id)
+    _link_source(database, first_ko, "evidence", same_basket.id)
+    _link_source(database, first_ko, "evidence", cross_basket.id)
+    # document/page ids intentionally collide numerically with target.id.
+    _link_source(database, first_ko, "document", target.id)
+    _link_source(database, first_ko, "page", target.id)
+
+    service.remove_item(target.id, basket_id=default.id)
+
+    assert service.get_item(target.id) is None
+    assert [(item.id, item.position) for item in service.list_items(default.id)] == [
+        (same_basket.id, 1)
+    ]
+    assert [(item.id, item.position) for item in service.list_items(other_basket.id)] == [
+        (cross_basket.id, 1)
+    ]
+    assert database.get_knowledge_object(first_ko) is not None
+    assert database.get_knowledge_object(second_ko) is not None
+    assert _knowledge_source_rows(database) == [
+        (first_ko, "document", target.id),
+        (first_ko, "evidence", same_basket.id),
+        (first_ko, "evidence", cross_basket.id),
+        (first_ko, "page", target.id),
+    ]
+    with sqlite3.connect(database.database_path) as connection:
+        assert connection.execute(
+            "SELECT COUNT(*) FROM knowledge_object_sources "
+            "WHERE source_type = 'evidence' AND source_id = ?",
+            (target.id,),
+        ).fetchone()[0] == 0
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+@pytest.mark.parametrize("link_second", [False, True])
+def test_clear_cleans_exact_basket_links_and_preserves_cross_basket(
+    tmp_path: Path, link_second: bool
+) -> None:
+    database, service, document_id, page_ids = _library(tmp_path)
+    default = service.default_basket()
+    other_basket = service.create_basket("保留篮")
+    first = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[0],
+        evidence_text="液压泵需要定期检查压力和温度。",
+    )
+    second = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[1],
+        evidence_text="阀组安装后应执行泄漏测试。",
+    )
+    other = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[0],
+        evidence_text="禁止超压",
+        basket_id=other_basket.id,
+    )
+    knowledge_object = _create_knowledge_object(database, "清空篮测试")
+    _link_source(database, knowledge_object, "evidence", first.id)
+    if link_second:
+        _link_source(database, knowledge_object, "evidence", second.id)
+    _link_source(database, knowledge_object, "evidence", other.id)
+
+    assert service.clear(basket_id=default.id) == 2
+
+    assert service.list_items(default.id) == []
+    assert [(item.id, item.position) for item in service.list_items(other_basket.id)] == [
+        (other.id, 1)
+    ]
+    assert service.clear(basket_id=default.id) == 0
+    assert _knowledge_source_rows(database) == [
+        (knowledge_object, "evidence", other.id)
+    ]
+    with sqlite3.connect(database.database_path) as connection:
+        for deleted_id in (first.id, second.id):
+            assert connection.execute(
+                "SELECT COUNT(*) FROM knowledge_object_sources "
+                "WHERE source_type = 'evidence' AND source_id = ?",
+                (deleted_id,),
+            ).fetchone()[0] == 0
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+class _FailBeforeEvidenceDeleteConnection:
+    """Raise after KO-link cleanup reaches the evidence row deletion."""
+
+    def __init__(self, delegate: sqlite3.Connection) -> None:
+        self._delegate = delegate
+
+    def execute(self, sql: str, parameters: tuple[object, ...] = ()) -> sqlite3.Cursor:
+        if sql.startswith("DELETE FROM evidence_items"):
+            raise sqlite3.OperationalError("simulated evidence delete failure")
+        return self._delegate.execute(sql, parameters)
+
+
+def test_remove_item_rolls_back_source_cleanup_and_position_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database, service, document_id, page_ids = _library(tmp_path)
+    default = service.default_basket()
+    target = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[0],
+        evidence_text="液压泵需要定期检查压力和温度。",
+    )
+    remaining = service.add_item(
+        document_id=document_id,
+        page_id=page_ids[1],
+        evidence_text="阀组安装后应执行泄漏测试。",
+    )
+    knowledge_object = _create_knowledge_object(database, "回滚测试")
+    _link_source(database, knowledge_object, "evidence", target.id)
+    before_items = [(item.id, item.position) for item in service.list_items(default.id)]
+    before_basket = next(
+        basket for basket in service.list_baskets() if basket.id == default.id
+    )
+    original_connection = _EvidenceRepository._connection
+
+    @contextmanager
+    def failing_connection(
+        self: _EvidenceRepository,
+    ) -> Iterator[_FailBeforeEvidenceDeleteConnection]:
+        with original_connection(self) as connection:
+            yield _FailBeforeEvidenceDeleteConnection(connection)
+
+    monkeypatch.setattr(_EvidenceRepository, "_connection", failing_connection)
+    with pytest.raises(sqlite3.OperationalError, match="simulated evidence delete failure"):
+        service.remove_item(target.id, basket_id=default.id)
+    monkeypatch.undo()
+
+    assert service.get_item(target.id) is not None
+    assert service.get_item(remaining.id) is not None
+    assert [(item.id, item.position) for item in service.list_items(default.id)] == before_items
+    after_basket = next(
+        basket for basket in service.list_baskets() if basket.id == default.id
+    )
+    assert after_basket.updated_at == before_basket.updated_at
+    assert _knowledge_source_rows(database) == [
+        (knowledge_object, "evidence", target.id)
+    ]
+    with sqlite3.connect(database.database_path) as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
 
 
 def test_missing_mismatched_and_changed_sources_stop_safely(tmp_path: Path) -> None:

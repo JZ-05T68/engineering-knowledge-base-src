@@ -762,12 +762,18 @@ class _EvidenceRepository:
     def delete_item(self, basket_id: int, item_id: int) -> bool:
         now = _utc_now()
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT position FROM evidence_items WHERE basket_id = ? AND id = ?",
                 (basket_id, item_id),
             ).fetchone()
             if row is None:
                 return False
+            connection.execute(
+                "DELETE FROM knowledge_object_sources "
+                "WHERE source_type = 'evidence' AND source_id = ?",
+                (item_id,),
+            )
             connection.execute("DELETE FROM evidence_items WHERE id = ?", (item_id,))
             remaining_ids = tuple(
                 int(item[0])
@@ -797,6 +803,13 @@ class _EvidenceRepository:
 
     def clear_items(self, basket_id: int) -> int:
         with self._connection() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "DELETE FROM knowledge_object_sources "
+                "WHERE source_type = 'evidence' AND source_id IN ("
+                "SELECT id FROM evidence_items WHERE basket_id = ?)",
+                (basket_id,),
+            )
             cursor = connection.execute(
                 "DELETE FROM evidence_items WHERE basket_id = ?", (basket_id,)
             )

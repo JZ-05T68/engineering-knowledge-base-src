@@ -632,19 +632,33 @@ class NoteService:
         """Hard-delete one note row in a single transaction.
 
         Never touches documents, pages, PDFs, PNGs, text layers, Markdown,
-        evidence items or sibling notes. A write that does not affect exactly
-        one row is an error, not a silent success.
+        evidence items or sibling notes. Knowledge-object source links that
+        point to this exact note are removed in the same transaction. A write
+        that does not affect exactly one note row is an error, not a silent
+        success.
         """
 
-        self.get_note(note_id)  # raises NoteNotFoundError when absent
         try:
             with self._database._connection() as connection:
+                connection.execute("BEGIN IMMEDIATE")
+                row = connection.execute(
+                    "SELECT id FROM notes WHERE id = ?", (note_id,)
+                ).fetchone()
+                if row is None:
+                    raise NoteNotFoundError(f"笔记不存在：{note_id}")
+                connection.execute(
+                    "DELETE FROM knowledge_object_sources "
+                    "WHERE source_type = 'note' AND source_id = ?",
+                    (note_id,),
+                )
                 cursor = connection.execute("DELETE FROM notes WHERE id = ?", (note_id,))
+                if cursor.rowcount != 1:
+                    raise NoteWriteError("删除笔记未生效，请重试")
+        except (NoteNotFoundError, NoteWriteError):
+            raise
         except sqlite3.Error as exc:
             LOGGER.exception("删除笔记失败：%s", note_id)
             raise NoteWriteError("删除笔记失败，请重试") from exc
-        if cursor.rowcount != 1:
-            raise NoteWriteError("删除笔记未生效，请重试")
 
     # ------------------------------------------------------------- internals
 
