@@ -3,6 +3,8 @@
 - **日期：** 2026-08-29　**基线：** `main` @ `7e7a293`（v0.6.1 演示冻结树）
 - **来源：** `docs/repository-architecture-risk-audit-2026-08-29.md`（总审计）的风险登记册。
   本清单只收录**有具体触发路径或明确下游需求的项**；纯观察项只在总审计记录，不转化为债务。
+- **状态标记（2026-08-29 整改包）：** TD-01 / TD-02 / TD-03 / TD-08 / TD-09 已在本包
+  RESOLVED（见各条目内的「整改记录」，保留原始发现描述不改写）。其余项状态不变。
 - **总原则：** 比赛冻结期内不动任何冻结面（`pages/0_知识Agent.py`、`src/demo_ui.py`、
   `src/demo/**`、`src/agent_client.py` 语义、`src/hosted_api/contracts.py`、A/B/C 场景语义）。
   下表所有项均可**在不解冻的前提下**启动，除了标注"依赖冻结解除"的 TD-13。
@@ -39,6 +41,15 @@
 ## 明细
 
 ### TD-01 测试环境隔离：真实 .env 不得进入测试进程
+**状态（2026-08-29）：RESOLVED。** `tests/conftest.py` 新增套件级 autouse fixture
+`_isolate_developer_environment`：清除环境中的 `EKB_*`/`DASHSCOPE_*` 变量（子进程继承
+净化环境），并将 `Settings.model_config["env_file"]` 中和为 None（真实 `.env` 不再被
+隐式读取；生产语义不变）。显式 opt-in 通道保留：测试可 `monkeypatch.setenv` 自设变量、
+或向 `Settings(_env_file=...)` 显式传 dotenv 路径。另对 3 处直接构造点
+（`test_navigation_ui.py:37`、`test_v008_ui.py:25`、`test_release_check.py:137`）补
+`_env_file=None` 双保险。回归锁：`tests/test_test_environment_isolation.py`（含
+"真实 .env 存在密钥时普通测试仍解析为 manual + 空 key"的 secret-safety 断言）。
+
 - **Evidence:** `tests/conftest.py:16-27`（仅 1 个 fixture，无 env 消毒）；
   `tests/test_navigation_ui.py:37`、`tests/test_v008_ui.py:25`、`tests/test_release_check.py:137`
   构造 `Settings(...)` 未传 `_env_file=None`；`src/config.py:54-57` 指向 `PROJECT_ROOT/.env`；
@@ -53,6 +64,18 @@
   `test_current_application_version_is_v050`（`tests/test_config.py:19`）。
 
 ### TD-02 发布门禁与冻结演示页互斥修复
+**状态（2026-08-29）：RESOLVED。** `scripts/release_check.py` 引入显式版本维度策略：
+`EXPECTED_VERSION`（发布版 0.6.0）与 `ACTIVE_MILESTONE_VERSION`（活动里程碑 0.6.1）分离；
+`MILESTONE_PAGES = {"0_知识Agent.py"}` 白名单页免于"标题含发布版"要求、改为必须包含
+里程碑版本行（普通页显示里程碑版本仍判 stale）；新增 `app_version="..."` 字面量规则
+（页面硬编码应用版本必须等于发布版）；README parity 与 parser 描述改为引用
+`EXPECTED_VERSION`（消除 v0.6.0/v0.5.3 硬编码漂移）。未改冻结页面本身。
+回归锁：`tests/test_release_check.py` 新增 8 项门禁策略测试，含
+`test_frozen_competition_agent_page_passes_version_consistency`（真实冻结树整树 PASS）。
+官方门禁全量运行复验：20/21 检查 PASS、`Version consistency: PASS`、内部 pytest
+2704 passed / 0 skipped；唯一 FAIL 为门禁运行暴露的**先存**文档漂移
+（`README_EN.md:106` `Schema v12` 大小写 vs 要求字面 `schema v12`），已对齐并单项复验 PASS。
+
 - **Evidence:** `scripts/release_check.py:449-467` 要求每个 `pages/*.py` 的
   `page_title=`/`st.title(` 行含 `v0.6.0`；`pages/0_知识Agent.py:603` 页面标题无版本号，
   v0.6.1 版本行经 HTML div 渲染（`:621`）不在过滤器视野内 → 现在重跑门禁必 FAIL；
@@ -65,6 +88,11 @@
   同时把 `:957` 描述、`:696-698` 硬编码字面量改为引用 `EXPECTED_VERSION`/`settings.app_version`。
 
 ### TD-03 roadmap 活文档状态修正
+**状态（2026-08-29）：RESOLVED。** `docs/v0.5.x-roadmap.md`：v0.5.x 状态改为
+"已完成（CLOSED）"；v0.6.x 状态改为 "v0.6.0 已发布（RELEASED / CLOSED，tag v0.6.0，
+2026-08-29）；v0.6.1 Competition Demo Experience 进行中（比赛演示冻结 KEEP_FROZEN）"。
+v0.7/v0.8/v0.9 的"尚未开始"保持不变（仍然真实）。历史文档未改写。
+
 - **Evidence:** `docs/v0.5.x-roadmap.md:21`（v0.5.x 仍标"当前版本线"）、`:42`
   （v0.6.x 标"未来规划；尚未开始，尚未实现"）vs `README.md:336`（v0.6.0 RELEASED/CLOSED）+ CHANGELOG。
 - **Why it matters:** 唯一发现的活文档级与现实矛盾；新协作者（比赛队友）会先读 roadmap。
@@ -128,6 +156,12 @@
   （审计已 grep 过 src/pages/scripts 均无）。
 
 ### TD-08 版本字面量治理
+**状态（2026-08-29）：RESOLVED。** `pages/4_检索资料.py:371,1300` 的
+`app_version="0.5.3"`（不匹配任何已声明版本）改为引用 `src.__version__` 包版本常量
+（与 `config.app_version` 由 `tests/test_config.py` 锁定一致，避免页面触碰运行时单例）；
+`scripts/release_check.py` 的 README parity / parser 描述硬编码字面量改为引用
+`EXPECTED_VERSION`。门禁新增 `app_version="..."` 字面量规则防止回退（TD-02 整改一部分）。
+
 - **Evidence:** `pages/4_检索资料.py:371,1300` 硬编码 `app_version="0.5.3"`
   （传入 `KnowledgeContextPackager` 元数据）；`release_check.py:696-698` 硬编码
   `v0.6.0` 与 `:43 EXPECTED_VERSION` 重复；页面标题版本散布
@@ -140,6 +174,12 @@
   明示的合法例外，不要动；其余页面统一改引 `settings.app_version`。
 
 ### TD-09 pages/4 无守护初始化修复
+**状态（2026-08-29）：RESOLVED。** `pages/4_检索资料.py:81` 的覆盖率初始化移入
+try/except：失败时 `LOGGER.exception` 记日志、显示中文错误并 `st.stop()`，
+与其他页面的守护模式一致（`app.py:22-34`、`pages/3:57-68`）。
+回归锁：`tests/test_search_ui.py::test_search_page_shows_friendly_error_when_coverage_init_fails`
+（AppTest 注入覆盖率故障 → 无异常屏、显示友好错误）。
+
 - **Evidence:** `pages/4_检索资料.py:81` 在模块级调用
   `application_coverage_service().coverage_summary()`，早于守护初始化块（`:458-475`）；
   对照 `app.py:22-34`、`pages/3_浏览资料.py:57-68` 均有 try/except+`st.stop()`。

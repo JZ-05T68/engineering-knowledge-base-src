@@ -8,6 +8,7 @@ from dataclasses import replace
 import streamlit as st
 import streamlit.components.v1 as components
 
+from src import __version__
 from src.batch_selection import BatchSelectionSource, build_visible_page_scope
 from src.batch_ui import (
     clear_inactive_visible_batch_state,
@@ -78,7 +79,12 @@ RESULTS_PER_PAGE = 10
 st.set_page_config(page_title="检索资料｜工程知识库 v0.6.0", page_icon="🔎", layout="wide")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
-_coverage = application_coverage_service().coverage_summary()
+try:
+    _coverage = application_coverage_service().coverage_summary()
+except Exception as exc:
+    LOGGER.exception("初始化检索资料页失败")
+    st.error(f"检索资料页初始化失败：{exc}")
+    st.stop()
 if _coverage.indexable:
     st.caption(
         f"向量索引覆盖率：{_coverage.indexed}/{_coverage.indexable}"
@@ -368,7 +374,7 @@ def _render_knowledge_scope(state: SearchPageState) -> None:
         knowledge_results,
         scope="knowledge",
         kb_uuid=database.get_knowledge_base_uuid(),
-        app_version="0.5.3",
+        app_version=__version__,
     )
 
 
@@ -1297,7 +1303,7 @@ if results and active_state.view_mode is SearchViewMode.PAGE:
         results,
         scope="page",
         kb_uuid=database.get_knowledge_base_uuid(),
-        app_version="0.5.3",
+        app_version=__version__,
     )
 
 

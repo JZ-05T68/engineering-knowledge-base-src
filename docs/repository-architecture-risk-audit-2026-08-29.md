@@ -396,3 +396,21 @@ fail-closed 行为有对抗测试（伪造引用、预算拒绝不打网络、�
 赛后第一周做三件小事：修 R-01（门禁）+ R-02（测试隔离）+ R-03（roadmap 两行），
 让流程重新可信；v0.7 立项时先写写能力 ADR 并修 R-04/R-05/R-06。
 不需要大重构：god-module 拆分只在 v0.7 写路径实际触碰 knowledge 区域时顺势进行。
+
+---
+
+## Remediation Status Addendum（2026-08-29 整改包，保留原发现不改写）
+
+| 发现 | 状态 | 整改内容 |
+| --- | --- | --- |
+| R-01 / TD-02（发布门禁与冻结树互斥） | RESOLVED | `scripts/release_check.py` 引入 `EXPECTED_VERSION`（0.6.0 发布版）与 `ACTIVE_MILESTONE_VERSION`（0.6.1 里程碑）双维度策略；`MILESTONE_PAGES={"0_知识Agent.py"}` 白名单页必须含里程碑版本行、免于标题含发布版要求；新增页面 `app_version="..."` 字面量防回退规则；README parity/parser 描述改引用 `EXPECTED_VERSION`。冻结页面本身零改动。锁定测试 8 项，含真实冻结树整树 PASS。 |
+| R-02 / TD-01（测试无环境隔离） | RESOLVED | `tests/conftest.py` 新增套件级 autouse `_isolate_developer_environment`：清除 `EKB_*`/`DASHSCOPE_*` 环境变量 + 中和 `Settings` 隐式 dotenv 源；opt-in 通道显式保留（`monkeypatch.setenv` / `Settings(_env_file=...)`）；3 处直接构造点补 `_env_file=None`。回归锁：`tests/test_test_environment_isolation.py`（含 secret-safety 断言：真实 `.env` 有密钥时普通测试仍为 manual + 空 key，证明隔离不可能意外启用真实 AI）。 |
+| R-03 / TD-03（roadmap 活文档漂移） | RESOLVED | `docs/v0.5.x-roadmap.md` 两行状态更新：v0.5.x → 已完成（CLOSED）；v0.6.x → v0.6.0 RELEASED/CLOSED + v0.6.1 进行中（演示冻结）。v0.7+ "尚未开始" 保持不变（仍然真实）。 |
+| TD-08（版本字面量治理，顺带） | RESOLVED | `pages/4_检索资料.py` 两处 `app_version="0.5.3"` → `src.__version__`；门禁 `app_version=` 字面量规则防回退。 |
+| TD-09（pages/4 无守护初始化，顺带） | RESOLVED | 覆盖率初始化移入 try/except + 中文错误 + `st.stop()`；AppTest 故障注入测试锁定。 |
+| 追加：README_EN `schema v12` 能力词漂移（门禁运行暴露） | RESOLVED | 官方 `release_check.py --expect-service-stopped` 全量运行（20/21 PASS、2704 passed/0 skipped、Version consistency PASS）暴露唯一 FAIL：`README_EN.md:106` 为 `Schema v12`（大小写漂移，中文版为小写），parity 检查要求字面 `schema v12`。已对齐为小写，`readme_parity_check` 单项复验 PASS。该漂移先于本包存在（门禁自 v0.6.0 收口后未再运行）。 |
+
+边界确认：比赛冻结面（`pages/0_知识Agent.py` 语义、`src/demo/**`、`src/demo_ui.py`、
+Mode 1/Mode 2 行为、A/B/C 场景、引用与完整性措辞）零改动；全局 `app_version` 仍为
+0.6.0；Hosted API 仍为 `/v0.6`；schema 仍为 v12；公网部署仍 DEFERRED；真实 AI 调用 0。
+R-04 及其余 P2/P3 项未在本包范围内，见技术债清单。

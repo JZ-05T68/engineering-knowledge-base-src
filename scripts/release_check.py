@@ -1,4 +1,11 @@
-"""Unified v0.6.0 release-readiness checks with clear process exit status."""
+"""Unified release-readiness checks with clear process exit status.
+
+The gate certifies the *released* application version (``EXPECTED_VERSION``,
+the global ``app_version`` truth). Distinct version dimensions — the active
+development milestone (v0.6.1 Competition Demo, displayable only on
+explicitly sanctioned pages), the Hosted API path version (``/v0.6``) and the
+SQLite schema version (v12) — are never conflated with it.
+"""
 
 from __future__ import annotations
 
@@ -40,8 +47,24 @@ from src.diagnostic_service import (  # noqa: E402
 )
 from src.migrations import SCHEMA_VERSION  # noqa: E402
 
+#: Released application version this gate certifies. This is the global
+#: ``app_version`` truth (``src/config.py`` + git tag), intentionally distinct
+#: from the Hosted API path version (``/v0.6``) and the SQLite schema version
+#: (v12) — the gate never conflates those dimensions.
 EXPECTED_VERSION: Final[str] = "0.6.0"
+#: Active development milestone that may legitimately be displayed by
+#: explicitly sanctioned pages (v0.6.1 Competition Demo Experience) while the
+#: global ``app_version`` stays at the released version.
+ACTIVE_MILESTONE_VERSION: Final[str] = "0.6.1"
+#: Pages sanctioned to display the active milestone version line instead of a
+#: released page version. Everything else must keep showing ``EXPECTED_VERSION``.
+MILESTONE_PAGES: Final[frozenset[str]] = frozenset({"0_知识Agent.py"})
 _VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(r"\bv\d+\.\d+\.\d+\b")
+#: Pages must not hardcode a stale application version into exported context
+#: metadata; the value must come from settings, not a literal.
+_PAGE_APP_VERSION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r'app_version\s*=\s*"([^"]+)"'
+)
 ISOLATION_PORTS: Final[tuple[int, ...]] = tuple(range(8502, 8513))
 _RUNTIME_ARTIFACT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"(?i)(?:^|/)(?:browser[-_]?acceptance|acceptance[-_]?artifacts?|test[-_]?data)(?:/|$)"
@@ -454,17 +477,41 @@ def version_consistency_check(
             if "page_title=" in line or "st.title(" in line
         )
         display_versions = set(_VERSION_PATTERN.findall(display_text))
-        if f"v{expected}" not in display_versions:
-            issues.append(f"{page.name} 未包含当前页面版本")
-        stale_versions = sorted(
-            version
-            for version in display_versions
-            if version != f"v{expected}"
-        )
+        if page.name in MILESTONE_PAGES:
+            # Explicit policy: the dedicated competition Agent page carries the
+            # active milestone version line (rendered outside ``page_title``).
+            # It is exempt from the released-version requirement but must show
+            # the sanctioned milestone version, and ordinary stale versions
+            # are still rejected.
+            if f"v{ACTIVE_MILESTONE_VERSION}" not in content:
+                issues.append(
+                    f"{page.name} 未包含活动里程碑版本 v{ACTIVE_MILESTONE_VERSION}"
+                )
+            stale_versions = sorted(
+                version
+                for version in display_versions
+                if version not in {f"v{expected}", f"v{ACTIVE_MILESTONE_VERSION}"}
+            )
+        else:
+            if f"v{expected}" not in display_versions:
+                issues.append(f"{page.name} 未包含当前页面版本")
+            stale_versions = sorted(
+                version
+                for version in display_versions
+                if version != f"v{expected}"
+            )
         if stale_versions:
             issues.append(
                 f"{page.name} 仍包含旧页面版本：{', '.join(stale_versions)}"
             )
+        # Live pages must not hardcode an application version into exported
+        # context metadata; ``app_version=`` literals must match the released
+        # version so the value can never silently drift backwards.
+        for literal in _PAGE_APP_VERSION_PATTERN.findall(content):
+            if literal != expected:
+                issues.append(
+                    f"{page.name} 硬编码了过期应用版本字面量：{literal}"
+                )
     return CheckResult(
         "Version consistency",
         CheckStatus.PASS if not issues else CheckStatus.FAIL,
@@ -693,10 +740,11 @@ def readme_parity_check(project_root: Path) -> CheckResult:
     readme = _safe_read(project_root / "README.md")
     readme_en = _safe_read(project_root / "README_EN.md")
     issues: list[str] = []
-    if not readme.startswith("# Engineering Knowledge Base v0.6.0"):
-        issues.append("README.md 标题版本不是 v0.6.0")
-    if not readme_en.startswith("# Engineering Knowledge Base v0.6.0"):
-        issues.append("README_EN.md 标题版本不是 v0.6.0")
+    released_title = f"# Engineering Knowledge Base v{EXPECTED_VERSION}"
+    if not readme.startswith(released_title):
+        issues.append(f"README.md 标题版本不是 v{EXPECTED_VERSION}")
+    if not readme_en.startswith(released_title):
+        issues.append(f"README_EN.md 标题版本不是 v{EXPECTED_VERSION}")
     zh_headings = re.findall(r"(?m)^## .+", readme)
     en_headings = re.findall(r"(?m)^## .+", readme_en)
     if len(zh_headings) != len(en_headings):
@@ -954,7 +1002,9 @@ def _last_output(value: str, maximum: int = 300) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="工程知识库 v0.5.3 统一发布检查")
+    parser = argparse.ArgumentParser(
+        description=f"工程知识库 v{EXPECTED_VERSION} 统一发布检查"
+    )
     backup_group = parser.add_mutually_exclusive_group()
     backup_group.add_argument(
         "--skip-backup",

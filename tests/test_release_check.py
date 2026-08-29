@@ -8,7 +8,10 @@ import pytest
 
 import scripts.release_check as release_check
 from scripts.release_check import (
+    ACTIVE_MILESTONE_VERSION,
     EXPECTED_VERSION,
+    MILESTONE_PAGES,
+    PROJECT_ROOT,
     CheckResult,
     CheckStatus,
     ReleaseChecker,
@@ -134,7 +137,7 @@ def test_release_closure_revalidates_existing_formal_backup(
 ) -> None:
     backup = tmp_path / "release-v0.1.2-20260721-120000-deadbeef"
     checker = ReleaseChecker(
-        Settings(app_title="工程知识库 v0.1.2", app_version="0.1.2"),
+        Settings(app_title="工程知识库 v0.1.2", app_version="0.1.2", _env_file=None),
         tmp_path,
     )
 
@@ -213,3 +216,203 @@ def test_pytest_count_parsers_support_project_quiet_output() -> None:
     assert successful_test_count(
         "..............F [100%]", returncode=1, collected=15
     ) == 0
+
+
+def test_frozen_competition_agent_page_passes_version_consistency() -> None:
+    """Audit R-01/TD-02 regression: the gate must accept the frozen tree.
+
+    The v0.6.1 competition Agent page intentionally carries no released
+    version in ``page_title`` and displays the milestone line elsewhere; the
+    gate must understand that policy instead of failing the whole release.
+    """
+
+    settings = Settings(_env_file=None)
+
+    result = version_consistency_check(
+        PROJECT_ROOT,
+        app_version=settings.app_version,
+        app_title=settings.app_title,
+    )
+
+    assert result.status is CheckStatus.PASS
+    assert "0.5.3" not in result.detail
+
+
+def test_milestone_page_policy_accepts_sanctioned_milestone_display(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "README.md").write_text(
+        f"# Engineering Knowledge Base v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        f"## v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text(
+        f'st.set_page_config(page_title="工程知识库 v{EXPECTED_VERSION}")',
+        encoding="utf-8",
+    )
+    (tmp_path / "pages" / "0_知识Agent.py").write_text(
+        'page_title="知识 Agent · 工程知识库"\n'
+        f'PAGE_VERSION_LINE = "v{ACTIVE_MILESTONE_VERSION} · Competition Demo"',
+        encoding="utf-8",
+    )
+
+    result = version_consistency_check(
+        tmp_path,
+        app_version=EXPECTED_VERSION,
+        app_title=f"工程知识库 v{EXPECTED_VERSION}",
+    )
+
+    assert result.status is CheckStatus.PASS
+
+
+def test_milestone_page_without_milestone_version_is_rejected(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "README.md").write_text(
+        f"# Engineering Knowledge Base v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        f"## v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text(
+        f'st.set_page_config(page_title="工程知识库 v{EXPECTED_VERSION}")',
+        encoding="utf-8",
+    )
+    (tmp_path / "pages" / "0_知识Agent.py").write_text(
+        'page_title="知识 Agent · 工程知识库"', encoding="utf-8"
+    )
+
+    result = version_consistency_check(
+        tmp_path,
+        app_version=EXPECTED_VERSION,
+        app_title=f"工程知识库 v{EXPECTED_VERSION}",
+    )
+
+    assert result.status is CheckStatus.FAIL
+    assert f"未包含活动里程碑版本 v{ACTIVE_MILESTONE_VERSION}" in result.detail
+
+
+def test_ordinary_page_missing_released_version_is_rejected(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "README.md").write_text(
+        f"# Engineering Knowledge Base v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        f"## v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text(
+        f'st.set_page_config(page_title="工程知识库 v{EXPECTED_VERSION}")',
+        encoding="utf-8",
+    )
+    (tmp_path / "pages" / "9_普通页.py").write_text(
+        'st.set_page_config(page_title="普通页 · 工程知识库")', encoding="utf-8"
+    )
+
+    result = version_consistency_check(
+        tmp_path,
+        app_version=EXPECTED_VERSION,
+        app_title=f"工程知识库 v{EXPECTED_VERSION}",
+    )
+
+    assert result.status is CheckStatus.FAIL
+    assert "9_普通页.py 未包含当前页面版本" in result.detail
+
+
+def test_ordinary_page_displaying_milestone_version_is_stale(
+    tmp_path: Path,
+) -> None:
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "README.md").write_text(
+        f"# Engineering Knowledge Base v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        f"## v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text(
+        f'st.set_page_config(page_title="工程知识库 v{EXPECTED_VERSION}")',
+        encoding="utf-8",
+    )
+    (tmp_path / "pages" / "9_普通页.py").write_text(
+        f'st.set_page_config(page_title="普通页 · 工程知识库 v{ACTIVE_MILESTONE_VERSION}")',
+        encoding="utf-8",
+    )
+
+    result = version_consistency_check(
+        tmp_path,
+        app_version=EXPECTED_VERSION,
+        app_title=f"工程知识库 v{EXPECTED_VERSION}",
+    )
+
+    assert result.status is CheckStatus.FAIL
+    assert "旧页面版本" in result.detail
+
+
+def test_stale_app_version_literal_in_page_is_rejected(tmp_path: Path) -> None:
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "README.md").write_text(
+        f"# Engineering Knowledge Base v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        f"## v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text(
+        f'st.set_page_config(page_title="工程知识库 v{EXPECTED_VERSION}")',
+        encoding="utf-8",
+    )
+    (tmp_path / "pages" / "9_普通页.py").write_text(
+        f'st.set_page_config(page_title="普通页 · 工程知识库 v{EXPECTED_VERSION}")\n'
+        'render_packager(app_version="0.5.3")',
+        encoding="utf-8",
+    )
+
+    result = version_consistency_check(
+        tmp_path,
+        app_version=EXPECTED_VERSION,
+        app_title=f"工程知识库 v{EXPECTED_VERSION}",
+    )
+
+    assert result.status is CheckStatus.FAIL
+    assert "硬编码了过期应用版本字面量：0.5.3" in result.detail
+
+
+def test_gate_does_not_confuse_api_schema_and_display_versions(
+    tmp_path: Path,
+) -> None:
+    """/v0.6 (API path) and schema v12 must never trip the display check."""
+
+    (tmp_path / "pages").mkdir()
+    (tmp_path / "README.md").write_text(
+        f"# Engineering Knowledge Base v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "CHANGELOG.md").write_text(
+        f"## v{EXPECTED_VERSION}\n", encoding="utf-8"
+    )
+    (tmp_path / "app.py").write_text(
+        f'st.set_page_config(page_title="工程知识库 v{EXPECTED_VERSION}")\n'
+        'st.caption("Hosted API: /v0.6 · schema v12 · 引用可点击")',
+        encoding="utf-8",
+    )
+    (tmp_path / "pages" / "9_普通页.py").write_text(
+        f'st.set_page_config(page_title="普通页 · 工程知识库 v{EXPECTED_VERSION}")\n'
+        'st.caption("POST /v0.6/agent/run 需要 schema v12 数据库")',
+        encoding="utf-8",
+    )
+
+    result = version_consistency_check(
+        tmp_path,
+        app_version=EXPECTED_VERSION,
+        app_title=f"工程知识库 v{EXPECTED_VERSION}",
+    )
+
+    assert result.status is CheckStatus.PASS
+
+
+def test_milestone_pages_policy_only_covers_the_competition_agent_page() -> None:
+    assert MILESTONE_PAGES == frozenset({"0_知识Agent.py"})
+    assert ACTIVE_MILESTONE_VERSION == "0.6.1"
+    assert EXPECTED_VERSION == "0.6.0"

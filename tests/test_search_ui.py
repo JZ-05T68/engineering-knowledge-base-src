@@ -180,3 +180,27 @@ def test_reader_rejects_missing_page_instead_of_falling_back(
     assert not app.exception
     assert any("不存在第 999 页" in item.value for item in app.error)
     assert not any(metric.label == "状态" for metric in app.metric)
+
+
+def test_search_page_shows_friendly_error_when_coverage_init_fails(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Audit R-10/TD-09: coverage init must not surface a raw traceback.
+
+    The page used to call the coverage service before any guarded init, so a
+    broken database produced an uncaught exception screen instead of the
+    guarded Chinese error used by every other page.
+    """
+
+    def _broken_coverage_service():
+        raise RuntimeError("synthetic coverage failure")
+
+    monkeypatch.setattr(
+        runtime, "application_coverage_service", _broken_coverage_service
+    )
+    _local_search_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("4_*.py"))
+    app = AppTest.from_file(str(page_path)).run(timeout=10)
+
+    assert not app.exception
+    assert any("检索资料页初始化失败" in item.value for item in app.error)

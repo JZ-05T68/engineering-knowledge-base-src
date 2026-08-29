@@ -103,7 +103,7 @@ Version capabilities:
 - **Knowledge Export**: lossless structured export of knowledge objects, sources, relations, revisions and memories with a manifest, per-file SHA-256 and one Markdown file per object.
 - **AI Ledger Export**: a standalone audit export of ai_calls metadata (JSON/JSONL authoritative), without content or credentials.
 - **Schema-v8 legacy backup isolated upgrade**: legacy database snapshots are upgraded to the current schema through a dedicated entry point while the original backup stays unchanged.
-- **Schema v12**: the current database structure hosting both knowledge assets and the AI ledger.
+- **schema v12**: the current database structure hosting both knowledge assets and the AI ledger.
 - **Local operation**: the official service binds to `127.0.0.1:8501` only; without an API Key all offline core features keep working.
 
 Explicit boundaries: AI does not write knowledge automatically; an Experience Candidate is not confirmed experience; there is no Agent; no tool calling; no long-term session memory; no automatic scanning of private files; no cloud sync; the AI call ledger does not store full prompts, context or answers; AI is an optional layer, not a dependency of core features.
