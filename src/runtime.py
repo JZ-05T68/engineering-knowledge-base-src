@@ -18,8 +18,9 @@ from src.ai.provider import (
     AiCallRecord,
     AIUnavailableError,
     AuditedAIProvider,
-    CompletionProvider,
     EmbeddingProvider,
+    build_production_audited_provider,
+    require_production_audited_provider,
 )
 from src.ai.qwen_client import QwenProvider, urllib_transport
 from src.ai.vector_recall import (
@@ -115,7 +116,7 @@ def application_database() -> Database:
 
 
 @lru_cache(maxsize=1)
-def application_ai_provider() -> CompletionProvider | None:
+def application_ai_provider() -> AuditedAIProvider | None:
     """Return the optional audited AI provider, or ``None`` when AI is disabled.
 
     AI is an optional capability, never a startup dependency: manual mode,
@@ -148,7 +149,7 @@ def application_ai_provider() -> CompletionProvider | None:
         max_extra_attempts=settings.ai_max_extra_attempts,
         transport=urllib_transport,
     )
-    return AuditedAIProvider(
+    provider = build_production_audited_provider(
         qwen_provider,
         default_model=settings.ai_llm_model,
         default_embedding_model=settings.ai_embedding_model,
@@ -156,6 +157,7 @@ def application_ai_provider() -> CompletionProvider | None:
         ledger=_LazyDatabaseAiCallLedger(),
         budget_guard=_LazyTokenBudgetGuard(settings),
     )
+    return require_production_audited_provider(provider)
 
 
 class _LazyDatabaseAiCallLedger:
@@ -223,6 +225,8 @@ def application_hybrid_search_service() -> HybridSearchService:
     database = application_database()
     lexical = SearchService(database)
     provider = application_ai_provider()
+    if provider is not None:
+        provider = require_production_audited_provider(provider)
     vector = None
     if isinstance(provider, EmbeddingProvider):
         vector = PersistentVectorRecallSource(
@@ -376,7 +380,10 @@ def application_experience_model_service() -> ExperienceModelService:
     UI layer. No network request happens at construction time.
     """
 
-    return ExperienceModelService(application_ai_provider())
+    provider = application_ai_provider()
+    if provider is not None:
+        provider = require_production_audited_provider(provider)
+    return ExperienceModelService(provider)
 
 
 @lru_cache(maxsize=1)

@@ -7,12 +7,33 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 import src.runtime as runtime
-from src.ai.provider import AIExecutionError
+from src.ai.provider import AIExecutionError, build_production_audited_provider
 from src.database import Database
 from src.knowledge_memory_service import KnowledgeMemoryService
 from src.models import KNOWLEDGE_MEMORY_STABLE_TYPE, build_stable_id
 
 MEMORY_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("15_*.py")))
+
+
+class _TestLedger:
+    def record(self, call) -> None:
+        return None
+
+
+class _TestBudgetGuard:
+    def ensure_allowed(self, capability: str) -> None:
+        return None
+
+
+def _production_provider(provider: object):
+    return build_production_audited_provider(
+        provider,
+        default_model="test-model",
+        default_embedding_model="test-embedding",
+        source_feature="experience_ui_test",
+        ledger=_TestLedger(),
+        budget_guard=_TestBudgetGuard(),
+    )
 
 
 def _make_database(tmp_path: Path) -> Database:
@@ -136,7 +157,7 @@ def test_provider_failure_does_not_break_memory_page(
             raise AIExecutionError("模拟调用失败")
 
     def provider_factory():
-        return _FailingProvider()
+        return _production_provider(_FailingProvider())
 
     _stub_runtime(database, monkeypatch, provider_factory)
     app = AppTest.from_file(MEMORY_PAGE).run(timeout=30)

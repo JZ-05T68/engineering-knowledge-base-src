@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from src.ai.provider import AiCallRecord, AIUnavailableError, AuditedAIProvider
+from src.ai.provider import (
+    AiCallRecord,
+    AIUnavailableError,
+    AuditedAIProvider,
+    build_production_audited_provider,
+    require_production_audited_provider,
+)
 from src.ai.qwen_client import QwenProvider, urllib_transport
 from src.database import Database
 from src.hosted_config import HostedSettings
@@ -60,7 +66,7 @@ def build_hosted_ai_provider(
         enable_thinking=False,
         transport=urllib_transport,
     )
-    return AuditedAIProvider(
+    audited = build_production_audited_provider(
         provider,
         default_model=settings.ai_llm_model,
         default_embedding_model=settings.ai_embedding_model,
@@ -68,3 +74,4 @@ def build_hosted_ai_provider(
         ledger=HostedDatabaseAiCallLedger(database),
         budget_guard=HostedDatabaseAiBudgetGuard(database, settings),
     )
+    return require_production_audited_provider(audited)

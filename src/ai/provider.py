@@ -41,12 +41,14 @@ __all__ = [
     "AIError",
     "AIExecutionError",
     "AIProvider",
+    "AIProductionCompositionError",
     "AIUnavailableError",
     "AiBudgetGuard",
     "AiCallLedger",
     "AiCallRecord",
     "AiOutputRecord",
     "AuditedAIProvider",
+    "build_production_audited_provider",
     "CompletionProvider",
     "CompletionResult",
     "CompletionUsage",
@@ -57,6 +59,7 @@ __all__ = [
     "RerankProvider",
     "RerankResult",
     "require_ai_provider",
+    "require_production_audited_provider",
 ]
 
 
@@ -75,6 +78,10 @@ class AIUnavailableError(AIError):
     from ``AIExecutionError`` so callers can tell "not configured" apart
     from "configured but the call failed".
     """
+
+
+class AIProductionCompositionError(AIUnavailableError):
+    """Production AI composition is missing its approved audit/budget boundary."""
 
 
 class AIExecutionError(AIError):
@@ -332,6 +339,9 @@ class _NullAiBudgetGuard:
         return None
 
 
+_PRODUCTION_COMPOSITION_MARKER = object()
+
+
 def _sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -371,6 +381,7 @@ class AuditedAIProvider:
         target_refs: Sequence[str] = (),
         ledger: AiCallLedger | None = None,
         budget_guard: AiBudgetGuard | None = None,
+        _production_marker: object | None = None,
     ) -> None:
         if not default_model.strip():
             raise ValueError("default_model 不能为空")
@@ -378,18 +389,19 @@ class AuditedAIProvider:
             raise ValueError("default_embedding_model 不能为空")
         if not source_feature.strip():
             raise ValueError("source_feature 不能为空")
-        self.wrapped = provider
+        self._wrapped = provider
         self._default_model = default_model
         self._default_embedding_model = default_embedding_model
         self._source_feature = source_feature
         self._target_refs = tuple(target_refs)
         self._ledger = ledger or _NullAiCallLedger()
         self._budget_guard = budget_guard or _NullAiBudgetGuard()
+        self._production_marker = _production_marker
 
     @property
     def is_configured(self) -> bool:
         """Mirror the wrapped provider's credential state when it exists."""
-        return bool(getattr(self.wrapped, "is_configured", False))
+        return bool(getattr(self._wrapped, "is_configured", False))
 
     def complete(
         self,
@@ -424,7 +436,7 @@ class AuditedAIProvider:
         self._ensure_allowed("completion", base)
         started = time.monotonic()
         try:
-            result = self.wrapped.complete(  # type: ignore[attr-defined]
+            result = self._wrapped.complete(  # type: ignore[attr-defined]
                 prompt, model=model, max_completion_tokens=max_completion_tokens
             )
         except AIUnavailableError:
@@ -488,7 +500,7 @@ class AuditedAIProvider:
         self._ensure_allowed("embedding", base)
         started = time.monotonic()
         try:
-            result = self.wrapped.embed(  # type: ignore[attr-defined]
+            result = self._wrapped.embed(  # type: ignore[attr-defined]
                 texts, model=model, dimensions=dimensions
             )
         except AIUnavailableError:
@@ -528,7 +540,7 @@ class AuditedAIProvider:
         top_n: int | None = None,
     ) -> RerankResult:
         """Delegate rerank directly; the Qwen adapter defers it for now."""
-        rerank = getattr(self.wrapped, "rerank", None)
+        rerank = getattr(self._wrapped, "rerank", None)
         if rerank is None:
             raise AIUnavailableError("AI 能力不可用：rerank 通道未配置。")
         return rerank(query, documents, model=model, top_n=top_n)
@@ -585,6 +597,50 @@ class AuditedAIProvider:
                 "AI 调用台账写入失败（不影响本次调用结果）：error_type=%s",
                 type(exc).__name__,
             )
+
+
+def build_production_audited_provider(
+    provider: object,
+    *,
+    default_model: str,
+    default_embedding_model: str,
+    source_feature: str,
+    ledger: AiCallLedger,
+    budget_guard: AiBudgetGuard,
+    target_refs: Sequence[str] = (),
+) -> AuditedAIProvider:
+    """Build the only wrapper shape approved for production composition roots."""
+
+    if ledger is None or budget_guard is None:
+        raise AIProductionCompositionError(
+            "AI 生产组合无效：必须配置审计台账与预算门禁。"
+        )
+    audited = AuditedAIProvider(
+        provider,
+        default_model=default_model,
+        default_embedding_model=default_embedding_model,
+        source_feature=source_feature,
+        target_refs=target_refs,
+        ledger=ledger,
+        budget_guard=budget_guard,
+        _production_marker=_PRODUCTION_COMPOSITION_MARKER,
+    )
+    return require_production_audited_provider(audited)
+
+
+def require_production_audited_provider(provider: object) -> AuditedAIProvider:
+    """Fail closed unless ``provider`` is the approved production wrapper."""
+
+    if (
+        not isinstance(provider, AuditedAIProvider)
+        or provider._production_marker is not _PRODUCTION_COMPOSITION_MARKER
+        or isinstance(provider._ledger, _NullAiCallLedger)
+        or isinstance(provider._budget_guard, _NullAiBudgetGuard)
+    ):
+        raise AIProductionCompositionError(
+            "AI 生产组合无效：必须使用经批准的审计与预算 provider。"
+        )
+    return provider
 
 
 def _elapsed_ms(started: float) -> int:

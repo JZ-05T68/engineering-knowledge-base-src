@@ -24,7 +24,11 @@ from src.ai.page_indexer import (
     EMBEDDING_DIMENSIONS,
     prepare_page_text,
 )
-from src.ai.provider import AIUnavailableError, EmbeddingResult
+from src.ai.provider import (
+    AIUnavailableError,
+    EmbeddingResult,
+    build_production_audited_provider,
+)
 from src.config import Settings
 from src.database import Database
 from src.models import Page
@@ -146,6 +150,27 @@ class UnavailableEmbeddingProvider:
         raise AIUnavailableError("未配置 API Key")
 
 
+class _TestLedger:
+    def record(self, call) -> None:
+        return None
+
+
+class _AllowBudgetGuard:
+    def ensure_allowed(self, capability: str) -> None:
+        return None
+
+
+def _production_provider(provider: object):
+    return build_production_audited_provider(
+        provider,
+        default_model="test-completion",
+        default_embedding_model=MODEL,
+        source_feature="hybrid_runtime_test",
+        ledger=_TestLedger(),
+        budget_guard=_AllowBudgetGuard(),
+    )
+
+
 # ------------------------------------------------------------------ dimensions
 
 
@@ -164,7 +189,11 @@ def test_factory_wires_canonical_dimensions_into_recall_source(
     _library(database_path)
     _stub_settings(monkeypatch, database_path, ai_mode="api", ai_api_key="sk-contract-test")
     _stub_database(monkeypatch, database_path)
-    monkeypatch.setattr(runtime, "application_ai_provider", lambda: FakeEmbeddingProvider())
+    monkeypatch.setattr(
+        runtime,
+        "application_ai_provider",
+        lambda: _production_provider(FakeEmbeddingProvider()),
+    )
 
     captured: dict[str, object] = {}
 
@@ -201,7 +230,9 @@ def test_factory_dimensions_match_persisted_embedding_contract(
     _stub_settings(monkeypatch, database_path, ai_mode="api", ai_api_key="sk-contract-test")
     _stub_database(monkeypatch, database_path)
     fake = FakeEmbeddingProvider()
-    monkeypatch.setattr(runtime, "application_ai_provider", lambda: fake)
+    monkeypatch.setattr(
+        runtime, "application_ai_provider", lambda: _production_provider(fake)
+    )
 
     outcome = runtime.application_hybrid_search_service().search("定时器")
 
@@ -334,7 +365,9 @@ def test_fake_provider_hybrid_regression_full_assembly(
     _stub_settings(monkeypatch, database_path, ai_mode="api", ai_api_key="sk-regression-test")
     _stub_database(monkeypatch, database_path)
     fake = FakeEmbeddingProvider()
-    monkeypatch.setattr(runtime, "application_ai_provider", lambda: fake)
+    monkeypatch.setattr(
+        runtime, "application_ai_provider", lambda: _production_provider(fake)
+    )
 
     outcome = runtime.application_hybrid_search_service().search("定时器")
 
@@ -364,7 +397,9 @@ def test_fake_provider_hybrid_without_stored_embeddings_reports_empty(
     _stub_settings(monkeypatch, database_path, ai_mode="api", ai_api_key="sk-regression-test")
     _stub_database(monkeypatch, database_path)
     fake = FakeEmbeddingProvider()
-    monkeypatch.setattr(runtime, "application_ai_provider", lambda: fake)
+    monkeypatch.setattr(
+        runtime, "application_ai_provider", lambda: _production_provider(fake)
+    )
 
     outcome = runtime.application_hybrid_search_service().search("定时器")
 
@@ -401,7 +436,9 @@ def test_natural_language_query_fuses_both_branches(
     _stub_settings(monkeypatch, database_path, ai_mode="api", ai_api_key="sk-regression-test")
     _stub_database(monkeypatch, database_path)
     fake = FakeEmbeddingProvider()
-    monkeypatch.setattr(runtime, "application_ai_provider", lambda: fake)
+    monkeypatch.setattr(
+        runtime, "application_ai_provider", lambda: _production_provider(fake)
+    )
 
     outcome = runtime.application_hybrid_search_service().search(query)
 
@@ -423,7 +460,9 @@ def test_fake_provider_unavailable_degrades_to_lexical(
     _stub_settings(monkeypatch, database_path, ai_mode="api", ai_api_key="sk-regression-test")
     _stub_database(monkeypatch, database_path)
     monkeypatch.setattr(
-        runtime, "application_ai_provider", lambda: UnavailableEmbeddingProvider()
+        runtime,
+        "application_ai_provider",
+        lambda: _production_provider(UnavailableEmbeddingProvider()),
     )
 
     outcome = runtime.application_hybrid_search_service().search("定时器")

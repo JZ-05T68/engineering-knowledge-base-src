@@ -8,10 +8,13 @@ import pytest
 
 import src.prompt_builder as prompt_builder
 from src.ai.provider import (
+    AiCallRecord,
     AIError,
     AIExecutionError,
+    AIProductionCompositionError,
     AIProvider,
     AIUnavailableError,
+    AuditedAIProvider,
     CompletionProvider,
     CompletionResult,
     CompletionUsage,
@@ -20,7 +23,9 @@ from src.ai.provider import (
     RerankHit,
     RerankProvider,
     RerankResult,
+    build_production_audited_provider,
     require_ai_provider,
+    require_production_audited_provider,
 )
 
 
@@ -53,6 +58,33 @@ class _FakeRerank:
 class _FakeLegacy:
     def generate(self, prompt: str) -> str:
         return prompt
+
+
+class _CountingCompletion(_FakeCompletion):
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def complete(self, prompt, *, model=None, max_completion_tokens=None):
+        self.calls += 1
+        return super().complete(
+            prompt, model=model, max_completion_tokens=max_completion_tokens
+        )
+
+
+class _RecordingLedger:
+    def __init__(self) -> None:
+        self.records: list[AiCallRecord] = []
+
+    def record(self, call: AiCallRecord) -> None:
+        self.records.append(call)
+
+
+class _AllowBudgetGuard:
+    def __init__(self) -> None:
+        self.capabilities: list[str] = []
+
+    def ensure_allowed(self, capability: str) -> None:
+        self.capabilities.append(capability)
 
 
 def test_exception_hierarchy_separates_unavailable_from_execution() -> None:
@@ -112,3 +144,68 @@ def test_require_ai_provider_turns_none_into_typed_unavailable() -> None:
 
     provider = _FakeCompletion()
     assert require_ai_provider(provider) is provider
+
+
+def test_audited_provider_has_no_public_wrapped_escape_hatch() -> None:
+    provider = AuditedAIProvider(
+        _FakeCompletion(),
+        default_model="fake-model",
+        default_embedding_model="fake-embedding",
+        source_feature="test",
+    )
+
+    for name in ("wrapped", "raw", "inner", "transport", "provider", "underlying"):
+        assert not hasattr(provider, name)
+
+
+def test_production_boundary_rejects_raw_provider_before_transport() -> None:
+    raw = _CountingCompletion()
+
+    with pytest.raises(AIProductionCompositionError):
+        require_production_audited_provider(raw)
+
+    assert raw.calls == 0
+
+
+def test_production_boundary_rejects_unapproved_or_incomplete_wrapper() -> None:
+    low_level = AuditedAIProvider(
+        _FakeCompletion(),
+        default_model="fake-model",
+        default_embedding_model="fake-embedding",
+        source_feature="test",
+    )
+
+    with pytest.raises(AIProductionCompositionError):
+        require_production_audited_provider(low_level)
+    with pytest.raises(AIProductionCompositionError):
+        build_production_audited_provider(
+            _FakeCompletion(),
+            default_model="fake-model",
+            default_embedding_model="fake-embedding",
+            source_feature="test",
+            ledger=None,  # type: ignore[arg-type]
+            budget_guard=_AllowBudgetGuard(),
+        )
+
+
+def test_production_builder_preserves_audit_budget_and_transport_order() -> None:
+    raw = _CountingCompletion()
+    ledger = _RecordingLedger()
+    budget = _AllowBudgetGuard()
+    provider = build_production_audited_provider(
+        raw,
+        default_model="fake-model",
+        default_embedding_model="fake-embedding",
+        source_feature="composition_test",
+        ledger=ledger,
+        budget_guard=budget,
+    )
+
+    assert require_production_audited_provider(provider) is provider
+    result = provider.complete("test prompt")
+
+    assert result.text == "echo:test prompt"
+    assert raw.calls == 1
+    assert budget.capabilities == ["completion"]
+    assert len(ledger.records) == 1
+    assert ledger.records[0].source_feature == "composition_test"

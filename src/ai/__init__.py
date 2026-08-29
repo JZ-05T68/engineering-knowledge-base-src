@@ -13,6 +13,7 @@ from src.ai.provider import (
     AIError,
     AIExecutionError,
     AiOutputRecord,
+    AIProductionCompositionError,
     AIProvider,
     AIUnavailableError,
     AuditedAIProvider,
@@ -24,19 +25,23 @@ from src.ai.provider import (
     RerankHit,
     RerankProvider,
     RerankResult,
+    build_production_audited_provider,
     require_ai_provider,
+    require_production_audited_provider,
 )
 
 __all__ = [
     "AIError",
     "AIExecutionError",
     "AIProvider",
+    "AIProductionCompositionError",
     "AIUnavailableError",
     "AiBudgetGuard",
     "AiCallLedger",
     "AiCallRecord",
     "AiOutputRecord",
     "AuditedAIProvider",
+    "build_production_audited_provider",
     "CompletionProvider",
     "CompletionResult",
     "CompletionUsage",
@@ -46,4 +51,5 @@ __all__ = [
     "RerankProvider",
     "RerankResult",
     "require_ai_provider",
+    "require_production_audited_provider",
 ]

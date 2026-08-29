@@ -18,7 +18,12 @@ from src.ai.experience_model_service import (
     ExperienceModelError,
     ExperienceModelService,
 )
-from src.ai.provider import AIError, AIUnavailableError
+from src.ai.provider import (
+    AIError,
+    AIProductionCompositionError,
+    AIUnavailableError,
+    require_production_audited_provider,
+)
 from src.ai.rag_answer_service import MockCompletionProvider
 from src.database import Database
 from src.knowledge_context import ContextItemProjector, ContextProjectionError
@@ -90,12 +95,14 @@ def _resolve_provider() -> tuple[object, bool]:
 
     try:
         provider = application_ai_provider()
+    except AIProductionCompositionError:
+        raise
     except Exception:
         LOGGER.exception("解析 AI provider 失败，回退到离线演示")
         provider = None
     if provider is None:
         return MockCompletionProvider(), True
-    return provider, False
+    return require_production_audited_provider(provider), False
 
 
 def render_experience_section(database: Database) -> None:

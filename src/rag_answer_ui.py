@@ -16,7 +16,12 @@ from collections.abc import Sequence
 
 import streamlit as st
 
-from src.ai.provider import AIError, AIUnavailableError
+from src.ai.provider import (
+    AIError,
+    AIProductionCompositionError,
+    AIUnavailableError,
+    require_production_audited_provider,
+)
 from src.ai.rag_answer_service import (
     MockCompletionProvider,
     RagAnswerError,
@@ -74,12 +79,14 @@ def _resolve_provider() -> tuple[object, bool]:
 
     try:
         provider = application_ai_provider()
+    except AIProductionCompositionError:
+        raise
     except Exception:
         LOGGER.exception("解析 AI provider 失败，回退到离线演示回答")
         provider = None
     if provider is None:
         return MockCompletionProvider(), True
-    return provider, False
+    return require_production_audited_provider(provider), False
 
 
 def render_ask_ai_section(

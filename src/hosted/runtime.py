@@ -14,6 +14,7 @@ from src.agent import (
     build_single_step_executor,
 )
 from src.agent.tools import ToolSideEffect
+from src.ai.provider import require_production_audited_provider
 from src.ai.rag_answer_service import RagAnswerService
 from src.evidence_basket_service import EvidenceBasketService
 from src.hosted.ai_runtime import build_hosted_ai_provider
@@ -38,7 +39,9 @@ def compose_hosted_dependencies(
     if settings != storage.settings or storage.readiness_reason(storage.database_path) is not None:
         raise ValueError("hosted_storage_invalid")
     database = storage.database
-    provider = build_hosted_ai_provider(settings, database)
+    provider = require_production_audited_provider(
+        build_hosted_ai_provider(settings, database)
+    )
     executor = build_single_step_executor(database)
     # Read the existing private registry at this composition boundary only; do
     # not alter the frozen executor API or construct a parallel tool catalog.
