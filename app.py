@@ -39,6 +39,20 @@ if quarantine_reconciliation is not None and quarantine_reconciliation.has_atten
         "请前往“系统维护”页查看详情。"
     )
 
+demo_entry = st.columns([3.2, 1])
+demo_entry[0].markdown(
+    "**比赛演示 · 知识 Agent 工作台**：提问 → 有依据回答 → 来源核验 → 信任边界，"
+    "预置离线演示数据，本地运行、无需 API Key。"
+)
+if demo_entry[1].button(
+    "进入知识 Agent →",
+    type="primary",
+    use_container_width=True,
+):
+    st.switch_page("pages/0_知识Agent.py")
+
+st.divider()
+
 columns = st.columns(6)
 for column, label, value in zip(
     columns,
