@@ -108,7 +108,7 @@ def test_empty_fixture_maps_to_no_evidence_outcome(client: MockDemoClient) -> No
 def test_failed_fixture_maps_to_failed_outcome(client: MockDemoClient) -> None:
     view_model = _answered(client, "REHEARSAL_FAILED")
     assert view_model.outcome is DisplayOutcome.FAILED
-    assert view_model.failure_headline == "本次请求失败"
+    assert view_model.failure_headline == "本次请求未完成"
     assert view_model.failure_detail
     assert view_model.paragraphs == ()
     for forbidden in ("Traceback", "Exception", "{", "tool"):
@@ -342,10 +342,66 @@ def test_preset_chips_map_three_main_questions() -> None:
     assert {chip.preset_id for chip in backups} == {"A2", "EMPTY", "REHEARSAL_FAILED"}
 
 
+def test_preset_chips_use_human_scenario_titles() -> None:
+    # judge-facing titles never leak fixture identifiers
+    for chip in build_preset_chips():
+        assert "_" not in chip.short_label
+        assert chip.short_label not in ("success_grounded_a", "partial_warning_b")
+        assert chip.question == DEMO_QUESTIONS[chip.preset_id]
+
+
+def test_source_viewer_support_note_mock_dedup_or_anchor() -> None:
+    client = MockDemoClient()
+    # Scenario A anchor repeats title·page — deduplicated to the verified line.
+    response = client.run_agent(DEMO_QUESTIONS["A"])
+    metadata = {sid: client.get_source(sid) for sid in response.citations}
+    view_model = build_answer_view_model(DEMO_QUESTIONS["A"], response, metadata)
+    source = build_source_view_model(view_model.chips[0], metadata[view_model.chips[0].stable_id])
+    assert source.support_note == demo_ui.VERIFIED_SUPPORT_NOTE
+    # Scenario C anchor (完整性检查目标) is distinct and stays.
+    response_c = client.run_agent(DEMO_QUESTIONS["C"])
+    metadata_c = {sid: client.get_source(sid) for sid in response_c.citations}
+    view_model_c = build_answer_view_model(DEMO_QUESTIONS["C"], response_c, metadata_c)
+    source_c = build_source_view_model(
+        view_model_c.chips[0], metadata_c[view_model_c.chips[0].stable_id]
+    )
+    assert source_c.support_note == "完整性检查目标"
+
+
+def test_source_viewer_support_note_mode1_falls_back_to_verified_line() -> None:
+    stable_id = "0e6b1de5-0000-4000-8000-000000000001:page:1"
+    response = AgentRunResponse(
+        request_id="real-4",
+        status="completed",
+        answer="结论。",
+        grounded=True,
+        citations=(stable_id,),
+        warnings=(),
+        error=None,
+    )
+    metadata = {
+        stable_id: DemoSourceResponse(
+            stable_id=stable_id,
+            type=ContextItemType.PAGE,
+            title="调试手册",
+            label="第 3 页",
+        )
+    }
+    view_model = build_answer_view_model("问题", response, metadata)
+    source = build_source_view_model(view_model.chips[0], metadata[stable_id])
+    assert source.support_note == demo_ui.VERIFIED_SUPPORT_NOTE
+
+
 def test_mode_labels_identify_mock_mode_visibly() -> None:
     assert AgentMode.MOCK_DEMO.badge == "预置离线演示"
-    assert "mock_demo" in AgentMode.MOCK_DEMO.caption
+    assert "预置演示数据" in AgentMode.MOCK_DEMO.caption
     assert AgentMode.LOCAL_AGENT.badge == "本机 Agent"
+    # judge-visible copy stays jargon-free
+    for jargon in ("mock_demo", "/v0.6", "HTTP", "DTO", "loopback"):
+        assert jargon not in AgentMode.MOCK_DEMO.caption
+        assert jargon not in AgentMode.LOCAL_AGENT.caption
+        assert jargon not in AgentMode.MOCK_DEMO.label
+        assert jargon not in AgentMode.LOCAL_AGENT.label
 
 
 def test_stale_state_helpers() -> None:

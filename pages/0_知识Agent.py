@@ -46,21 +46,28 @@ LIVE_CLIENT_KEY = "agent_live_client"
 
 _CSS = """
 /* EKB Agent Workspace — page-local styles only (ekb-aw-* namespace). */
-div[data-testid="stMainBlockContainer"] { padding-top: 1.1rem; }
+div[data-testid="stMainBlockContainer"] { padding-top: 0.9rem; }
 @media (min-width: 1600px) { div[data-testid="stMainBlockContainer"] { max-width: 1760px; } }
+/* Hide the Streamlit toolbar chrome (Deploy menu / status widget) on this
+   competition surface only; sidebar navigation stays reachable. */
+div[data-testid="stToolbar"] { display: none; }
 
+/* --- header & brand --- */
 .ekb-aw-header { display: flex; align-items: flex-end; justify-content: space-between;
-    gap: 1.5rem; padding-bottom: 0.75rem; margin-bottom: 0.75rem;
+    gap: 1.5rem; padding-bottom: 0.65rem; margin-bottom: 0.6rem;
     border-bottom: 1px solid #e2e8f0; }
 .ekb-aw-brand { font-size: 12.5px; font-weight: 800; letter-spacing: 0.14em;
     color: #2563eb; text-transform: uppercase; }
-.ekb-aw-title { font-size: 27px; font-weight: 800; color: #0f172a; margin: 2px 0 4px; }
+.ekb-aw-title { font-size: 26px; font-weight: 800; color: #0f172a; margin: 2px 0 3px; }
 .ekb-aw-sub { font-size: 13px; color: #64748b; }
-.ekb-aw-mode-badge { display: inline-flex; align-items: center; gap: 6px;
+.ekb-aw-mode-badge { display: inline-flex; align-items: center; gap: 7px;
     padding: 6px 14px; border-radius: 999px; font-size: 13px; font-weight: 800;
     white-space: nowrap; }
+.ekb-aw-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .ekb-aw-mode-mock { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
+.ekb-aw-mode-mock .ekb-aw-dot { background: #d97706; }
 .ekb-aw-mode-live { background: #ecfdf5; color: #166534; border: 1px solid #a7f3d0; }
+.ekb-aw-mode-live .ekb-aw-dot { background: #16a34a; }
 
 .ekb-aw-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px;
     padding: 16px 22px; margin-bottom: 12px; }
@@ -132,6 +139,10 @@ div[data-testid="stMainBlockContainer"] { padding-top: 1.1rem; }
     border: 1px solid #cbd5e1; border-radius: 999px; padding: 2px 10px; }
 .ekb-aw-viewer-row { font-size: 13.5px; color: #475569; margin-bottom: 4px; line-height: 1.6; }
 .ekb-aw-viewer-row b { color: #334155; }
+.ekb-aw-support { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af;
+    border-radius: 10px; padding: 9px 12px; font-size: 13.5px; line-height: 1.7;
+    margin-top: 8px; }
+.ekb-aw-support b { display: block; margin-bottom: 2px; }
 .ekb-aw-integrity { border-radius: 10px; padding: 10px 13px; font-size: 13.5px;
     margin-top: 8px; line-height: 1.7; }
 .ekb-aw-integrity-ok { background: #ecfdf5; border: 1px solid #a7f3d0; color: #166534; }
@@ -143,6 +154,9 @@ div[data-testid="stMainBlockContainer"] { padding-top: 1.1rem; }
 
 .ekb-aw-section-label { font-size: 13px; font-weight: 700; color: #334155;
     margin: 8px 0 6px; }
+.ekb-aw-preset-q { font-size: 12.5px; color: #64748b; line-height: 1.55;
+    margin: 4px 2px 0; min-height: 2.6em; overflow: hidden; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 """
 
 
@@ -354,17 +368,26 @@ def _render_grounded_answer(view_model: Any) -> None:
             "<div class='ekb-aw-section-label'>引用来源 · 点击在右侧查看详情</div>",
             unsafe_allow_html=True,
         )
+        selected_id = st.session_state.get(SELECTED_KEY)
         for row_start in range(0, len(view_model.chips), 3):
             row = view_model.chips[row_start : row_start + 3]
             columns = st.columns(3)
             for column, chip in zip(columns, row, strict=False):
+                selected = selected_id == chip.stable_id
                 prefix = f"#{chip.display_index}" if chip.display_index else "来源"
                 column.button(
-                    f"{prefix} · {chip.title}",
+                    f"{'▸ ' if selected else ''}{prefix} · {chip.title}",
                     key=f"cite_{chip.stable_id}_{chip.display_index or 'n'}",
                     on_click=_select_source,
                     args=(chip.stable_id,),
                     use_container_width=True,
+                    type="primary" if selected else "secondary",
+                )
+                location = chip.location or demo_ui.LOCATION_FALLBACK
+                column.markdown(
+                    "<div class='ekb-aw-preset-q'>"
+                    f"{demo_ui.escape_text(f'{chip.type_label} · {location}')}</div>",
+                    unsafe_allow_html=True,
                 )
 
 
@@ -462,34 +485,33 @@ def _viewer_html(source: Any) -> str:
     ]
     if source.citation_index is not None:
         chip_row.append(f"<span class='ekb-aw-chip'>引用 #{source.citation_index}</span>")
-    rows: list[str] = []
-    if source.anchor_note:
-        rows.append(
-            "<div class='ekb-aw-viewer-row'><b>引用位置</b> · "
-            f"{demo_ui.escape_text(source.anchor_note)}</div>"
+    support_html = ""
+    if source.support_note and not source.unavailable:
+        support_html = (
+            "<div class='ekb-aw-support'><b>为什么与回答有关</b>"
+            f"{demo_ui.escape_text(source.support_note)}</div>"
         )
     integrity_html = ""
     if source.integrity is not None:
         integrity_html = (
             f"<div class='ekb-aw-integrity ekb-aw-integrity-{source.integrity.tone}'>"
-            f"<b>完整性状态 · {demo_ui.escape_text(source.integrity.label)}</b>"
+            f"<b>来源状态 · {demo_ui.escape_text(source.integrity.label)}</b>"
             f"{demo_ui.escape_text(source.integrity.explanation)}</div>"
         )
     elif source.integrity_note:
         integrity_html = (
             "<div class='ekb-aw-integrity ekb-aw-integrity-muted'>"
-            f"<b>完整性状态</b>{demo_ui.escape_text(source.integrity_note)}</div>"
+            f"<b>来源状态</b>{demo_ui.escape_text(source.integrity_note)}</div>"
         )
     note_html = ""
     if source.note:
         note_html = f"<div class='ekb-aw-note'>{demo_ui.escape_text(source.note)}</div>"
     return (
         "<div class='ekb-aw-viewer'>"
-        "<div class='ekb-aw-viewer-kicker'>来源详情</div>"
+        "<div class='ekb-aw-viewer-kicker'>来源详情 · 已验证</div>"
         f"<div class='ekb-aw-viewer-title'>{demo_ui.escape_text(source.title)}</div>"
         f"<div class='ekb-aw-chiprow'>{''.join(chip_row)}</div>"
-        f"{''.join(rows)}"
-        f"{integrity_html}{note_html}"
+        f"{support_html}{integrity_html}{note_html}"
         "</div>"
     )
 
@@ -508,7 +530,10 @@ def _render_sources_panel() -> None:
     )
     if not chips:
         if not fresh:
-            hint = "回答后，这里会列出支撑答案的每一条来源，点击即可查看详情。"
+            hint = (
+                "运行一个演示问题后，这里会显示回答的每一条依据，点击即可查看详情。"
+                "EKB 的关键结论可以回到来源。"
+            )
         elif record is not None and (
             record.transport_failed or record.response.status == "failed"
         ):
@@ -546,8 +571,7 @@ def _render_sources_panel() -> None:
     selected_chip = next((c for c in chips if c.stable_id == selected_id), None)
     if selected_chip is None:
         st.markdown(
-            "<div class='ekb-aw-panel-empty'>点击上方一条来源，查看它为什么支持这条回答"
-            "（仅展示安全的来源元数据）。</div>",
+            "<div class='ekb-aw-panel-empty'>点击上方一条来源，查看它为什么支持这条回答。</div>",
             unsafe_allow_html=True,
         )
         return
@@ -584,7 +608,9 @@ st.markdown(
     "<div class='ekb-aw-title'>知识 Agent 工作台</div>"
     f"<div class='ekb-aw-sub'>{demo_ui.escape_text(PAGE_VERSION_LINE)}</div>"
     "</div><div>"
-    f"<span class='ekb-aw-mode-badge {mode_class}'>{demo_ui.escape_text(mode.badge)}</span>"
+    f"<span class='ekb-aw-mode-badge {mode_class}'>"
+    "<span class='ekb-aw-dot' aria-hidden='true'></span>"
+    f"{demo_ui.escape_text(mode.badge)}</span>"
     "</div></div>",
     unsafe_allow_html=True,
 )
@@ -606,7 +632,7 @@ if mode is AgentMode.LOCAL_AGENT:
             key=LIVE_BASE_KEY,
             on_change=_on_base_url_change,
         )
-        st.caption("默认 http://127.0.0.1:8000。需先在本机启动 Hosted Agent 服务。")
+        st.caption("默认 http://127.0.0.1:8000，仅限本机回环地址。")
 st.caption(mode.caption)
 
 with st.form("agent_ask_form", border=True):
@@ -630,7 +656,7 @@ if submitted:
         st.info("请先输入一个工程问题，或点击下方演示题卡。")
 
 st.markdown(
-    "<div class='ekb-aw-section-label'>演示题卡 · 一键运行</div>",
+    "<div class='ekb-aw-section-label'>演示场景 · 一键提问</div>",
     unsafe_allow_html=True,
 )
 main_columns = st.columns(3)
@@ -643,20 +669,27 @@ for column, chip in zip(
         on_click=_queue_question,
         args=(chip.question,),
         use_container_width=True,
-        help=chip.question,
     )
-secondary_columns = st.columns(3)
-for column, chip in zip(
-    secondary_columns, (chip for chip in preset_chips if not chip.main), strict=True
-):
-    column.button(
-        f"{chip.tag} · {chip.short_label}",
-        key=f"preset_{chip.preset_id}",
-        on_click=_queue_question,
-        args=(chip.question,),
-        use_container_width=True,
-        help=chip.question,
+    column.markdown(
+        f"<div class='ekb-aw-preset-q'>{demo_ui.escape_text(chip.question)}</div>",
+        unsafe_allow_html=True,
     )
+with st.expander("更多演示问题（备用与排练）"):
+    secondary_columns = st.columns(3)
+    for column, chip in zip(
+        secondary_columns, (chip for chip in preset_chips if not chip.main), strict=True
+    ):
+        column.button(
+            f"{chip.tag} · {chip.short_label}",
+            key=f"preset_{chip.preset_id}",
+            on_click=_queue_question,
+            args=(chip.question,),
+            use_container_width=True,
+        )
+        column.markdown(
+            f"<div class='ekb-aw-preset-q'>{demo_ui.escape_text(chip.question)}</div>",
+            unsafe_allow_html=True,
+        )
 
 body = st.columns([1.62, 1], gap="medium")
 with body[0]:

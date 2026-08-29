@@ -77,7 +77,7 @@ class AgentMode(StrEnum):
     def label(self) -> str:
         return {
             self.MOCK_DEMO: "预置离线演示（推荐）",
-            self.LOCAL_AGENT: "本机 Agent（/v0.6 HTTP）",
+            self.LOCAL_AGENT: "本机 Agent 服务（需先启动）",
         }[self]
 
     @property
@@ -91,12 +91,11 @@ class AgentMode(StrEnum):
     def caption(self) -> str:
         return {
             self.MOCK_DEMO: (
-                "响应来自确定性预置演示数据（mock_demo），不是实时模型输出；"
-                "无需 API Key、无需网络、不访问真实知识库数据。"
+                "回答由预置演示数据生成，不是实时模型输出；无需联网，无需 API Key。"
             ),
             self.LOCAL_AGENT: (
-                "调用本机 Hosted Agent 服务（loopback /v0.6 API）；"
-                "需要先在本机启动该服务。"
+                "连接本机知识服务回答问题；服务未启动时会明确提示，"
+                "可随时切回预置离线演示。"
             ),
         }[self]
 
@@ -135,7 +134,7 @@ class Badge:
 _GROUNDED_BADGE = Badge(icon="✓", text="有依据回答", tone="ok")
 _LIMITED_BADGE = Badge(icon="⚠", text="来源存在限制", tone="warn")
 _NO_EVIDENCE_BADGE = Badge(icon="○", text="未找到可支持资料", tone="empty")
-_FAILED_BADGE = Badge(icon="×", text="本次请求失败", tone="error")
+_FAILED_BADGE = Badge(icon="×", text="本次请求未完成", tone="error")
 _RATE_LIMIT_BADGE = Badge(icon="⏳", text="请求过于频繁", tone="warn")
 _UNAVAILABLE_BADGE = Badge(icon="⏻", text="本机服务不可用", tone="error")
 
@@ -196,10 +195,10 @@ def classify_outcome(response: Any) -> DisplayOutcome:
 
 def failure_headline(outcome: DisplayOutcome) -> str:
     return {
-        DisplayOutcome.FAILED: "本次请求失败",
+        DisplayOutcome.FAILED: "本次请求未完成",
         DisplayOutcome.RATE_LIMITED: "请求过于频繁，请稍后再试",
         DisplayOutcome.BACKEND_UNAVAILABLE: "本机 Agent 服务当前不可用",
-    }.get(outcome, "本次请求失败")
+    }.get(outcome, "本次请求未完成")
 
 
 def failure_detail(outcome: DisplayOutcome, error_message: str | None = None) -> str:
@@ -280,6 +279,7 @@ INTEGRITY_BADGES: dict[ContextFingerprintState, IntegrityBadge] = {
 SOURCE_UNAVAILABLE_NOTE = "该来源暂时不可检查（来源详情获取失败），不影响已给出的答案。"
 LOCATION_FALLBACK = "位置信息未提供"
 LIVE_INTEGRITY_NOTE = "当前模式未提供该来源的完整性状态，仅展示来源元数据。"
+VERIFIED_SUPPORT_NOTE = "本条回答的已验证来源之一，支撑回答中的对应结论。"
 
 
 def short_source_id(stable_id: str) -> str:
@@ -318,6 +318,7 @@ class SourceViewModel:
     type_label: str
     location: str
     citation_index: int | None
+    support_note: str | None = None
     anchor_note: str | None = None
     integrity: IntegrityBadge | None = None
     integrity_note: str | None = None
@@ -402,12 +403,22 @@ def build_source_view_model(
         note = safe_display_text(getattr(source, "demo_note", None))
     else:
         integrity_note = LIVE_INTEGRITY_NOTE
+    anchor = chip.anchor_label
+    # An anchor that merely repeats "title · location" adds nothing the chip
+    # row does not already show; only a distinct anchor explains the support.
+    label_text = (safe_display_text(source.label) or "").strip()
+    title_text = (source.title or "").strip()
+    parts = [text for text in (title_text, label_text) if text]
+    repeated = {text for text in (title_text, " · ".join(parts)) if text}
+    if anchor and title_text and anchor.strip() in repeated:
+        anchor = None
     return SourceViewModel(
         stable_id=chip.stable_id,
         title=_display_title(source) or chip.title,
         type_label=source_type_label(source.type),
         location=safe_display_text(source.label) or chip.location or LOCATION_FALLBACK,
         citation_index=chip.display_index,
+        support_note=anchor or VERIFIED_SUPPORT_NOTE,
         anchor_note=chip.anchor_label,
         integrity=integrity,
         integrity_note=integrity_note,
@@ -474,8 +485,8 @@ def split_answer_paragraph(
 
 
 NO_EVIDENCE_HINT = (
-    "这不是系统故障。EKB 在知识库中没有足够依据时不会编造答案；"
-    "可以换一条演示问题，或先在管理页面导入相关资料。"
+    "EKB 不会在缺少依据时编造答案。可以换一条演示问题，"
+    "或先在管理页面导入相关资料。"
 )
 
 
@@ -602,12 +613,12 @@ def build_failure_view_model(record: AskRecord) -> AnswerViewModel:
 # ---------------------------------------------------------------------------
 
 _PRESET_SHORT_LABELS: dict[str, str] = {
-    "A": "PID 参数的作用",
-    "B": "编码器接线的历史问题",
-    "C": "来源可信度检查",
-    "A2": "变频器参数注意事项",
-    "EMPTY": "超出知识范围的问题",
-    "REHEARSAL_FAILED": "（排练）失败状态",
+    "A": "参数影响",
+    "B": "历史经验",
+    "C": "来源可信度",
+    "A2": "变频器注意事项",
+    "EMPTY": "超出知识范围",
+    "REHEARSAL_FAILED": "失败演练",
 }
 
 _PRESET_TAGS: dict[str, str] = {

@@ -157,7 +157,7 @@ def test_rehearsal_failed_state_is_safe() -> None:
 
     assert not app.exception
     markdown = "\n".join(item.value for item in app.markdown)
-    assert "本次请求失败" in markdown
+    assert "本次请求未完成" in markdown
     assert "知识库工具执行失败" in markdown
     for forbidden in ("Traceback", "Exception", '{"', "request_id"):
         assert forbidden not in markdown
@@ -172,7 +172,7 @@ def test_rate_limited_state_renders_distinctly() -> None:
     app = _app_with_failure(failure_code="rate_limited")
     markdown = "\n".join(item.value for item in app.markdown)
     assert "请求过于频繁" in markdown
-    assert "本次请求失败" not in markdown.split("请求过于频繁")[0]
+    assert "本次请求未完成" not in markdown.split("请求过于频繁")[0]
 
 
 def test_backend_unavailable_state_offers_explicit_mock_switch() -> None:
@@ -210,7 +210,7 @@ def test_mode_switch_clears_previous_result() -> None:
     app.run(timeout=30)
     assert _button(app, "src_0_" + f"{KB}:page:1")
 
-    app.radio[0].set_value("本机 Agent（/v0.6 HTTP）")
+    app.radio[0].set_value("本机 Agent 服务（需先启动）")
     app.run(timeout=30)
 
     assert not app.exception
