@@ -201,6 +201,18 @@ def _switch_to_mock(question: str) -> None:
     _queue_question(question)
 
 
+def _reset_demo() -> None:
+    """Operator reset: clear ALL demo presentation state, nothing else.
+
+    Clears session keys only (mode, result, selected source, request
+    sequence, live base URL override). Never touches the database, files,
+    fixtures or services.
+    """
+
+    for key in demo_ui.AGENT_SESSION_KEYS:
+        st.session_state.pop(key, None)
+
+
 # ---------------------------------------------------------------------------
 # Client seam
 # ---------------------------------------------------------------------------
@@ -704,3 +716,17 @@ with body[0]:
     _render_answer_area(preset_chips)
 with body[1]:
     _render_sources_panel()
+
+# Compact operator area: backstage control, deliberately not a primary
+# judge-facing button. Reset clears demo session state only.
+with st.expander("演示操作"):
+    st.caption(
+        "重置演示只清除本页会话状态（结果、选中来源、请求序号与运行模式），"
+        "不会修改数据库、文件或任何演示数据。"
+    )
+    st.button(
+        "重置演示",
+        key="demo_reset",
+        on_click=_reset_demo,
+        use_container_width=True,
+    )

@@ -221,6 +221,87 @@ def test_mode_switch_clears_previous_result() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Repeated-run reliability (freeze rehearsal): transitions without state bleed
+# ---------------------------------------------------------------------------
+
+
+def _outcome_text(app: AppTest) -> str:
+    return "\n".join(item.value for item in app.markdown)
+
+
+def test_sequential_scenario_transitions_do_not_contaminate_state() -> None:
+    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
+
+    # A -> B -> C -> A: each run shows only its own answer, badges and sources.
+    _button(app, "preset_A").click()
+    app.run(timeout=30)
+    assert "引用来源 2 条" in _outcome_text(app)
+    assert _button(app, "src_0_" + f"{KB}:page:1")
+
+    _button(app, "preset_B").click()
+    app.run(timeout=30)
+    text = _outcome_text(app)
+    assert "来源存在限制" in text
+    assert "引用来源 1 条" in text
+    assert "引用来源 2 条" not in text
+
+    _button(app, "preset_C").click()
+    app.run(timeout=30)
+    _button(app, "src_0_" + f"{KB}:knowledge_object:1").click()
+    app.run(timeout=30)
+    assert "来源发生变化" in _outcome_text(app)
+
+    _button(app, "preset_A").click()
+    app.run(timeout=30)
+    text = _outcome_text(app)
+    assert "有依据回答" in text
+    # C's integrity state must not leak into scenario A's sources
+    assert "来源发生变化" not in text
+
+    # A -> empty -> A -> failed -> A: recovery transitions
+    _button(app, "preset_EMPTY").click()
+    app.run(timeout=30)
+    assert "当前知识库中没有找到足够资料支持这个问题。" in _outcome_text(app)
+
+    _button(app, "preset_A").click()
+    app.run(timeout=30)
+    assert "有依据回答" in _outcome_text(app)
+
+    _button(app, "preset_REHEARSAL_FAILED").click()
+    app.run(timeout=30)
+    assert "本次请求未完成" in _outcome_text(app)
+
+    _button(app, "preset_A").click()
+    app.run(timeout=30)
+    text = _outcome_text(app)
+    assert "有依据回答" in text
+    assert "本次请求未完成" not in text
+    assert not app.exception
+
+
+def test_demo_reset_returns_page_to_clean_initial_state() -> None:
+    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
+    _button(app, "preset_A").click()
+    app.run(timeout=30)
+    _button(app, "src_0_" + f"{KB}:page:1").click()
+    app.run(timeout=30)
+    assert "来源详情" in _outcome_text(app)
+
+    _button(app, "demo_reset").click()
+    app.run(timeout=30)
+
+    assert not app.exception
+    text = _outcome_text(app)
+    assert "向你的工程知识库提问" in text
+    assert "有依据回答" not in text
+    assert "来源详情" not in text
+    source_buttons = [b for b in app.button if (b.key or "").startswith("src_")]
+    assert source_buttons == []
+    # reset restores the default mock demo mode (radio value is the raw option)
+    assert app.radio[0].value == "mock_demo"
+
+
+# ---------------------------------------------------------------------------
 # Home page entry point
 # ---------------------------------------------------------------------------
 
