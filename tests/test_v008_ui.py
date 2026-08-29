@@ -35,6 +35,7 @@ def empty_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
         runtime_dir=tmp_path / "runtime",
         pid_path=tmp_path / "runtime" / "engineering-kb.pid.json",
         port=49341,
+        _env_file=None,
     )
     settings.ensure_directories()
     database = Database(settings.database_path)

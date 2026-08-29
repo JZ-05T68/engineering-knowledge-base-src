@@ -45,6 +45,7 @@ def _local_runtime(tmp_path: Path, monkeypatch) -> tuple[Database, DocumentServi
         log_path=tmp_path / "logs" / "test.log",
         runtime_dir=tmp_path / "runtime",
         pid_path=tmp_path / "runtime" / "test.pid.json",
+        _env_file=None,
     )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(runtime, "application_document_service", lambda: service)

@@ -33,10 +33,29 @@ def test_paid_call_without_staging_refused(capsys) -> None:
 
 
 def test_staging_flag_is_forced_at_import() -> None:
-    # The probe must establish staging context before any runtime resolves.
-    import os
+    # The probe must establish staging context in a fresh process before any
+    # runtime resolves. Proven in a subprocess WITHOUT the flag pre-set: the
+    # suite-wide isolation fixture sanitizes ambient EKB_* state, and a
+    # collection-time import of this module must not leak into ordinary tests.
+    import subprocess
+    import sys
+    from pathlib import Path
 
-    assert os.environ.get("EKB_STAGING_INSTANCE") == "1"
+    code = (
+        "import os, scripts.ai_real_natural_language_probe as probe; "
+        "print(os.environ.get('EKB_STAGING_INSTANCE'))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", code],
+        cwd=Path(__file__).parents[1],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        check=True,
+        timeout=60,
+    )
+
+    assert result.stdout.strip() == "1"
 
 
 def test_staging_database_path_is_staging_only() -> None:
