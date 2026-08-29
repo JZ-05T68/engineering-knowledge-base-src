@@ -14,5 +14,6 @@ rapidocr>=3.9.2,<4
 onnxruntime>=1.27.0,<2
 pytest
 # In-process FastAPI/Starlette TestClient transport (tests only).
-httpx
+# starlette>=1.6 TestClient requires httpx2 (replaces the former httpx note).
+httpx2
 ruff
