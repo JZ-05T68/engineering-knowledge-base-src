@@ -21,6 +21,7 @@ import src.hosted.runtime as runtime
 from src.agent import AgentRequest, ModelDecisionProvider, SingleStepAgentService
 from src.agent.tools import ToolContext, ToolInput, ToolResultStatus, ToolSideEffect
 from src.ai.provider import (
+    AIBudgetExceededError,
     AiCallRecord,
     AIProductionCompositionError,
     AIUnavailableError,
@@ -233,7 +234,7 @@ def test_audit_append_and_exhausted_budget_never_calls_transport(demo, monkeypat
             total_tokens=100, created_at=datetime.now(UTC).isoformat(timespec="microseconds"),
         )
         provider._ledger.record(record)
-        with pytest.raises(AIUnavailableError, match="预算"):
+        with pytest.raises(AIBudgetExceededError, match="预算"):
             provider.complete("TEST_ONLY_PRIVATE_PROMPT")
         transport.assert_not_called()
         with closing(sqlite3.connect(storage.database_path)) as db:
@@ -256,8 +257,10 @@ def test_budget_utc_period_semantics(demo, monkeypatch, daily, monthly):
         database, configured(demo, ai_daily_token_budget=daily, ai_monthly_token_budget=monthly),
     )
     if not daily and not monthly:
-        with pytest.raises(AIUnavailableError):
+        # B8: a missing budget configuration is unavailable, not exhausted.
+        with pytest.raises(AIUnavailableError) as excinfo:
             guard.ensure_allowed("completion")
+        assert not isinstance(excinfo.value, AIBudgetExceededError)
         database.total_ai_tokens_since.assert_not_called()
         return
     guard.ensure_allowed("completion")
@@ -269,7 +272,8 @@ def test_budget_utc_period_semantics(demo, monkeypatch, daily, monthly):
     if monthly:
         assert starts[-1].day == 1
     database.total_ai_tokens_since.return_value = 20
-    with pytest.raises(AIUnavailableError):
+    # B7: actual quota exhaustion raises the typed budget error.
+    with pytest.raises(AIBudgetExceededError):
         guard.ensure_allowed("completion")
 
 

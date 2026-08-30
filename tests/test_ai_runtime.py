@@ -8,8 +8,10 @@ import pytest
 
 import src.runtime as runtime
 from src.ai.provider import (
+    AIBudgetExceededError,
     AIExecutionError,
     AIProductionCompositionError,
+    AIUnavailableError,
     AuditedAIProvider,
 )
 from src.ai.qwen_client import QwenProvider, QwenTransportError
@@ -169,3 +171,71 @@ def test_experience_production_composition_rejects_raw_provider(
         runtime.application_experience_model_service()
 
     raw.complete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# TD-06: typed local budget guard semantics
+# ---------------------------------------------------------------------------
+
+
+def _budget_guard(monkeypatch: pytest.MonkeyPatch, **overrides: object):
+    from src.runtime import _LazyTokenBudgetGuard
+
+    kwargs: dict[str, object] = {
+        "ai_mode": "api",
+        "ai_api_key": "sk-runtime-test",
+        "ai_daily_token_budget": 100,
+        "ai_monthly_token_budget": 1000,
+    }
+    kwargs.update(overrides)
+    settings = _stub_settings(monkeypatch, **kwargs)  # type: ignore[arg-type]
+    return settings, _LazyTokenBudgetGuard(settings)
+
+
+def test_local_daily_budget_exhaustion_raises_typed_budget_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B5: local daily exhaustion -> AIBudgetExceededError, transport untouched."""
+    _, guard = _budget_guard(monkeypatch)
+    database = Mock()
+    database.total_ai_tokens_since.return_value = 100
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+
+    with pytest.raises(AIBudgetExceededError) as excinfo:
+        guard.ensure_allowed("completion")
+
+    assert isinstance(excinfo.value, AIUnavailableError)
+    assert "日预算" in str(excinfo.value)
+
+
+def test_local_monthly_budget_exhaustion_raises_typed_budget_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """B6: local monthly exhaustion -> AIBudgetExceededError."""
+    _, guard = _budget_guard(
+        monkeypatch, ai_daily_token_budget=0, ai_monthly_token_budget=500
+    )
+    database = Mock()
+    database.total_ai_tokens_since.return_value = 500
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+
+    with pytest.raises(AIBudgetExceededError) as excinfo:
+        guard.ensure_allowed("embedding")
+
+    assert isinstance(excinfo.value, AIUnavailableError)
+    assert "月预算" in str(excinfo.value)
+    assert database.total_ai_tokens_since.call_args is not None
+
+
+def test_local_zero_budget_means_unlimited_and_never_touches_database(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, guard = _budget_guard(
+        monkeypatch, ai_daily_token_budget=0, ai_monthly_token_budget=0
+    )
+    database = Mock()
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+
+    guard.ensure_allowed("completion")
+
+    database.total_ai_tokens_since.assert_not_called()

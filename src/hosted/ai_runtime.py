@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from src.ai.provider import (
+    AIBudgetExceededError,
     AiCallRecord,
     AIUnavailableError,
     AuditedAIProvider,
@@ -32,6 +33,8 @@ class HostedDatabaseAiBudgetGuard:
     Zero disables a period, but both zero fail closed in Hosted. This is a
     preflight check of recorded usage, not a token reservation or cost ceiling
     for concurrent in-flight calls. Unknown usage retains existing semantics.
+    A missing budget configuration is a plain ``AIUnavailableError``; actual
+    quota exhaustion raises the typed ``AIBudgetExceededError``.
     """
 
     def __init__(self, database: Database, settings: HostedSettings) -> None:
@@ -48,7 +51,7 @@ class HostedDatabaseAiBudgetGuard:
             if limit > 0 and self._database.total_ai_tokens_since(
                 start.isoformat(timespec="microseconds")
             ) >= limit:
-                raise AIUnavailableError("AI 调用被预算限制拒绝。")
+                raise AIBudgetExceededError("AI 调用被预算限制拒绝。")
 
 
 def build_hosted_ai_provider(

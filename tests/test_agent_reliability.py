@@ -31,6 +31,7 @@ from src.agent.tools import (
 )
 from src.agent.tools.adapters import PageSearchAdapter
 from src.ai.provider import (
+    AIBudgetExceededError,
     AIExecutionError,
     AIUnavailableError,
     AuditedAIProvider,
@@ -122,7 +123,7 @@ class _AllowBudget:
 
 class _DenyBudget:
     def ensure_allowed(self, capability: str) -> None:
-        raise AIUnavailableError("预算拒绝")
+        raise AIBudgetExceededError("预算拒绝")
 
 
 class _ExplodingSearch:

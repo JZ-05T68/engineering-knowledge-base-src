@@ -8,6 +8,7 @@ from src.ai.provider import AIExecutionError, CompletionResult
 from src.ai.rag_answer_service import (
     MockCompletionProvider,
     RagAnswerError,
+    RagAnswerErrorCode,
     RagAnswerService,
 )
 from src.ai.rag_prompt_builder import RagPromptBuilder
@@ -283,3 +284,91 @@ def test_similar_but_different_stable_id_is_rejected() -> None:
 
     with pytest.raises(RagAnswerError, match="未知或非法"):
         RagAnswerService(provider).answer("问题", package)
+
+
+# --- TD-06: typed RAG error semantics ----------------------------------------
+
+
+def test_empty_context_rejection_carries_typed_code_and_zero_completions() -> None:
+    """R1/R4: no package items -> EMPTY_CONTEXT with zero provider calls."""
+    empty_package = KnowledgeContextPackage(
+        package_uuid="pkg",
+        generated_at="now",
+        kb_uuid=KB_UUID,
+        app_version="0.5.3",
+        question="问题",
+        items=(),
+        citations=(),
+        excluded=(),
+        warnings=(),
+    )
+    provider = _RecordingProvider()
+
+    with pytest.raises(RagAnswerError) as excinfo:
+        RagAnswerService(provider).answer("问题", empty_package)
+
+    assert excinfo.value.code is RagAnswerErrorCode.EMPTY_CONTEXT
+    assert len(provider.prompts) == 0
+
+
+def test_unsourced_context_rejection_carries_typed_code_and_zero_completions() -> None:
+    """R2/R4: all items without anchors -> EMPTY_CONTEXT with zero provider calls."""
+    provider = _RecordingProvider()
+
+    with pytest.raises(RagAnswerError) as excinfo:
+        RagAnswerService(provider).answer("问题", _package(_unsourced_item()))
+
+    assert excinfo.value.code is RagAnswerErrorCode.EMPTY_CONTEXT
+    assert len(provider.prompts) == 0
+
+
+def test_forged_stable_id_rejection_carries_citation_invalid_code() -> None:
+    """C1: unknown raw stable id -> CITATION_INVALID; exactly one model call."""
+    package = _package(_sourced_item(1))
+    provider = _answer_with(f"见【来源 #1】；另见 {KB_UUID}:knowledge_object:999。")
+
+    with pytest.raises(RagAnswerError) as excinfo:
+        RagAnswerService(provider).answer("问题", package)
+
+    assert excinfo.value.code is RagAnswerErrorCode.CITATION_INVALID
+    assert len(provider.prompts) == 1
+
+
+def test_unknown_citation_number_rejection_carries_citation_invalid_code() -> None:
+    """C2: unknown #N citation -> CITATION_INVALID."""
+    package = _package(_sourced_item(1))
+    provider = _answer_with("结论见【来源 #7】。")
+
+    with pytest.raises(RagAnswerError) as excinfo:
+        RagAnswerService(provider).answer("问题", package)
+
+    assert excinfo.value.code is RagAnswerErrorCode.CITATION_INVALID
+
+
+def test_missing_citation_rejection_carries_citation_invalid_code() -> None:
+    """C3: no legal citation in the model output -> CITATION_INVALID."""
+    package = _package(_sourced_item(1))
+    provider = _answer_with("这是没有任何引用的推测。")
+
+    with pytest.raises(RagAnswerError) as excinfo:
+        RagAnswerService(provider).answer("问题", package)
+
+    assert excinfo.value.code is RagAnswerErrorCode.CITATION_INVALID
+
+
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        (RagAnswerErrorCode.EMPTY_CONTEXT, "no evidence available"),
+        (RagAnswerErrorCode.EMPTY_CONTEXT, "上下文为空"),
+        (RagAnswerErrorCode.CITATION_INVALID, "unverifiable reference"),
+        (RagAnswerErrorCode.CITATION_INVALID, "引用不可验证"),
+    ],
+)
+def test_error_code_is_independent_of_message_language(code, message) -> None:
+    """M2/M3: rewriting the message never changes the machine code."""
+
+    error = RagAnswerError(code, message)
+
+    assert error.code is code
+    assert str(error) == message

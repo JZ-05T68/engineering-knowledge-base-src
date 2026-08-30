@@ -15,8 +15,8 @@ from src.ai.experience_model_service import ExperienceModelService
 from src.ai.hybrid_search import HybridSearchService
 from src.ai.page_indexer import EMBEDDING_CONFIG_VERSION, EMBEDDING_DIMENSIONS
 from src.ai.provider import (
+    AIBudgetExceededError,
     AiCallRecord,
-    AIUnavailableError,
     AuditedAIProvider,
     EmbeddingProvider,
     build_production_audited_provider,
@@ -173,7 +173,7 @@ class _LazyTokenBudgetGuard:
     Budgets are expressed in tokens and read from settings; ``0`` means
     unlimited. The database is resolved lazily so constructing the AI
     provider never touches it. An exceeded budget raises
-    ``AIUnavailableError`` before any network request is sent.
+    ``AIBudgetExceededError`` before any network request is sent.
     """
 
     def __init__(self, settings: Settings) -> None:
@@ -190,7 +190,7 @@ class _LazyTokenBudgetGuard:
                 day_start.isoformat(timespec="microseconds")
             )
             if used >= self._daily_budget:
-                raise AIUnavailableError(
+                raise AIBudgetExceededError(
                     f"AI 调用被日预算限制拒绝：今日已用 {used} tokens，"
                     f"上限 {self._daily_budget} tokens。"
                 )
@@ -200,7 +200,7 @@ class _LazyTokenBudgetGuard:
                 month_start.isoformat(timespec="microseconds")
             )
             if used >= self._monthly_budget:
-                raise AIUnavailableError(
+                raise AIBudgetExceededError(
                     f"AI 调用被月预算限制拒绝：本月已用 {used} tokens，"
                     f"上限 {self._monthly_budget} tokens。"
                 )

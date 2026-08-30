@@ -30,8 +30,16 @@ from src.agent.response.contracts import (
 )
 from src.agent.response.tool_context import ToolResultContextMapper
 from src.agent.tools.contracts import ToolResultStatus
-from src.ai.provider import AIExecutionError, AIUnavailableError
-from src.ai.rag_answer_service import RagAnswerError, RagAnswerService
+from src.ai.provider import (
+    AIBudgetExceededError,
+    AIExecutionError,
+    AIUnavailableError,
+)
+from src.ai.rag_answer_service import (
+    RagAnswerError,
+    RagAnswerErrorCode,
+    RagAnswerService,
+)
 from src.knowledge_context_packager import (
     KnowledgeContextError,
     KnowledgeContextPackager,
@@ -146,8 +154,13 @@ class FinalAnswerStage:
                 max_completion_tokens=self._max_completion_tokens,
             )
         except RagAnswerError as exc:
-            message = str(exc)
-            if "引用校验失败" in message:
+            if exc.code is RagAnswerErrorCode.EMPTY_CONTEXT:
+                return self._no_evidence_response(
+                    _NO_EVIDENCE_MESSAGE,
+                    warnings=tool_result.warnings,
+                    trace=execution.trace,
+                )
+            if exc.code is RagAnswerErrorCode.CITATION_INVALID:
                 return AgentResponse(
                     status=AgentResponseStatus.FAILED,
                     answer="",
@@ -155,14 +168,8 @@ class FinalAnswerStage:
                     warnings=tool_result.warnings,
                     error=AgentResponseError(
                         code=AgentResponseErrorCode.CITATION_INVALID,
-                        message=message,
+                        message=str(exc),
                     ),
-                    trace=execution.trace,
-                )
-            if "空上下文" in message or "无来源上下文" in message:
-                return self._no_evidence_response(
-                    _NO_EVIDENCE_MESSAGE,
-                    warnings=tool_result.warnings,
                     trace=execution.trace,
                 )
             return AgentResponse(
@@ -172,28 +179,32 @@ class FinalAnswerStage:
                 warnings=tool_result.warnings,
                 error=AgentResponseError(
                     code=AgentResponseErrorCode.INTERNAL_FAILURE,
-                    message=message,
+                    message=str(exc),
                 ),
                 trace=execution.trace,
             )
-        except AIUnavailableError as exc:
-            unavailable_message = str(exc)
-            code = (
-                AgentResponseErrorCode.BUDGET_EXCEEDED
-                if "预算" in unavailable_message
-                else AgentResponseErrorCode.PROVIDER_UNAVAILABLE
-            )
-            message = (
-                "Final Answer 调用被预算限制拒绝。"
-                if code is AgentResponseErrorCode.BUDGET_EXCEEDED
-                else "Final Answer 服务不可用。"
-            )
+        except AIBudgetExceededError:
             return AgentResponse(
                 status=AgentResponseStatus.FAILED,
                 answer="",
                 grounded=False,
                 warnings=tool_result.warnings,
-                error=AgentResponseError(code=code, message=message),
+                error=AgentResponseError(
+                    code=AgentResponseErrorCode.BUDGET_EXCEEDED,
+                    message="Final Answer 调用被预算限制拒绝。",
+                ),
+                trace=execution.trace,
+            )
+        except AIUnavailableError:
+            return AgentResponse(
+                status=AgentResponseStatus.FAILED,
+                answer="",
+                grounded=False,
+                warnings=tool_result.warnings,
+                error=AgentResponseError(
+                    code=AgentResponseErrorCode.PROVIDER_UNAVAILABLE,
+                    message="Final Answer 服务不可用。",
+                ),
                 trace=execution.trace,
             )
         except AIExecutionError as exc:

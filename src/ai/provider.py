@@ -42,6 +42,7 @@ __all__ = [
     "AIExecutionError",
     "AIProvider",
     "AIProductionCompositionError",
+    "AIBudgetExceededError",
     "AIUnavailableError",
     "AiBudgetGuard",
     "AiCallLedger",
@@ -82,6 +83,17 @@ class AIUnavailableError(AIError):
 
 class AIProductionCompositionError(AIUnavailableError):
     """Production AI composition is missing its approved audit/budget boundary."""
+
+
+class AIBudgetExceededError(AIUnavailableError):
+    """The configured token budget is exhausted; the call was rejected.
+
+    This is the typed machine signal for budget exhaustion, deliberately a
+    subclass of ``AIUnavailableError`` so existing callers that catch the
+    wider type keep working, while precise consumers can catch budget
+    rejection first. Machine decisions must classify on this type, never on
+    the human-readable message.
+    """
 
 
 class AIExecutionError(AIError):
@@ -321,7 +333,7 @@ class AiBudgetGuard(Protocol):
     """Pre-call budget gate evaluated before any network request is sent."""
 
     def ensure_allowed(self, capability: str) -> None:
-        """Raise ``AIUnavailableError`` when the configured budget is exceeded."""
+        """Raise ``AIBudgetExceededError`` when the budget is exhausted."""
         ...
 
 

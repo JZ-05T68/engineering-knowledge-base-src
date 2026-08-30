@@ -7,6 +7,7 @@ including the default manual AI mode with no API key configured.
 """
 
 from src.ai.provider import (
+    AIBudgetExceededError,
     AiBudgetGuard,
     AiCallLedger,
     AiCallRecord,
@@ -34,6 +35,7 @@ __all__ = [
     "AIError",
     "AIExecutionError",
     "AIProvider",
+    "AIBudgetExceededError",
     "AIProductionCompositionError",
     "AIUnavailableError",
     "AiBudgetGuard",

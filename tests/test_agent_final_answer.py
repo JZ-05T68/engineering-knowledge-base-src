@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from src.agent import (
     DEFAULT_FINAL_ANSWER_MAX_OUTPUT_TOKENS,
     AgentDecision,
@@ -35,13 +37,18 @@ from src.agent.tools import (
     build_phase1_registry,
 )
 from src.ai.provider import (
+    AIBudgetExceededError,
     AIExecutionError,
     AIUnavailableError,
     AuditedAIProvider,
     CompletionResult,
     CompletionUsage,
 )
-from src.ai.rag_answer_service import RagAnswerService
+from src.ai.rag_answer_service import (
+    RagAnswerError,
+    RagAnswerErrorCode,
+    RagAnswerService,
+)
 from src.knowledge_context_packager import KnowledgeContextPackager
 
 KB_UUID = "12345678-1234-1234-1234-123456789abc"
@@ -117,7 +124,7 @@ class _AllowBudgetGuard:
 
 class _DenyBudgetGuard:
     def ensure_allowed(self, capability: str) -> None:
-        raise AIUnavailableError("AI 调用被预算限制拒绝")
+        raise AIBudgetExceededError("AI 调用被预算限制拒绝")
 
 
 # ---------------------------------------------------------------------------
@@ -759,3 +766,225 @@ def test_final_answer_stage_without_rag_service_fails_safely() -> None:
     assert response.status is AgentResponseStatus.FAILED
     assert response.error is not None
     assert response.error.code is AgentResponseErrorCode.PROVIDER_UNAVAILABLE
+
+
+# ---------------------------------------------------------------------------
+# TD-06: typed error semantics (message independence)
+# ---------------------------------------------------------------------------
+
+
+class _RaisingRagService:
+    """Deterministic RAG service stub that always raises the given error."""
+
+    def __init__(self, error: Exception) -> None:
+        self._error = error
+
+    def answer(self, *args: object, **kwargs: object) -> object:
+        raise self._error
+
+
+def _success_execution():
+    from src.agent.execution.contracts import (
+        AgentExecutionResult,
+        AgentExecutionStatus,
+        AgentRuntimeTrace,
+    )
+
+    return AgentExecutionResult(
+        status=AgentExecutionStatus.COMPLETED,
+        decision=AgentDecision(
+            kind=AgentDecisionKind.CALL_TOOL,
+            tool_name="page_search",
+            arguments={"query": "x"},
+        ),
+        tool_called=True,
+        selected_tool="page_search",
+        tool_result=_search_result_tool(),
+        error=None,
+        trace=AgentRuntimeTrace(
+            run_id="td06-run",
+            request_id=None,
+            started_at="2026-08-30T00:00:00+00:00",
+            duration_ms=None,
+            decision_kind="CALL_TOOL",
+            selected_tool="page_search",
+            decision_call_count=1,
+            tool_call_count=1,
+            retry_count=0,
+            tool_status="success",
+            outcome="completed",
+        ),
+    )
+
+
+def _stage_raising(error: Exception) -> FinalAnswerStage:
+    return FinalAnswerStage(
+        _RaisingRagService(error),  # type: ignore[arg-type]
+        packager=KnowledgeContextPackager(kb_uuid=KB_UUID, app_version="test"),
+    )
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "AI 调用被预算限制拒绝。",
+        "今日额度已用尽，请明天再试。",
+        "Daily AI allowance exhausted.",
+    ],
+)
+def test_typed_budget_error_maps_to_budget_exceeded_regardless_of_message(
+    message: str,
+) -> None:
+    """B1-B3/M1: AIBudgetExceededError -> BUDGET_EXCEEDED for any wording."""
+    response = _stage_raising(AIBudgetExceededError(message)).answer(
+        _request(), _success_execution()
+    )
+
+    assert response.status is AgentResponseStatus.FAILED
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.BUDGET_EXCEEDED
+    assert response.grounded is False
+    assert response.error.message == "Final Answer 调用被预算限制拒绝。"
+
+
+def test_unavailable_error_mentioning_budget_is_not_budget_exceeded() -> None:
+    """B4/E1: generic AIUnavailableError -> PROVIDER_UNAVAILABLE even when
+    its message happens to contain the budget keyword."""
+    response = _stage_raising(
+        AIUnavailableError("配置异常：预算参数不合法，请检查设置")
+    ).answer(_request(), _success_execution())
+
+    assert response.status is AgentResponseStatus.FAILED
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.PROVIDER_UNAVAILABLE
+    assert response.error.message == "Final Answer 服务不可用。"
+
+
+def test_production_composition_error_is_not_budget_exceeded() -> None:
+    """E3: AIProductionCompositionError mentions 预算 in its text but is a
+    configuration failure, so it must map to PROVIDER_UNAVAILABLE."""
+    from src.ai.provider import AIProductionCompositionError
+
+    response = _stage_raising(
+        AIProductionCompositionError(
+            "AI 生产组合无效：必须配置审计台账与预算门禁。"
+        )
+    ).answer(_request(), _success_execution())
+
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.PROVIDER_UNAVAILABLE
+
+
+def test_typed_empty_context_maps_to_deterministic_no_evidence() -> None:
+    """R3/M3: EMPTY_CONTEXT keeps deterministic no-evidence for any wording."""
+    response = _stage_raising(
+        RagAnswerError(
+            RagAnswerErrorCode.EMPTY_CONTEXT, "completely rewritten message"
+        )
+    ).answer(_request(), _success_execution())
+
+    assert response.status is AgentResponseStatus.COMPLETED
+    assert response.grounded is False
+    assert response.citations == ()
+    assert "没有在当前知识库中找到" in response.answer
+    assert response.error is None
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        "引用校验失败：回答包含未知或非法的引用，拒绝显示。",
+        "No Chinese citation keywords at all",
+    ],
+)
+def test_typed_citation_error_maps_to_citation_invalid_regardless_of_message(
+    message: str,
+) -> None:
+    """C4/M2: CITATION_INVALID for any wording of the typed error."""
+    response = _stage_raising(
+        RagAnswerError(RagAnswerErrorCode.CITATION_INVALID, message)
+    ).answer(_request(), _success_execution())
+
+    assert response.status is AgentResponseStatus.FAILED
+    assert response.grounded is False
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.CITATION_INVALID
+
+
+def test_invalid_cited_answer_is_never_exposed_as_grounded() -> None:
+    """C5: a citation-rejected model answer is not shown as a grounded answer."""
+    handler = FakeToolHandler(_search_result_tool())
+    executor = _executor_with_page_search(handler)
+    final_fake = FakeCompletionProvider(
+        CompletionResult(text="伪造依据：【来源 #2】。", model="fake")
+    )
+
+    response = _final_answer_stage(final_fake).answer(
+        _request(),
+        executor.execute(
+            _request(),
+            FakeDecisionProvider(
+                AgentDecision(
+                    kind=AgentDecisionKind.CALL_TOOL,
+                    tool_name="page_search",
+                    arguments={"query": "x"},
+                )
+            ),
+        ),
+    )
+
+    assert response.status is AgentResponseStatus.FAILED
+    assert response.grounded is False
+    assert response.answer == ""
+    assert response.citations == ()
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.CITATION_INVALID
+    assert "伪造依据" not in response.error.message
+
+
+def test_unknown_rag_code_fails_closed_to_internal_failure() -> None:
+    """G2: an out-of-set RAG code must fail closed to INTERNAL_FAILURE."""
+
+    error = RagAnswerError(RagAnswerErrorCode.EMPTY_CONTEXT, "future code probe")
+    object.__setattr__(error, "code", "future_unknown_code")  # type: ignore[arg-type]
+
+    response = _stage_raising(error).answer(_request(), _success_execution())
+
+    assert response.status is AgentResponseStatus.FAILED
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.INTERNAL_FAILURE
+
+
+def test_unknown_exception_maps_to_internal_failure_with_safe_detail() -> None:
+    """E4: an unexpected exception -> INTERNAL_FAILURE, sanitized detail."""
+    response = _stage_raising(RuntimeError("unexpected boom")).answer(
+        _request(), _success_execution()
+    )
+
+    assert response.status is AgentResponseStatus.FAILED
+    assert response.error is not None
+    assert response.error.code is AgentResponseErrorCode.INTERNAL_FAILURE
+    assert response.error.detail == "RuntimeError"
+    assert "unexpected boom" not in response.error.message
+
+
+def test_typed_error_inheritance_keeps_wider_catch_compatible() -> None:
+    """Section 29: budget error is-a AIUnavailableError; RagAnswerError stays
+    catchable as RagAnswerError regardless of code."""
+    from src.ai.provider import AIUnavailableError
+    from src.ai.rag_answer_service import RagAnswerError, RagAnswerErrorCode
+
+    assert isinstance(AIBudgetExceededError("任意文案"), AIUnavailableError)
+    for code in (
+        RagAnswerErrorCode.EMPTY_CONTEXT,
+        RagAnswerErrorCode.CITATION_INVALID,
+    ):
+        assert isinstance(RagAnswerError(code, "任意文案"), RagAnswerError)
+
+
+def test_static_final_answer_mapping_never_parses_exception_messages() -> None:
+    """Section 31: the Final Answer mapping must not classify on message
+    substrings; machine decisions come from types and codes only."""
+    source = Path("src/agent/response/final_answer.py").read_text(encoding="utf-8")
+    for banned in ("in str(", "in message", "in unavailable_message"):
+        assert banned not in source

@@ -20,6 +20,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, datetime
+from enum import StrEnum
 
 from src.ai.provider import (
     AuditedAIProvider,
@@ -39,12 +40,33 @@ _CITATION_NUMBER_TOKEN = re.compile(r"#([0-9]{1,3})")
 __all__ = [
     "MockCompletionProvider",
     "RagAnswerError",
+    "RagAnswerErrorCode",
     "RagAnswerService",
 ]
 
 
+class RagAnswerErrorCode(StrEnum):
+    """Closed set of machine-readable RAG safety rejection codes.
+
+    Machine consumers must classify on ``RagAnswerError.code`` only; the
+    human-readable message never participates in control flow.
+    """
+
+    EMPTY_CONTEXT = "empty_context"
+    CITATION_INVALID = "citation_invalid"
+
+
 class RagAnswerError(ValueError):
-    """Raised when the audited answer chain cannot run safely."""
+    """Raised when the audited answer chain cannot run safely.
+
+    ``code`` is the closed machine-readable classification and ``message``
+    is the safe human-readable text. The two are independent: rewriting the
+    message never changes the machine semantics.
+    """
+
+    def __init__(self, code: RagAnswerErrorCode, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 class MockCompletionProvider:
@@ -106,10 +128,14 @@ class RagAnswerService:
         """
 
         if not package.items:
-            raise RagAnswerError("空上下文：没有可用知识，拒绝生成 AI 回答。")
+            raise RagAnswerError(
+                RagAnswerErrorCode.EMPTY_CONTEXT,
+                "空上下文：没有可用知识，拒绝生成 AI 回答。",
+            )
         if all(not item.source_anchors for item in package.items):
             raise RagAnswerError(
-                "无来源上下文：全部知识项都没有可回源来源，拒绝生成 AI 回答。"
+                RagAnswerErrorCode.EMPTY_CONTEXT,
+                "无来源上下文：全部知识项都没有可回源来源，拒绝生成 AI 回答。",
             )
         provider = require_ai_provider(self._provider)
         prompt = self._prompt_builder.build(query, package)
@@ -180,7 +206,8 @@ def _validate_answer_citations(
         token = match.group(0)
         if token not in package_stable_ids:
             raise RagAnswerError(
-                f"引用校验失败：回答包含未知或非法的引用 {token}，拒绝显示。"
+                RagAnswerErrorCode.CITATION_INVALID,
+                f"引用校验失败：回答包含未知或非法的引用 {token}，拒绝显示。",
             )
         if token not in found:
             found.append(token)
@@ -188,13 +215,15 @@ def _validate_answer_citations(
         number = int(match.group(1))
         if number not in citation_by_number:
             raise RagAnswerError(
-                f"引用校验失败：回答引用了不存在的来源编号 #{number}，拒绝显示。"
+                RagAnswerErrorCode.CITATION_INVALID,
+                f"引用校验失败：回答引用了不存在的来源编号 #{number}，拒绝显示。",
             )
         stable_id = citation_by_number[number]
         if stable_id not in found:
             found.append(stable_id)
     if not found:
         raise RagAnswerError(
-            "引用校验失败：AI 回答未包含任何合法引用，拒绝作为有依据回答显示。"
+            RagAnswerErrorCode.CITATION_INVALID,
+            "引用校验失败：AI 回答未包含任何合法引用，拒绝作为有依据回答显示。",
         )
     return tuple(found)
