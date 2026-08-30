@@ -51,6 +51,10 @@ div[data-testid="stMainBlockContainer"] { padding-top: 0.9rem; }
 /* Hide the Streamlit toolbar chrome (Deploy menu / status widget) on this
    competition surface only; sidebar navigation stays reachable. */
 div[data-testid="stToolbar"] { display: none; }
+/* The fixed Streamlit header bar is opaque white and, at this page's compact
+   0.9rem top padding, would cover the brand kicker. Keep it transparent so
+   the brand line shows while the sidebar toggle stays reachable. */
+[data-testid="stHeader"] { background-color: transparent; }
 
 /* --- header & brand --- */
 .ekb-aw-header { display: flex; align-items: flex-end; justify-content: space-between;
