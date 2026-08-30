@@ -4,7 +4,10 @@
 - **来源：** `docs/repository-architecture-risk-audit-2026-08-29.md`（总审计）的风险登记册。
   本清单只收录**有具体触发路径或明确下游需求的项**；纯观察项只在总审计记录，不转化为债务。
 - **状态标记（2026-08-29 整改包）：** TD-01 / TD-02 / TD-03 / TD-08 / TD-09 已在本包
-  RESOLVED（见各条目内的「整改记录」，保留原始发现描述不改写）。其余项状态不变。
+  RESOLVED（见各条目内的「整改记录」，保留原始发现描述不改写）。
+  **状态标记（2026-08-30 pre-v0.7 整改）：** TD-04（commit `3b34a72`）、TD-05
+  （commit `687a10b`）、TD-06（commit `d6c4022`）已 RESOLVED（见各条目内状态行；
+  复核记录见 `docs/v0.7-post-remediation-readiness-review.md` §3-§5）。其余项状态不变。
 - **总原则：** 比赛冻结期内不动任何冻结面（`pages/0_知识Agent.py`、`src/demo_ui.py`、
   `src/demo/**`、`src/agent_client.py` 语义、`src/hosted_api/contracts.py`、A/B/C 场景语义）。
   下表所有项均可**在不解冻的前提下**启动，除了标注"依赖冻结解除"的 TD-13。
@@ -102,6 +105,11 @@ v0.7/v0.8/v0.9 的"尚未开始"保持不变（仍然真实）。历史文档未
   `v0.6.0-release-closure-inventory.md:95` 的反向失真单行记录在案即可，不改历史文档。
 
 ### TD-04 多态来源孤儿链接清理
+**状态（2026-08-30）：RESOLVED（commit `3b34a72`）。** `delete_note` / evidence
+`delete_item` / `clear_items` 三条删除路径已在同一 `BEGIN IMMEDIATE` 事务内精确清理
+对应 `knowledge_object_sources` 行（存在性校验移入事务内消除 TOCTOU）；focused tests
+落地于 `tests/test_note_service.py`、`tests/test_evidence_basket_service.py`。逐项复核
+见 `docs/v0.7-post-remediation-readiness-review.md` §3。
 - **Evidence:** `knowledge_object_sources` 无 FK（`src/migrations.py:905-907`，设计使然）；
   `note_service.delete_note`（`src/note_service.py:631-649`）与
   `evidence_basket_service.remove_item/clear`（`src/evidence_basket_service.py:303-314`）
@@ -117,6 +125,11 @@ v0.7/v0.8/v0.9 的"尚未开始"保持不变（仍然真实）。历史文档未
   补一条"删除 note/evidence 后 search_knowledge 无悬空锚点"的回归测试。
 
 ### TD-05 AI 审计/预算边界收紧（防绕过）
+**状态（2026-08-30）：RESOLVED（commit `687a10b`）。** `AuditedAIProvider.wrapped`
+私有化；新增 `build_production_audited_provider` / `require_production_audited_provider`
+（缺真实台账/预算门禁即 fail-closed 抛 `AIProductionCompositionError`）；Local/Hosted
+组合根与 UI 消费面全部强制经批准组合；`src/` 内 `QwenProvider` 构造点仅存两处批准
+组合根。逐项复核见 `docs/v0.7-post-remediation-readiness-review.md` §4。
 - **Evidence:** `AuditedAIProvider.wrapped` 公开属性（`src/ai/provider.py:381`）；
   `QwenProvider` 可自由构造且 `scripts/ai_smoke_test.py:100`、`ai_embedding_experiment.py:138`、
   `ai_real_query_probe.py:322` 等已有裸构造先例（绕过账本/预算做付费探针）。
@@ -129,6 +142,11 @@ v0.7/v0.8/v0.9 的"尚未开始"保持不变（仍然真实）。历史文档未
   或 `wrapped` 改私有 + 提供受控出口；加一条"生产组合根之外构造裸 QwenProvider 需 lint/测试告警"的守卫测试。
 
 ### TD-06 Agent 错误分类去子串化
+**状态（2026-08-30）：RESOLVED（commit `d6c4022`）。** 新增 `AIBudgetExceededError`
+（Local/Hosted 预算门禁均抛该类型）与闭合 `RagAnswerErrorCode`（EMPTY_CONTEXT /
+CITATION_INVALID，`RagAnswerError` 构造强制显式 code）；`FinalAnswerStage` 仅按
+type/code 穷尽映射，子串分类清零，未知 fail-closed 落 `INTERNAL_FAILURE`。
+逐项复核见 `docs/v0.7-post-remediation-readiness-review.md` §5。
 - **Evidence:** `src/agent/response/final_answer.py:150,162,180-185` 用
   `"引用校验失败"`/`"空上下文"`/`"无来源上下文"`/`"预算"` 子串匹配决定
   `CITATION_INVALID`/空态/`BUDGET_EXCEEDED`；被匹配的消息文本在
