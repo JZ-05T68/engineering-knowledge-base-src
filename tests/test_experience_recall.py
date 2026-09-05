@@ -195,12 +195,12 @@ def test_decision_prompt_encodes_recall_rules() -> None:
     assert "不得因此宣称" in built
 
 
-def test_mapper_prepends_recall_note_to_memory_content() -> None:
+def test_mapper_prepends_recall_note_to_memory_content(tmp_path: Path) -> None:
     from src.agent.response.tool_context import ToolResultContextMapper
     from src.agent.tools.contracts import ToolReference, ToolResult, ToolResultStatus
     from src.knowledge_context_packager import KnowledgeContextPackager
 
-    database_dir = Path(__file__).parent / "_tmp_mapper_case" / "db"
+    database_dir = tmp_path / "db"
     database_dir.mkdir(parents=True, exist_ok=True)
     database = Database(database_dir / "knowledge.db")
     kb_uuid = database.get_knowledge_base_uuid()

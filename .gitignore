@@ -46,3 +46,4 @@ staging-data/
 
 # Local scratch space (audit scripts, ad-hoc conversion output); never committed
 tmp/
+tests/_tmp_*/
