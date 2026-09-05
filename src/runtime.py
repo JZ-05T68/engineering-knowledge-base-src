@@ -296,6 +296,7 @@ def application_document_deletion_service() -> DocumentDeletionService:
         pages_dir=settings.pages_dir,
         markdown_dir=settings.markdown_dir,
         data_dir=settings.data_dir,
+        agent_readings_dir=settings.agent_readings_dir,
         app_version=settings.app_version,
     )
 
@@ -318,6 +319,7 @@ def application_startup_reconciliation() -> QuarantineReconciliation | None:
             raw_dir=settings.raw_dir,
             pages_dir=settings.pages_dir,
             markdown_dir=settings.markdown_dir,
+            agent_readings_dir=settings.agent_readings_dir,
         )
     except Exception:
         logging.getLogger(__name__).critical(
@@ -347,6 +349,7 @@ def run_quarantine_reconciliation() -> QuarantineReconciliation:
         raw_dir=settings.raw_dir,
         pages_dir=settings.pages_dir,
         markdown_dir=settings.markdown_dir,
+        agent_readings_dir=settings.agent_readings_dir,
     )
 
 

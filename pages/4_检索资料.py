@@ -72,11 +72,13 @@ from src.search_state import (
     remove_search_filter,
     search_state_query_params,
 )
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 RESULTS_PER_PAGE = 10
 
 st.set_page_config(page_title="检索资料｜工程知识库 v0.6.0", page_icon="🔎", layout="wide")
+render_workspace("pages/4_检索资料.py")
 st.title("检索资料")
 st.caption("筛选候选页面、快速判断相关性，并连续阅读全局或当前文档中的命中。")
 try:

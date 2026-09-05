@@ -8,12 +8,14 @@ import streamlit as st
 
 from src.ai_ledger_ui import render_ai_ledger_page
 from src.runtime import application_ai_ledger_service
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(
     page_title="AI 调用台账｜工程知识库 v0.6.0", page_icon="🧾", layout="wide"
 )
+render_workspace("pages/16_AI调用台账.py")
 st.title("AI 调用台账")
 st.caption("只读审计视图：本地 SQLite 查询，不发起任何模型调用。")
 

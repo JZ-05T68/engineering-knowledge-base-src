@@ -1,4 +1,9 @@
-"""AppTest UI tests for the read-only experience-model section (Phase 4)."""
+"""AppTest UI tests for the read-only experience-model section (Phase 4).
+
+The normal-user "我保存过的内容" page no longer embeds this section (2026-09-04
+simplification), so the tests render the section component directly through a
+minimal wrapper script instead of the memory page.
+"""
 
 from __future__ import annotations
 
@@ -12,7 +17,11 @@ from src.database import Database
 from src.knowledge_memory_service import KnowledgeMemoryService
 from src.models import KNOWLEDGE_MEMORY_STABLE_TYPE, build_stable_id
 
-MEMORY_PAGE = str(next((Path(__file__).parents[1] / "pages").glob("15_*.py")))
+_SECTION_SCRIPT = (
+    "from src.experience_ui import render_experience_section\n"
+    "from src.runtime import application_database\n"
+    "render_experience_section(application_database())\n"
+)
 
 
 class _TestLedger:
@@ -80,7 +89,9 @@ def _stub_runtime(database: Database, monkeypatch, provider_factory) -> None:
 def _app(tmp_path: Path, monkeypatch, provider_factory) -> AppTest:
     database = _make_database(tmp_path)
     _stub_runtime(database, monkeypatch, provider_factory)
-    return AppTest.from_file(MEMORY_PAGE).run(timeout=30)
+    script = tmp_path / "experience_section_app.py"
+    script.write_text(_SECTION_SCRIPT, encoding="utf-8")
+    return AppTest.from_file(str(script)).run(timeout=30)
 
 
 def test_empty_database_shows_no_context_hint(tmp_path: Path, monkeypatch) -> None:
@@ -99,7 +110,7 @@ def test_generate_button_disabled_without_selection(
     _memory_entry(database)
     _stub_runtime(database, monkeypatch, lambda: None)
 
-    app = AppTest.from_file(MEMORY_PAGE).run(timeout=30)
+    app = _app(tmp_path, monkeypatch, lambda: None)
 
     assert not app.exception
     assert app.button(key="experience_generate").disabled is True
@@ -120,7 +131,7 @@ def test_click_generates_once_and_rerun_does_not_repeat(
         return None
 
     _stub_runtime(database, monkeypatch, provider_factory)
-    app = AppTest.from_file(MEMORY_PAGE).run(timeout=30)
+    app = _app(tmp_path, monkeypatch, provider_factory)
 
     option = f"知识记忆｜{entry.title}｜{stable_id}"
     app.multiselect(key="experience_context_selection").set_value([option])
@@ -148,9 +159,6 @@ def test_provider_failure_does_not_break_memory_page(
 ) -> None:
     database = _make_database(tmp_path)
     entry = _memory_entry(database)
-    stable_id = build_stable_id(
-        database.get_knowledge_base_uuid(), KNOWLEDGE_MEMORY_STABLE_TYPE, entry.id
-    )
 
     class _FailingProvider:
         def complete(self, prompt, *, model=None, max_completion_tokens=None):
@@ -160,8 +168,11 @@ def test_provider_failure_does_not_break_memory_page(
         return _production_provider(_FailingProvider())
 
     _stub_runtime(database, monkeypatch, provider_factory)
-    app = AppTest.from_file(MEMORY_PAGE).run(timeout=30)
+    app = _app(tmp_path, monkeypatch, provider_factory)
 
+    stable_id = build_stable_id(
+        database.get_knowledge_base_uuid(), KNOWLEDGE_MEMORY_STABLE_TYPE, entry.id
+    )
     option = f"知识记忆｜{entry.title}｜{stable_id}"
     app.multiselect(key="experience_context_selection").set_value([option])
     app.text_area(key="experience_task").set_value("总结编码器经验")
@@ -169,8 +180,8 @@ def test_provider_failure_does_not_break_memory_page(
 
     assert not app.exception
     assert any("AI 服务调用失败" in error.value for error in app.error)
-    markdown = [item.value for item in app.markdown]
-    assert any(entry.title in value for value in markdown)
+    # The section itself stays intact after the failure.
+    assert app.multiselect(key="experience_context_selection").value == [option]
 
 
 def test_no_automatic_save_entry_exists(tmp_path: Path, monkeypatch) -> None:
@@ -180,7 +191,7 @@ def test_no_automatic_save_entry_exists(tmp_path: Path, monkeypatch) -> None:
         database.get_knowledge_base_uuid(), KNOWLEDGE_MEMORY_STABLE_TYPE, entry.id
     )
     _stub_runtime(database, monkeypatch, lambda: None)
-    app = AppTest.from_file(MEMORY_PAGE).run(timeout=30)
+    app = _app(tmp_path, monkeypatch, lambda: None)
 
     option = f"知识记忆｜{entry.title}｜{stable_id}"
     app.multiselect(key="experience_context_selection").set_value([option])

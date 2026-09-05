@@ -7,10 +7,12 @@ import logging
 import streamlit as st
 
 from src.runtime import application_database
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="项目管理｜工程知识库 v0.6.0", page_icon="🗂️", layout="wide")
+render_workspace("pages/10_项目管理.py")
 st.title("项目管理")
 st.caption("项目用于组织学习与竞赛方向；删除项目不会删除其中的资料。")
 
@@ -115,8 +117,9 @@ with left:
             key=f"project_document_{document.id}",
             use_container_width=True,
         ):
-            st.query_params["document"] = str(document.id)
-            st.switch_page("pages/3_浏览资料.py")
+            st.switch_page(
+                "pages/3_浏览资料.py", query_params={"document": str(document.id)}
+            )
     if not linked_documents:
         st.caption("该项目尚未关联文档。可在上方选择并保存关联。")
 with right:
@@ -128,10 +131,10 @@ with right:
             key=f"project_page_{page.id}",
             use_container_width=True,
         ):
-            st.query_params.update(
-                {"document": str(document.id), "page": str(page.page_number)}
+            st.switch_page(
+                "pages/3_浏览资料.py",
+                query_params={"document": str(document.id), "page": str(page.page_number)},
             )
-            st.switch_page("pages/3_浏览资料.py")
     if not linked_pages:
         st.caption("该项目尚未直接关联页面。可在浏览资料页为页面添加项目。")
 

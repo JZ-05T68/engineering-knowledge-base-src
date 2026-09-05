@@ -21,6 +21,8 @@ data/pages/*
 !data/pages/.gitkeep
 data/markdown/*
 !data/markdown/.gitkeep
+data/agent-readings/*
+!data/agent-readings/.gitkeep
 data/database/*
 !data/database/.gitkeep
 backups/*
@@ -41,3 +43,6 @@ Thumbs.db
 
 # AI staging instance (Phase 10A, fully isolated local test data)
 staging-data/
+
+# Local scratch space (audit scripts, ad-hoc conversion output); never committed
+tmp/

@@ -1,128 +1,95 @@
-"""Import PDF documents with durable status and progress feedback."""
+"""Import a document and let the local Agent read every page."""
 
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import streamlit as st
 
-from src.document_service import first_reviewable_import_page
-from src.models import PageStatus
-from src.runtime import application_document_service
+from src.agent.local_client import LocalDocumentAgentClient
+from src.agent_document_reader import AgentReadingStore
+from src.ocr_engine import OcrUnavailable
+from src.runtime import (
+    application_ai_provider,
+    application_database,
+    application_document_service,
+    application_settings,
+)
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
-_REVIEW_REQUEST_PARAM = "import_review_page"
 
 
-def _request_review_page(page_id: int) -> None:
-    """Request a review navigation that the next page run consumes once."""
+def _local_agent_client() -> LocalDocumentAgentClient:
+    """Build the in-process Agent from the same local database as the page."""
 
-    st.query_params[_REVIEW_REQUEST_PARAM] = str(page_id)
-
-
-def _consume_review_request() -> None:
-    """Validate and consume the callback request outside Streamlit's callback phase."""
-
-    raw_value = st.query_params.get(_REVIEW_REQUEST_PARAM)
-    if raw_value is None:
-        return
-    del st.query_params[_REVIEW_REQUEST_PARAM]
-    try:
-        page_id = int(raw_value)
-    except (TypeError, ValueError):
-        return
-    if page_id <= 0:
-        return
-    st.switch_page(
-        "pages/5_待整理页面.py",
-        query_params={"page_id": str(page_id)},
+    settings = application_settings()
+    return LocalDocumentAgentClient(
+        database=application_database(),
+        provider=application_ai_provider(),
+        readings=AgentReadingStore(settings.agent_readings_dir),
+        model=settings.ai_llm_model_hard,
     )
 
 
 st.set_page_config(page_title="导入资料｜工程知识库 v0.6.0", page_icon="📥", layout="wide")
-_consume_review_request()
-st.title("导入资料")
-st.caption("PDF 原件、逐页 PNG、文本和导入记录都保存在本机。")
+render_workspace("pages/1_导入资料.py")
+st.title("添加一份资料")
+st.caption("选择文件后点一下，Agent 会按页读完；原文件和每一页都保存在本机。")
 
-uploaded_pdf = st.file_uploader(
-    "选择 PDF 文件",
-    type=["pdf"],
+uploaded_document = st.file_uploader(
+    "选择 PDF、Word 或 PowerPoint 文件",
+    type=["pdf", "doc", "docx", "ppt", "pptx"],
     accept_multiple_files=False,
-    help="相同内容会按 SHA-256 识别；同名但内容不同的文件允许导入。",
+    help="支持 PDF、DOC、DOCX、PPT 和 PPTX；相同内容不会重复保存。",
 )
-default_title = Path(uploaded_pdf.name).stem if uploaded_pdf is not None else ""
-document_title = st.text_input("文档标题", value=default_title, placeholder="默认使用 PDF 文件名")
 
-if uploaded_pdf is None:
-    st.info("选择第一份 PDF 后，系统会在本机保留原件、逐页生成 PNG，并提取已有文本层。")
+if uploaded_document is None:
+    st.info("先选择一份资料。普通文字会直接读取，图片或手写页面会自动尝试识别。")
     st.stop()
 
-st.caption(f"文件：{uploaded_pdf.name}　|　大小：{uploaded_pdf.size / (1024 * 1024):.2f} MB")
+st.caption(
+    f"文件：{uploaded_document.name}　|　"
+    f"大小：{uploaded_document.size / (1024 * 1024):.2f} MB"
+)
 
-if st.button("导入 PDF", type="primary"):
-    progress = st.progress(0, text="正在准备导入……")
+if st.button("让 Agent 读这份资料", type="primary"):
+    progress = st.progress(0, text="正在准备资料……")
 
     def update_progress(current: int, total: int) -> None:
         ratio = current / total if total else 0
-        progress.progress(ratio, text=f"正在处理第 {current}/{total} 页")
+        progress.progress(ratio, text=f"正在读取 {current} / {total} 页")
 
     try:
-        result = application_document_service().import_pdf(
-            file_content=uploaded_pdf.getvalue(),
-            filename=uploaded_pdf.name,
-            title=document_title,
+        document_service = application_document_service()
+        result = document_service.import_document(
+            file_content=uploaded_document.getvalue(),
+            filename=uploaded_document.name,
+        )
+        for page in result.pages:
+            try:
+                document_service.run_page_ocr(page.id)
+            except OcrUnavailable:
+                # Text pages remain readable without OCR. A page with no usable
+                # text will be rejected by the Agent reader below with a clear
+                # page number instead of being silently marked complete.
+                pass
+        _local_agent_client().read_document(
+            result.document.id,
             progress_callback=update_progress,
         )
     except Exception as exc:
-        LOGGER.exception("导入 PDF 失败：filename=%s", uploaded_pdf.name)
+        LOGGER.exception("Agent 读取资料失败：filename=%s", uploaded_document.name)
         progress.empty()
-        st.error(f"导入失败：{exc}")
+        st.error(f"这份资料还没有读完：{exc}")
     else:
-        progress.progress(1.0, text="导入处理完成")
-        if result.duplicate:
-            st.warning(
-                f"该文件已经导入：{result.document.title}（编号 {result.document.id}），"
-                "未生成重复数据。"
+        progress.progress(1.0, text=f"已读完 {len(result.pages)} / {len(result.pages)} 页")
+        st.success("资料已经读完，可以去问 Agent 了。")
+        actions = st.columns(2)
+        if actions[0].button("去问 Agent", type="primary", use_container_width=True):
+            st.switch_page("pages/0_知识Agent.py")
+        if actions[1].button("查看识别结果（可选）", use_container_width=True):
+            st.switch_page(
+                "pages/17_我的资料.py",
+                query_params={"document": str(result.document.id)},
             )
-        else:
-            failed_count = sum(page.status is PageStatus.FAILED for page in result.pages)
-            review_count = sum(
-                page.status in {PageStatus.PENDING, PageStatus.DRAFT, PageStatus.FAILED}
-                for page in result.pages
-            )
-            text_count = sum(
-                page.processing_status in {"text_extracted", "ocr_completed"}
-                for page in result.pages
-            )
-            message = (
-                f"{result.document.title}：共 {len(result.pages)} 页，"
-                f"已处理 {len(result.pages)} 页，"
-                f"文本页 {text_count} 页，待复核 {review_count} 页。"
-            )
-            if failed_count:
-                st.warning(f"部分完成。{message} 其中 {failed_count} 页处理失败。")
-            else:
-                st.success(f"导入完成。{message}")
-        review_target = first_reviewable_import_page(result)
-        if review_target is not None:
-            st.button(
-                "进入复核",
-                on_click=_request_review_page,
-                args=(review_target.id,),
-                help="打开本次导入的第一张待复核页面；不会自动修改页面状态。",
-            )
-        elif not result.duplicate:
-            st.caption("本次导入没有新增待复核页面，可以稍后从浏览或检索入口继续使用资料。")
-
-st.divider()
-st.markdown(
-    """
-**状态说明**
-
-- `待处理`：新导入或尚未人工确认，需要继续整理。
-- `草稿待复核`：已有 Markdown，但尚未人工确认完成。
-- `处理失败`：单页处理出错；已完成的其他页面不会丢失。
-- v0.5.0 不接入云端 OCR；本地单页 OCR 完全离线执行，原始页面图片始终保留。
-"""
-)

@@ -93,6 +93,7 @@ def reconcile_quarantine(
     raw_dir: Path,
     pages_dir: Path,
     markdown_dir: Path,
+    agent_readings_dir: Path | None = None,
 ) -> QuarantineReconciliation:
     """Inspect every quarantine operation directory and settle what is provable.
 
@@ -111,7 +112,14 @@ def reconcile_quarantine(
                 _reconcile_operation(
                     operation_dir,
                     database=database,
-                    managed_roots=(Path(raw_dir), Path(pages_dir), Path(markdown_dir)),
+                    managed_roots=(
+                        Path(raw_dir),
+                        Path(pages_dir),
+                        Path(markdown_dir),
+                        Path(agent_readings_dir)
+                        if agent_readings_dir is not None
+                        else Path(data_dir) / "agent-readings",
+                    ),
                 )
             )
         except Exception as exc:  # fail closed, keep the operation inspectable
@@ -135,7 +143,7 @@ def _reconcile_operation(
     operation_dir: Path,
     *,
     database: Database,
-    managed_roots: tuple[Path, Path, Path],
+    managed_roots: tuple[Path, ...],
 ) -> QuarantineOperationReport:
     """Settle one operation directory; see the module docstring for the rules."""
 
@@ -224,7 +232,7 @@ def _validate_manifest(manifest: object, operation_dir: Path) -> str | None:
 def _validated_file_entries(
     entries: list[dict],
     operation_dir: Path,
-    managed_roots: tuple[Path, Path, Path],
+    managed_roots: tuple[Path, ...],
 ) -> tuple[list[tuple[Path, Path, str]], str | None]:
     """Resolve and validate every manifest path; any anomaly fails closed."""
 

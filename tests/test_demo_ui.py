@@ -83,7 +83,7 @@ def test_presentation_steps_are_coarse_only() -> None:
 def test_grounded_fixture_maps_to_grounded_outcome(client: MockDemoClient) -> None:
     view_model = _answered(client, "A")
     assert view_model.outcome is DisplayOutcome.ANSWER_GROUNDED
-    assert [badge.text for badge in view_model.badges] == ["有依据回答"]
+    assert [badge.text for badge in view_model.badges] == ["已在资料中找到"]
     assert view_model.citation_count == 2
     assert view_model.is_mock is True
     assert view_model.warnings == ()
@@ -92,7 +92,10 @@ def test_grounded_fixture_maps_to_grounded_outcome(client: MockDemoClient) -> No
 def test_warning_fixture_maps_to_limited_outcome(client: MockDemoClient) -> None:
     view_model = _answered(client, "B")
     assert view_model.outcome is DisplayOutcome.ANSWER_WITH_WARNING
-    assert [badge.text for badge in view_model.badges] == ["有依据回答", "来源存在限制"]
+    assert [badge.text for badge in view_model.badges] == [
+        "已在资料中找到",
+        "这份资料需要再检查",
+    ]
     assert GENERIC_WARNING in view_model.warnings
 
 
@@ -140,7 +143,7 @@ def test_transport_failure_record_renders_unavailable_state() -> None:
     view_model = build_failure_view_model(record)
     assert view_model.outcome is DisplayOutcome.BACKEND_UNAVAILABLE
     assert "本机 Agent 服务当前不可用" in (view_model.failure_headline or "")
-    assert "127.0.0.1" in (view_model.failure_detail or "")
+    assert "Agent 暂时没有准备好" in (view_model.failure_detail or "")
 
 
 def test_rate_limited_record_renders_rate_limit_state() -> None:
@@ -253,7 +256,7 @@ def test_split_answer_paragraph_disabled_keeps_text_whole() -> None:
 def test_source_type_labels_use_product_language() -> None:
     assert source_type_label(ContextItemType.PAGE) == "页面资料"
     assert source_type_label(ContextItemType.KNOWLEDGE_OBJECT) == "知识对象"
-    assert source_type_label(ContextItemType.KNOWLEDGE_MEMORY) == "知识记忆"
+    assert source_type_label(ContextItemType.KNOWLEDGE_MEMORY) == "我保存过的内容"
     assert source_type_label(ContextItemType.EVIDENCE) == "证据"
     assert source_type_label("page") == "页面资料"
     assert source_type_label("unknown_kind") == "unknown_kind"

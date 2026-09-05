@@ -14,10 +14,12 @@ from src.evidence_basket_service import (
 from src.evidence_prompt_builder import NO_CONFIRMED_EVIDENCE_MESSAGE
 from src.models import EvidenceConfirmationStatus, EvidenceType
 from src.runtime import application_evidence_basket_service
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="证据篮｜工程知识库 v0.6.0", page_icon="🧺", layout="wide")
+render_workspace("pages/7_证据篮.py")
 st.title("证据篮")
 st.caption("持久收集多个页面的具体选区，核对来源后按当前顺序生成 Markdown 证据包。")
 

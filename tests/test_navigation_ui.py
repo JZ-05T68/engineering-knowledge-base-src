@@ -160,6 +160,41 @@ def _has_caption(app: AppTest, text: str) -> bool:
     return any(text in caption.value for caption in app.caption)
 
 
+def test_empty_home_makes_add_document_the_obvious_first_step(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """A first-time user sees one action and no dashboard concepts before it."""
+
+    database = Database(tmp_path / "database" / "knowledge.db")
+    settings = Settings(
+        data_dir=tmp_path,
+        raw_dir=tmp_path / "raw",
+        pages_dir=tmp_path / "pages",
+        markdown_dir=tmp_path / "markdown",
+        database_dir=tmp_path / "database",
+        database_path=tmp_path / "database" / "knowledge.db",
+        logs_dir=tmp_path / "logs",
+        log_path=tmp_path / "logs" / "test.log",
+        runtime_dir=tmp_path / "runtime",
+        pid_path=tmp_path / "runtime" / "test.pid.json",
+        _env_file=None,
+    )
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+    monkeypatch.setattr(runtime, "application_settings", lambda: settings)
+    monkeypatch.setattr(runtime, "application_startup_reconciliation", lambda: None)
+
+    home = AppTest.from_file(str(Path(__file__).parents[1] / "app.py")).run(timeout=10)
+
+    assert not home.exception
+    visible = "\n".join(item.value for item in home.markdown)
+    assert "第 1 步：添加资料" in visible
+    assert all(text in visible for text in ("添加资料", "让 Agent 阅读", "开始提问"))
+    assert "EKB v0.6.0" in visible
+    assert not home.text_input
+    assert not home.metric
+    assert [button.label for button in home.button] == ["添加资料"]
+
+
 def test_reader_page_selection_synchronizes_position_and_ordinary_navigation(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -236,8 +271,114 @@ def test_home_and_browser_show_review_continuation_entry(tmp_path: Path, monkeyp
 
     assert not home.exception
     assert not browser.exception
-    assert any(button.label == "继续处理下一待复核页" for button in home.button)
+    assert any(button.label == "查看识别结果" for button in home.button)
     assert any(button.label == "继续处理下一待复核页" for button in browser.button)
+
+
+def test_home_recent_edit_keeps_document_and_page_on_real_switch(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Follow the real multipage switch, so clearing URL parameters cannot be masked."""
+
+    database, _ = _local_runtime(tmp_path, monkeypatch)
+    page = database.create_page(
+        document_id=1, page_number=2, image_path=tmp_path / "pages" / "page_0002.png",
+    )
+    database.update_page_markdown(page.id, "导航回归测试", tmp_path / "note.md")
+    home = AppTest.from_file(str(Path(__file__).parents[1] / "app.py")).run(timeout=10)
+    home.button(key=f"recent_page_{page.id}").click().run(timeout=10)
+
+    assert not home.exception
+    assert home.query_params["document"] == ["1"]
+    assert home.query_params["page"] == ["2"]
+
+
+def test_home_recent_document_replaces_unrelated_query_parameters(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Opening a document must not inherit a previous page or search context."""
+
+    _local_runtime(tmp_path, monkeypatch)
+    home = AppTest.from_file(str(Path(__file__).parents[1] / "app.py"))
+    home.query_params = {"page": "99", "from_search": "1", "search_query": "旧查询"}
+    home.run(timeout=10)
+    home.button(key="recent_document_1").click().run(timeout=10)
+
+    assert not home.exception
+    assert home.query_params == {"document": ["1"], "page": ["1"]}
+
+
+def test_home_review_entry_preserves_target_page(tmp_path: Path, monkeypatch) -> None:
+    """The review target survives Streamlit's default query-parameter reset."""
+
+    database, _ = _local_runtime(tmp_path, monkeypatch)
+    target = database.list_review_pages()[0]
+    home = AppTest.from_file(str(Path(__file__).parents[1] / "app.py")).run(timeout=10)
+    _reader_button(home, "查看识别结果").click().run(timeout=10)
+
+    assert not home.exception
+    assert home.query_params == {"page_id": [str(target.id)]}
+
+
+def test_sidebar_uses_direct_links_instead_of_source_page_rerun_buttons(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Navigation must send a destination hash directly, with no button-trigger rerun."""
+
+    _local_runtime(tmp_path, monkeypatch)
+    home = AppTest.from_file(str(Path(__file__).parents[1] / "app.py")).run(timeout=10)
+
+    assert not home.exception
+    assert not home.sidebar.button
+    links = {link.label: link.proto for link in home.sidebar.get("page_link")}
+    assert len(links) == 9
+    assert links["首页"].page == ""
+    assert links["首页"].disabled
+    for label, route in (
+        ("问问 Agent", "知识Agent"), ("添加资料", "导入资料"),
+        ("我的资料", "我的资料"), ("查看识别结果", "待整理页面"),
+        ("我保存过的内容", "知识记忆"),
+    ):
+        assert links[label].page == route
+        assert links[label].page_script_hash
+        assert not links[label].external
+        assert not links[label].disabled
+    assert len({link.page_script_hash for link in links.values()}) == 9
+
+
+def test_direct_reader_entry_keeps_native_sidebar_destinations(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    """Opening a subpage directly must still target the real home and import pages."""
+
+    _local_runtime(tmp_path, monkeypatch)
+    reader_path = next((Path(__file__).parents[1] / "pages").glob("17_*.py"))
+    reader = AppTest.from_file(str(reader_path)).run(timeout=10)
+
+    assert not reader.exception
+    links = {link.label: link.proto for link in reader.sidebar.get("page_link")}
+    assert links["首页"].page == ""
+    assert not links["首页"].disabled
+    assert links["我的资料"].disabled
+    assert links["添加资料"].page == "导入资料"
+
+
+def test_simple_reader_exposes_page_correction_without_advanced_jargon(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    _local_runtime(tmp_path, monkeypatch)
+    page_path = next((Path(__file__).parents[1] / "pages").glob("17_*.py"))
+    page = AppTest.from_file(str(page_path)).run(timeout=10)
+
+    assert not page.exception
+    text = "\n".join(item.value for item in (*page.caption, *page.subheader))
+    labels = {button.label for button in page.button}
+    assert "修改这一页的文字" in text
+    assert "保存修改并让 Agent 重读" in labels
+    assert "证据篮" not in text
+    assert "知识对象" not in text
+    control_labels = labels | {item.label for item in page.text_area}
+    assert not any("Markdown" in label for label in control_labels)
 
 
 def test_browser_warns_when_database_note_has_no_markdown_file(

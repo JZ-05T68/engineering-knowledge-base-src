@@ -1,29 +1,38 @@
-"""Streamlit dashboard for Engineering Knowledge Base v0.6.0."""
+"""Local knowledge workspace: overview, search and useful next actions."""
 
 from __future__ import annotations
 
 import logging
+from datetime import date
 
 import streamlit as st
 
 from src.runtime import (
     application_database,
-    application_evidence_basket_service,
     application_settings,
     application_startup_reconciliation,
 )
+from src.workspace_ui import empty_panel, render_workspace, section_heading
 
 LOGGER = logging.getLogger(__name__)
 
-st.set_page_config(page_title="工程知识库 v0.6.0", page_icon="📚", layout="wide")
-st.title("工程知识库 v0.6.0")
-st.caption("本地、单用户的页面级工程知识管理系统")
+
+def _render_footer() -> None:
+    """Keep the product version visible on both first-use and normal home pages."""
+
+    st.markdown(
+        '<div class="ekb-footer"><span>我的资料和经验 · 由我保存，为我所用</span>'
+        '<span>EKB v0.6.0</span></div>', unsafe_allow_html=True,
+    )
+
+
+st.set_page_config(page_title="工作台 · 工程知识库 v0.6.0", page_icon="📚", layout="wide")
+render_workspace("app.py")
 
 try:
     settings = application_settings()
     database = application_database()
     quarantine_reconciliation = application_startup_reconciliation()
-    basket_items = application_evidence_basket_service().list_items()
     stats = database.dashboard_stats()
     recent_documents = database.list_documents(sort_by="imported_desc")[:5]
     recent_pages = database.recent_edited_pages(5)
@@ -36,113 +45,157 @@ except Exception as exc:
 if quarantine_reconciliation is not None and quarantine_reconciliation.has_attention:
     st.warning(
         "检测到需要人工处理的删除操作残留：系统未自动删除或覆盖这些文件，"
-        "请前往“系统维护”页查看详情。"
+        "请前往“备份与修复”页查看详情。"
     )
-
-demo_entry = st.columns([3.2, 1])
-demo_entry[0].markdown(
-    "**比赛演示 · 知识 Agent 工作台**：提问 → 有依据回答 → 来源核验 → 信任边界，"
-    "预置离线演示数据，本地运行、无需 API Key。"
-)
-if demo_entry[1].button(
-    "进入知识 Agent →",
-    type="primary",
-    use_container_width=True,
-):
-    st.switch_page("pages/0_知识Agent.py")
-
-st.divider()
-
-columns = st.columns(6)
-for column, label, value in zip(
-    columns,
-    ("文档", "页面", "已写笔记", "待复核", "标签", "项目"),
-    (
-        stats.documents,
-        stats.pages,
-        stats.noted_pages,
-        stats.review_pages,
-        stats.tags,
-        stats.projects,
-    ),
-    strict=True,
-):
-    column.metric(label, value)
 
 if stats.documents == 0:
-    st.info("知识库还是空的。按下面三个步骤建立第一批可检索、可复用的工程资料。")
     st.markdown(
-        """
-1. **导入第一份 PDF**：保留原件并逐页生成 PNG。
-2. **复核并整理页面**：补充 Markdown，确认页面状态、标签和项目。
-3. **搜索资料并加入证据篮**：收集具体选区，生成可追溯的证据包。
-"""
+        '<div class="ekb-intro"><div><h1>第 1 步：添加资料</h1>'
+        '<p>先选择一个 PDF、Word 或 PowerPoint 文件，其他事情交给 Agent。</p>'
+        '</div></div>',
+        unsafe_allow_html=True,
     )
-    if st.button("📥 导入第一份 PDF", use_container_width=True):
+    with st.container(key="home_first_use"):
+        section_heading("第一次使用，只需要三步", "")
+        for number, title, detail in (
+            ("01", "添加资料", "从电脑中选择一份文件。"),
+            ("02", "让 Agent 阅读", "点击一次，等待 Agent 按页读完。"),
+            ("03", "开始提问", "用自己的话提问，并查看答案来自哪一页。"),
+        ):
+            st.markdown(
+                f'<div class="ekb-step"><span class="ekb-step-num">{number}</span>'
+                f'<div><b>{title}</b><p>{detail}</p></div></div>',
+                unsafe_allow_html=True,
+            )
+        if st.button(
+            "添加资料",
+            icon=":material/upload_file:",
+            type="primary",
+            use_container_width=True,
+            key="first_use_add_document",
+        ):
+            st.switch_page("pages/1_导入资料.py")
+        st.caption("资料读完后，页面会直接带你去问 Agent。")
+    _render_footer()
+    st.stop()
+
+today = date.today()
+weekday = "一二三四五六日"[today.weekday()]
+st.markdown(
+    '<div class="ekb-intro"><div><h1>把学过的、做过的，变成以后用得上的经验。</h1>'
+    '<p>添加资料，让 Agent 读懂；需要的时候，随时回来问。</p></div>'
+    f'<span class="ekb-date">{today:%Y年%m月%d日} · 星期{weekday}</span></div>',
+    unsafe_allow_html=True,
+)
+
+with st.container(key="home_search"), st.form("home_search_form", border=True):
+    query_column, action_column = st.columns([6, 1])
+    query = query_column.text_input(
+        "搜索我的资料", placeholder="搜索资料名称或记得的一句话…",
+        label_visibility="collapsed", key="home_search_query",
+    )
+    search_submitted = action_column.form_submit_button(
+        "搜索", icon=":material/search:", type="primary", use_container_width=True,
+    )
+if search_submitted:
+    if query.strip():
+        # Keep the existing search-state handoff, including its destination validation.
+        st.session_state["pending_search_query_params"] = {"q": query.strip()[:500]}
+        st.switch_page("pages/4_检索资料.py")
+    else:
+        st.info("请输入你想找的内容。")
+
+st.markdown(
+    '<div class="ekb-hero"><div class="ekb-hero-kicker">资料 · 理解 · 经验</div>'
+    '<h2>不只收藏资料，<br>还要记住你从中学到了什么。</h2>'
+    '<p>Agent 会阅读你添加的资料、回答问题并标出原始页码。<br>'
+    '有用的对话，可以由你亲手保存起来。</p>'
+    '<div class="ekb-hero-tags"><span>✓ 文件在本机</span><span>✓ 答案标页码</span>'
+    '<span>✓ 是否保存由你决定</span></div>'
+    '<div class="ekb-art" aria-hidden="true"><div class="ekb-orbit"></div>'
+    '<div class="ekb-orbit inner"></div><div class="ekb-book"><b>Ekb.</b>KNOWLEDGE'
+    '<i class="ekb-book-line"></i><i class="ekb-book-line"></i></div>'
+    '<span class="ekb-art-dot">✧</span><div class="ekb-art-label">连接 · 理解 · 复用</div>'
+    '</div></div>', unsafe_allow_html=True,
+)
+with st.container(key="home_actions"):
+    actions = st.columns([1.3, 1.1, 2.8], vertical_alignment="center")
+    if actions[0].button("问问 Agent →", type="primary", use_container_width=True):
+        st.switch_page("pages/0_知识Agent.py")
+    if actions[1].button("添加资料", icon=":material/add:", use_container_width=True):
         st.switch_page("pages/1_导入资料.py")
+    actions[2].caption("先让 Agent 读完一份资料，再直接用自己的话提问。")
 
-main_actions = st.columns(2)
-if main_actions[0].button(
-    "继续处理下一待复核页",
-    type="primary",
-    disabled=next_review_page is None,
-    use_container_width=True,
-):
-    st.query_params.clear()
-    st.query_params["page_id"] = str(next_review_page.id)
-    st.switch_page("pages/5_待整理页面.py")
-if main_actions[1].button(
-    f"查看证据篮（{len(basket_items)}）",
-    use_container_width=True,
-):
-    st.switch_page("pages/7_证据篮.py")
-if next_review_page is None:
-    st.caption("当前没有待处理、草稿待复核或处理失败的页面。")
+section_heading("我的内容", "保存在这台电脑里的内容")
+with st.container(key="home_metrics"):
+    for column, label, value in zip(
+        st.columns(4), ("资料", "已保存页面", "我的笔记", "可查看页面"),
+        (stats.documents, stats.pages, stats.noted_pages, stats.review_pages), strict=True,
+    ):
+        column.metric(label, value)
 
-left, right = st.columns(2, gap="large")
-with left:
-    st.subheader("最近导入")
+left, right = st.columns([1.7, 1], gap="medium")
+with left, st.container(key="home_recent"):
+    section_heading("最近导入", "最近 5 份资料")
     if recent_documents:
         for document in recent_documents:
             if st.button(
                 f"{document.title} · {document.page_count} 页 · {document.status_label}",
-                key=f"recent_document_{document.id}",
+                icon=":material/description:", key=f"recent_document_{document.id}",
                 use_container_width=True,
             ):
-                st.query_params["document"] = str(document.id)
-                st.switch_page("pages/3_浏览资料.py")
+                st.switch_page(
+                    "pages/17_我的资料.py", query_params={"document": str(document.id)}
+                )
     else:
-        st.info("还没有导入文档。请先导入第一份 PDF。")
+        empty_panel(
+            "你的下一次积累，从这里开始",
+            "添加讲义、说明书或学习资料，让 Agent 从第一页开始读。",
+        )
+        st.info("这里还没有资料。添加第一份文件后就可以开始提问。")
+        if st.button("添加第一份资料", icon=":material/upload_file:", use_container_width=True):
+            st.switch_page("pages/1_导入资料.py")
+    if st.button("查看全部资料 →", key="home_browse_all", use_container_width=True):
+        st.switch_page("pages/17_我的资料.py")
 
-with right:
-    st.subheader("最近编辑")
+with right, st.container(key="home_workflow"):
+    section_heading("只需要三步", "")
+    for number, title, detail in (
+        ("01", "添加资料", "选择 PDF、Word 或 PowerPoint 文件。"),
+        ("02", "让 Agent 读", "Agent 按页读取，图片或手写页会尝试识别。"),
+        ("03", "开始提问", "答案会告诉你来自哪份资料、哪一页。"),
+    ):
+        st.markdown(
+            f'<div class="ekb-step"><span class="ekb-step-num">{number}</span>'
+            f'<div><b>{title}</b><p>{detail}</p></div></div>', unsafe_allow_html=True,
+        )
+    if st.button("查看识别结果", disabled=next_review_page is None,
+                 use_container_width=True):
+        st.switch_page(
+            "pages/5_待整理页面.py", query_params={"page_id": str(next_review_page.id)}
+        )
+    if next_review_page is None:
+        st.caption("当前没有新的识别结果需要提醒。")
+
+with st.container(key="home_edits"):
+    section_heading("最近修改", "我亲手校对过的页面")
     if recent_pages:
         for page in recent_pages:
             document = database.get_document(page.document_id)
             if document and st.button(
-                f"{document.title} · 第 {page.page_number} 页",
-                key=f"recent_page_{page.id}",
-                use_container_width=True,
+                f"{document.title} · 第 {page.page_number} 页", icon=":material/edit_note:",
+                key=f"recent_page_{page.id}", use_container_width=True,
             ):
-                st.query_params.update(
-                    {"document": str(document.id), "page": str(page.page_number)}
+                st.switch_page(
+                    "pages/17_我的资料.py",
+                    query_params={"document": str(document.id), "page": str(page.page_number)},
                 )
-                st.switch_page("pages/3_浏览资料.py")
     else:
-        st.info("还没有编辑过页面笔记。导入后可从待复核页面开始整理。")
+        st.caption("还没有修改过页面。发现识别文字有误时再修改即可。")
 
-st.subheader("开始使用")
-st.markdown(
-    """
-- **导入资料**：保存 PDF 原件，逐页生成 PNG 并提取已有文本层。
-- **浏览资料**：筛选文档，在清晰双栏界面中阅读页面、编辑 Markdown、添加标签和项目。
-- **待整理页面**：集中处理扫描件、手写页和失败页。
-- **检索资料**：搜索页面、笔记、文档标题、标签和项目，直接跳转到命中页面。
-- **证据篮**：持久收集多个页面的具体选区，排序并导出来源可追溯的 Markdown 证据包。
-"""
-)
-st.info(
-    f"所有资料仅保存在本机 `{settings.data_dir}`。服务只监听 "
-    f"`{settings.host}:{settings.port}`，核心功能离线可用；AI 默认为手动模式，"
-    "未配置 API Key 不影响任何原有功能。"
-)
+_render_footer()
+with st.expander("资料保存在哪里"):
+    st.caption(
+        f"资料保存在本机 {settings.data_dir}。"
+        f"这个页面只在 {settings.host}:{settings.port} 打开。"
+    )

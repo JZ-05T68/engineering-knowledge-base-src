@@ -11,10 +11,12 @@ from src.runtime import (
     application_database,
     application_knowledge_object_service,
 )
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="知识对象｜工程知识库 v0.6.0", page_icon="🧠", layout="wide")
+render_workspace("pages/14_知识对象.py")
 st.title("知识对象")
 st.caption("把散落在页面、笔记和证据中的知识提炼为可复用、可关联、可追溯的个人知识资产。")
 

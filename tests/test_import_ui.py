@@ -1,4 +1,4 @@
-"""Focused tests for the optional post-import review action."""
+"""Focused tests for the one-click document-reading page."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ import pytest
 import streamlit as st
 
 import src.runtime as runtime
-from src.document_service import ImportResult, first_reviewable_import_page
 from src.models import PageStatus
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,178 +18,143 @@ IMPORT_PAGE = PROJECT_ROOT / "pages" / "1_导入资料.py"
 
 
 class _Progress:
+    def __init__(self) -> None:
+        self.labels: list[str] = []
+
     def progress(self, *args: Any, **kwargs: Any) -> None:
-        return None
+        self.labels.append(str(kwargs.get("text", "")))
 
     def empty(self) -> None:
         return None
 
 
-def _result(*statuses: PageStatus, duplicate: bool = False) -> ImportResult:
+def test_one_click_import_reads_every_page_and_hides_technical_terms(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     pages = tuple(
-        SimpleNamespace(
-            id=index,
-            status=status,
-            processing_status="failed" if status is PageStatus.FAILED else "text_extracted",
-        )
-        for index, status in enumerate(statuses, start=1)
+        SimpleNamespace(id=index, page_number=index, status=PageStatus.PENDING)
+        for index in range(1, 4)
     )
-    return SimpleNamespace(
-        document=SimpleNamespace(id=7, title="隔离导入资料"),
+    result = SimpleNamespace(
+        document=SimpleNamespace(id=7, title="隔离资料"),
         pages=pages,
-        duplicate=duplicate,
+        duplicate=False,
         import_record=None,
     )
 
-
-def _run_import_page(
-    monkeypatch: pytest.MonkeyPatch, result: ImportResult
-) -> tuple[
-    list[tuple[str, dict[str, Any]]],
-    dict[str, str],
-    list[tuple[str, dict[str, Any]]],
-    list[str],
-    Any,
-    list[int],
-]:
     class Upload:
-        name = "隔离资料.pdf"
+        name = "隔离资料.docx"
         size = 1024
 
         @staticmethod
         def getvalue() -> bytes:
-            return b"%PDF-isolated"
+            return b"office-document"
+
+    imported: list[dict[str, Any]] = []
+    ocr_pages: list[int] = []
+    read_documents: list[int] = []
+    button_labels: list[str] = []
+    success_messages: list[str] = []
+    progress = _Progress()
 
     class Service:
         @staticmethod
-        def import_pdf(**kwargs: Any) -> ImportResult:
-            callback = kwargs["progress_callback"]
-            callback(1, max(len(result.pages), 1))
+        def import_document(**kwargs: Any):
+            imported.append(kwargs)
             return result
 
-    buttons: list[tuple[str, dict[str, Any]]] = []
-    query_params: dict[str, str] = {}
-    switched: list[tuple[str, dict[str, Any]]] = []
-    captions: list[str] = []
-    remaining_import_clicks = [1]
-    import_calls: list[int] = []
+        @staticmethod
+        def run_page_ocr(page_id: int) -> None:
+            ocr_pages.append(page_id)
+
+    class AgentClient:
+        def __init__(self, **kwargs: Any) -> None:
+            del kwargs
+
+        def read_document(self, document_id: int, **kwargs: Any) -> None:
+            read_documents.append(document_id)
+            callback = kwargs["progress_callback"]
+            for position in range(1, 4):
+                callback(position, 3)
 
     def button(label: str, **kwargs: Any) -> bool:
-        buttons.append((label, kwargs))
-        if label == "导入 PDF" and remaining_import_clicks:
-            remaining_import_clicks.pop()
-            return True
-        return False
+        del kwargs
+        button_labels.append(label)
+        return label == "让 Agent 读这份资料"
 
-    original_import = Service.import_pdf
-
-    def import_pdf(**kwargs: Any) -> ImportResult:
-        import_calls.append(1)
-        return original_import(**kwargs)
-
-    Service.import_pdf = staticmethod(import_pdf)
+    class Column:
+        @staticmethod
+        def button(label: str, **kwargs: Any) -> bool:
+            return button(label, **kwargs)
 
     monkeypatch.setattr(runtime, "application_document_service", lambda: Service())
+    monkeypatch.setattr(
+        runtime,
+        "application_settings",
+        lambda: SimpleNamespace(
+            agent_readings_dir=Path("readings"), ai_llm_model_hard="qwen3.8"
+        ),
+    )
+    monkeypatch.setattr(runtime, "application_database", lambda: object())
+    monkeypatch.setattr(runtime, "application_ai_provider", lambda: object())
+    monkeypatch.setattr(
+        "src.agent.local_client.LocalDocumentAgentClient", AgentClient
+    )
     monkeypatch.setattr(st, "set_page_config", lambda **kwargs: None)
     monkeypatch.setattr(st, "title", lambda *args, **kwargs: None)
-    monkeypatch.setattr(st, "caption", lambda value, **kwargs: captions.append(str(value)))
+    monkeypatch.setattr(st, "caption", lambda *args, **kwargs: None)
     monkeypatch.setattr(st, "file_uploader", lambda *args, **kwargs: Upload())
-    monkeypatch.setattr(st, "text_input", lambda *args, **kwargs: "隔离导入资料")
     monkeypatch.setattr(st, "button", button)
-    monkeypatch.setattr(st, "progress", lambda *args, **kwargs: _Progress())
-    monkeypatch.setattr(st, "success", lambda *args, **kwargs: None)
-    monkeypatch.setattr(st, "warning", lambda *args, **kwargs: None)
-    monkeypatch.setattr(st, "error", lambda *args, **kwargs: None)
-    monkeypatch.setattr(st, "divider", lambda: None)
-    monkeypatch.setattr(st, "markdown", lambda *args, **kwargs: None)
-    monkeypatch.setattr(st, "query_params", query_params)
+    monkeypatch.setattr(st, "columns", lambda count: [Column() for _ in range(count)])
+    monkeypatch.setattr(st, "progress", lambda *args, **kwargs: progress)
     monkeypatch.setattr(
         st,
-        "switch_page",
-        lambda page, **kwargs: switched.append((str(page), kwargs)),
+        "success",
+        lambda message, *args, **kwargs: success_messages.append(str(message)),
     )
+    monkeypatch.setattr(st, "error", lambda *args, **kwargs: None)
 
-    def run_page() -> None:
+    runpy.run_path(str(IMPORT_PAGE), run_name="__main__")
+
+    assert len(imported) == 1
+    assert imported[0]["filename"] == "隔离资料.docx"
+    assert "progress_callback" not in imported[0]
+    assert ocr_pages == [1, 2, 3]
+    assert read_documents == [7]
+    assert "让 Agent 读这份资料" in button_labels
+    assert "去问 Agent" in button_labels
+    assert "查看识别结果（可选）" in button_labels
+    assert progress.labels[-1] == "已读完 3 / 3 页"
+    assert success_messages[-1] == "资料已经读完，可以去问 Agent 了。"
+    assert progress.labels == [
+        "正在读取 1 / 3 页",
+        "正在读取 2 / 3 页",
+        "正在读取 3 / 3 页",
+        "已读完 3 / 3 页",
+    ]
+    visible_text = "\n".join(button_labels + progress.labels + success_messages)
+    for hidden_term in ("embedding", "chunk", "RAG", "索引"):
+        assert hidden_term not in visible_text
+
+
+def test_uploader_accepts_pdf_word_and_powerpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    uploader_options: dict[str, Any] = {}
+
+    def file_uploader(*args: Any, **kwargs: Any) -> None:
+        del args
+        uploader_options.update(kwargs)
+        return None
+
+    monkeypatch.setattr(st, "set_page_config", lambda **kwargs: None)
+    monkeypatch.setattr(st, "title", lambda *args, **kwargs: None)
+    monkeypatch.setattr(st, "caption", lambda *args, **kwargs: None)
+    monkeypatch.setattr(st, "file_uploader", file_uploader)
+    monkeypatch.setattr(st, "info", lambda *args, **kwargs: None)
+    monkeypatch.setattr(st, "stop", lambda: (_ for _ in ()).throw(SystemExit))
+
+    with pytest.raises(SystemExit):
         runpy.run_path(str(IMPORT_PAGE), run_name="__main__")
 
-    run_page()
-    return buttons, query_params, switched, captions, run_page, import_calls
-
-
-def _click_review(buttons: list[tuple[str, dict[str, Any]]]) -> None:
-    review = next(kwargs for label, kwargs in buttons if label == "进入复核")
-    callback = review["on_click"]
-    callback(*review["args"])
-
-
-def test_normal_import_offers_review_action_for_first_reviewable_page(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result = _result(PageStatus.PENDING, PageStatus.PENDING)
-
-    buttons, query_params, switched, _, rerun, import_calls = _run_import_page(
-        monkeypatch, result
-    )
-    _click_review(buttons)
-    assert query_params == {"import_review_page": "1"}
-    assert switched == []
-    rerun()
-
-    assert first_reviewable_import_page(result).id == 1
-    assert query_params == {}
-    assert switched == [
-        ("pages/5_待整理页面.py", {"query_params": {"page_id": "1"}})
-    ]
-    assert len(import_calls) == 1
-
-
-def test_partially_failed_import_still_offers_review_for_failed_page(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result = _result(PageStatus.REVIEWED, PageStatus.FAILED)
-
-    buttons, query_params, switched, _, rerun, import_calls = _run_import_page(
-        monkeypatch, result
-    )
-    _click_review(buttons)
-    rerun()
-
-    assert first_reviewable_import_page(result).id == 2
-    assert query_params == {}
-    assert switched == [
-        ("pages/5_待整理页面.py", {"query_params": {"page_id": "2"}})
-    ]
-    assert len(import_calls) == 1
-
-
-def test_complete_duplicate_import_never_offers_review_action(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result = _result(PageStatus.PENDING, duplicate=True)
-
-    buttons, query_params, switched, _, _, import_calls = _run_import_page(
-        monkeypatch, result
-    )
-
-    assert first_reviewable_import_page(result) is None
-    assert "进入复核" not in [label for label, _ in buttons]
-    assert query_params == {}
-    assert switched == []
-    assert len(import_calls) == 1
-
-
-def test_import_without_reviewable_pages_explains_that_no_action_is_needed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    result = _result(PageStatus.REVIEWED, PageStatus.SKIPPED)
-
-    buttons, query_params, switched, captions, _, import_calls = _run_import_page(
-        monkeypatch, result
-    )
-
-    assert first_reviewable_import_page(result) is None
-    assert "进入复核" not in [label for label, _ in buttons]
-    assert any("没有新增待复核页面" in caption for caption in captions)
-    assert query_params == {}
-    assert switched == []
-    assert len(import_calls) == 1
+    assert uploader_options["type"] == ["pdf", "doc", "docx", "ppt", "pptx"]

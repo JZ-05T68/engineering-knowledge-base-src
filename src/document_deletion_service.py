@@ -60,6 +60,7 @@ class DocumentDeletionService:
         pages_dir: Path,
         markdown_dir: Path,
         data_dir: Path,
+        agent_readings_dir: Path | None = None,
         app_version: str = "",
     ) -> None:
         self._database = database
@@ -67,6 +68,11 @@ class DocumentDeletionService:
         self._pages_dir = Path(pages_dir)
         self._markdown_dir = Path(markdown_dir)
         self._data_dir = Path(data_dir)
+        self._agent_readings_dir = (
+            Path(agent_readings_dir)
+            if agent_readings_dir is not None
+            else self._data_dir / "agent-readings"
+        )
         self._app_version = app_version
         self._quarantine_root = self._data_dir / QUARANTINE_DIR_NAME
 
@@ -165,6 +171,7 @@ class DocumentDeletionService:
         files, missing_files, path_anomalies, total_size = self._collect_files(
             document_id=document_id,
             source_path=document.source_path,
+            page_ids=page_ids,
             image_paths=[page.image_path for page in pages],
             markdown_paths=[
                 page.markdown_path for page in pages if page.markdown_path is not None
@@ -492,6 +499,7 @@ class DocumentDeletionService:
         *,
         document_id: int,
         source_path: Path,
+        page_ids: list[int],
         image_paths: list[Path],
         markdown_paths: list[Path],
     ) -> tuple[tuple[DocumentDeletionFile, ...], tuple[Path, ...], tuple[str, ...], int]:
@@ -513,6 +521,32 @@ class DocumentDeletionService:
                 for path in markdown_paths
             ),
         ]
+        # Agent readings are derived files keyed by database ids. They are not
+        # database-recorded source paths, so missing files are normal; existing
+        # ones must still join the same quarantine/rollback transaction to avoid
+        # leaving stale read state after a document is deleted and re-uploaded.
+        optional_reading_candidates = [
+            (
+                self._agent_readings_dir
+                / "documents"
+                / f"document_{document_id}.json",
+                "agent_document_reading",
+                self._agent_readings_dir / "documents",
+            ),
+            *(
+                (
+                    self._agent_readings_dir / "pages" / f"page_{page_id}.json",
+                    "agent_page_reading",
+                    self._agent_readings_dir / "pages",
+                )
+                for page_id in page_ids
+            ),
+        ]
+        candidates.extend(
+            candidate
+            for candidate in optional_reading_candidates
+            if candidate[0].exists() or candidate[0].is_symlink()
+        )
         entries: list[DocumentDeletionFile] = []
         missing: list[Path] = []
         anomalies: list[str] = []

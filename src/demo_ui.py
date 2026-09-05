@@ -131,9 +131,9 @@ class Badge:
     tone: str  # "ok" | "warn" | "empty" | "error" | "muted"
 
 
-_GROUNDED_BADGE = Badge(icon="✓", text="有依据回答", tone="ok")
-_LIMITED_BADGE = Badge(icon="⚠", text="来源存在限制", tone="warn")
-_NO_EVIDENCE_BADGE = Badge(icon="○", text="未找到可支持资料", tone="empty")
+_GROUNDED_BADGE = Badge(icon="✓", text="已在资料中找到", tone="ok")
+_LIMITED_BADGE = Badge(icon="⚠", text="这份资料需要再检查", tone="warn")
+_NO_EVIDENCE_BADGE = Badge(icon="○", text="资料里没有找到答案", tone="empty")
 _FAILED_BADGE = Badge(icon="×", text="本次请求未完成", tone="error")
 _RATE_LIMIT_BADGE = Badge(icon="⏳", text="请求过于频繁", tone="warn")
 _UNAVAILABLE_BADGE = Badge(icon="⏻", text="本机服务不可用", tone="error")
@@ -205,14 +205,11 @@ def failure_detail(outcome: DisplayOutcome, error_message: str | None = None) ->
     """Closed failure copy; the only error text shown is the public catalog."""
 
     if outcome is DisplayOutcome.RATE_LIMITED:
-        return "短时间内请求过多。请稍等片刻后重试，或切换到预置离线演示继续演示。"
+        return "问题问得太快了，请稍等片刻后再试。"
     if outcome is DisplayOutcome.BACKEND_UNAVAILABLE:
-        return (
-            "本机 Agent 服务未启动或暂时无法连接（127.0.0.1）。"
-            "这不是知识库本身的问题。可稍后重试，或显式切换到预置离线演示。"
-        )
+        return "Agent 暂时没有准备好，请稍后再试。"
     detail = error_message or "服务处理请求失败。"
-    return f"{detail} 请重试，或切换到预置离线演示继续演示。"
+    return f"{detail} 请稍后重试。"
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +219,7 @@ def failure_detail(outcome: DisplayOutcome, error_message: str | None = None) ->
 SOURCE_TYPE_LABELS: dict[ContextItemType, str] = {
     ContextItemType.PAGE: "页面资料",
     ContextItemType.KNOWLEDGE_OBJECT: "知识对象",
-    ContextItemType.KNOWLEDGE_MEMORY: "知识记忆",
+    ContextItemType.KNOWLEDGE_MEMORY: "我保存过的内容",
     ContextItemType.EVIDENCE: "证据",
 }
 
@@ -278,8 +275,8 @@ INTEGRITY_BADGES: dict[ContextFingerprintState, IntegrityBadge] = {
 
 SOURCE_UNAVAILABLE_NOTE = "该来源暂时不可检查（来源详情获取失败），不影响已给出的答案。"
 LOCATION_FALLBACK = "位置信息未提供"
-LIVE_INTEGRITY_NOTE = "当前模式未提供该来源的完整性状态，仅展示来源元数据。"
-VERIFIED_SUPPORT_NOTE = "本条回答的已验证来源之一，支撑回答中的对应结论。"
+LIVE_INTEGRITY_NOTE = "你可以根据资料名称和页码回到原文检查。"
+VERIFIED_SUPPORT_NOTE = "这是回答用到的一页资料。"
 
 
 def short_source_id(stable_id: str) -> str:
@@ -485,8 +482,8 @@ def split_answer_paragraph(
 
 
 NO_EVIDENCE_HINT = (
-    "EKB 不会在缺少依据时编造答案。可以换一条演示问题，"
-    "或先在管理页面导入相关资料。"
+    "资料里没有写的内容，Agent 不会自己编一个答案。"
+    "你可以换一种问法，或先添加相关资料。"
 )
 
 

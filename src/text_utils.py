@@ -23,6 +23,32 @@ _MARKDOWN_MARKER: Final[re.Pattern[str]] = re.compile(
 _FTS_OPERATORS: Final[frozenset[str]] = frozenset({"and", "or", "not", "near"})
 
 
+def build_agent_page_text(
+    *, extracted_text: str, ocr_text: str, manual_text: str = ""
+) -> tuple[str, str]:
+    """Combine immutable source text with an explicitly labelled correction."""
+
+    if ocr_text.strip():
+        original = ocr_text.strip()
+        source_kind = "ocr_text"
+    elif extracted_text.strip():
+        original = extracted_text.strip()
+        source_kind = "pdf_text"
+    else:
+        original = ""
+        source_kind = "none"
+    correction = manual_text.strip()
+    if original and correction:
+        return (
+            f"【原始页面文字】\n{original}\n\n"
+            f"【用户人工校对或补充】\n{correction}",
+            f"{source_kind}+manual",
+        )
+    if correction:
+        return f"【用户人工校对或补充】\n{correction}", "manual"
+    return original, source_kind
+
+
 def literal_match_spans(text: str, terms: Sequence[str]) -> tuple[tuple[int, int], ...]:
     """Return non-overlapping literal matches, preferring longer overlapping terms."""
 
@@ -259,6 +285,7 @@ def highlight_html(text: str, terms: Sequence[str]) -> str:
 
 
 __all__ = [
+    "build_agent_page_text",
     "build_context_excerpt",
     "build_context_excerpts",
     "extract_fts_search_terms",

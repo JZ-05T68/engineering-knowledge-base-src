@@ -9,10 +9,12 @@ import streamlit as st
 from src.note_list_ui import render_notes_list_page
 from src.note_service import NoteService
 from src.runtime import application_database
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="结构化笔记｜工程知识库 v0.6.0", page_icon="🗂️", layout="wide")
+render_workspace("pages/6_结构化笔记.py")
 st.title("结构化笔记")
 st.caption("集中查看文档级、页面级、文字选区和图片区域笔记，并返回原始文档或页面。")
 

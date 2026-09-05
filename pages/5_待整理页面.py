@@ -30,6 +30,7 @@ from src.runtime import (
     application_document_service,
     application_page_batch_service,
 )
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 _ACTIVE_PAGE_KEY = "review_active_page_id"
@@ -39,9 +40,11 @@ _FLASH_KEY = "review_flash"
 _BATCH_NUMBER_KEY = "review_visible_batch_number"
 _VISIBLE_BATCH_SIZE = 20
 
-st.set_page_config(page_title="待复核页面｜工程知识库 v0.6.0", page_icon="📝", layout="wide")
-st.title("待复核页面")
-st.caption("连续保存草稿、人工复核或暂时跳过；所有内容仅保存在本机。")
+st.set_page_config(page_title="查看识别结果｜工程知识库 v0.6.0", page_icon="📝", layout="wide")
+render_workspace("pages/5_待整理页面.py")
+st.title("查看识别结果")
+st.info("AI 已自动识别。只有发现文字错误时才需要修改。")
+st.caption("这里可以对照原始页面查看识别文字；不修改也不会影响正常提问。")
 
 
 def _editor_key(page_id: int) -> str:
@@ -92,13 +95,13 @@ try:
     all_projects = classification_metadata.projects
 except Exception as exc:
     LOGGER.exception("读取待复核页面失败")
-    st.error(f"读取待复核页面失败：{exc}")
+    st.error(f"打开识别结果失败：{exc}")
     st.stop()
 
 document_options = {document.id: document for document in documents}
 document_titles = {document.id: document.title for document in documents}
 selected_document = st.selectbox(
-    "按文档筛选待处理队列",
+    "选择一份资料",
     options=[None, *document_options],
     format_func=lambda value: "全部文档" if value is None else document_options[value].title,
     key="review_document_filter",
@@ -134,12 +137,12 @@ if active_page is None and queue_batch.pages:
     active_page = queue_batch.pages[0]
 if active_page is None:
     if documents:
-        st.success("当前筛选范围内没有待复核页面。可以查看已经整理过的资料。")
-        if st.button("📖 查看已复核资料", use_container_width=True):
-            st.switch_page("pages/3_浏览资料.py")
+        st.success("这份资料目前没有需要提醒的识别结果。")
+        if st.button("📖 查看全部页面", use_container_width=True):
+            st.switch_page("pages/17_我的资料.py")
     else:
-        st.info("还没有文档或待复核页面。请先导入第一份 PDF。")
-        if st.button("📥 前往导入资料", use_container_width=True):
+        st.info("还没有资料。请先添加一份 PDF、Word 或 PowerPoint 文件。")
+        if st.button("📥 添加资料", use_container_width=True):
             st.switch_page("pages/1_导入资料.py")
     st.stop()
 
@@ -159,7 +162,7 @@ selector_options = sorted(
 )
 st.session_state[_SELECTOR_KEY] = int(st.session_state[_ACTIVE_PAGE_KEY])
 st.selectbox(
-    "选择当前批次待处理页面",
+    "选择一页查看",
     options=selector_options,
     format_func=lambda value: _page_label(selectable_pages[value], document_titles),
     key=_SELECTOR_KEY,

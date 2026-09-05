@@ -35,10 +35,12 @@ from src.search_state import (
     encode_return_state,
     search_state_query_params,
 )
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="浏览资料｜工程知识库 v0.6.0", page_icon="📖", layout="wide")
+render_workspace("pages/3_浏览资料.py")
 st.title("文档与页面")
 st.caption("筛选本地文档，在同一界面阅读原图、编辑笔记并组织标签与项目。")
 
@@ -299,9 +301,9 @@ if st.button(
     disabled=next_document_review_page is None,
     use_container_width=True,
 ):
-    st.query_params.clear()
-    st.query_params["page_id"] = str(next_document_review_page.id)
-    st.switch_page("pages/5_待整理页面.py")
+    st.switch_page(
+        "pages/5_待整理页面.py", query_params={"page_id": str(next_document_review_page.id)}
+    )
 if next_document_review_page is None:
     st.caption("这份文档当前没有待处理、草稿待复核或处理失败的页面。")
 

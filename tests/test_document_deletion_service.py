@@ -368,6 +368,39 @@ def test_delete_multi_page_document_cascades_everything(tmp_path: Path) -> None:
     assert not any(_quarantine_root(env["data_dir"]).iterdir())
 
 
+def test_delete_removes_only_that_documents_agent_readings(tmp_path: Path) -> None:
+    env = _build_full_library(tmp_path)
+    document = env["document"]
+    pages = env["pages"]
+    other = env["other"]
+    other_pages = env["other_pages"]
+    reading_root = env["data_dir"] / "agent-readings"
+    documents_root = reading_root / "documents"
+    page_root = reading_root / "pages"
+    documents_root.mkdir(parents=True)
+    page_root.mkdir(parents=True)
+    target_paths = [documents_root / f"document_{document.id}.json"] + [
+        page_root / f"page_{page.id}.json" for page in pages
+    ]
+    other_paths = [documents_root / f"document_{other.id}.json"] + [
+        page_root / f"page_{page.id}.json" for page in other_pages
+    ]
+    for path in (*target_paths, *other_paths):
+        path.write_text('{"derived": true}\n', encoding="utf-8")
+
+    preview = env["service"].preview_document_deletion(document.id)
+
+    assert set(target_paths) <= {entry.path for entry in preview.files}
+    assert set(other_paths).isdisjoint(entry.path for entry in preview.files)
+    result = env["service"].delete_document(
+        document.id, expected_title=document.title
+    )
+
+    assert result.deleted is True
+    assert all(not path.exists() for path in target_paths)
+    assert all(path.is_file() for path in other_paths)
+
+
 def test_delete_with_missing_file_still_succeeds(tmp_path: Path) -> None:
     env = _build_full_library(tmp_path)
     missing_png = env["pages"][0].image_path

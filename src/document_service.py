@@ -7,15 +7,18 @@ import logging
 import os
 import re
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, BinaryIO
 from uuid import uuid4
 
 from src.models import Document, ImportRecord, ImportStatus, Page, PageStatus
 from src.ocr_engine import OcrEngine, OcrExecutionError, require_ocr_engine
 from src.ocr_policy import is_page_eligible_for_ocr
+from src.office_pdf_converter import OFFICE_EXTENSIONS, OfficePdfConverter
 from src.pdf_service import (
     DocumentDiagnosticsSummary,
     PdfProcessingError,
@@ -193,6 +196,7 @@ class DocumentService:
         markdown_dir: Path | str,
         pdf_service: PdfService | None = None,
         ocr_engine: OcrEngine | None = None,
+        office_converter: OfficePdfConverter | None = None,
     ) -> None:
         self.database = database
         self.raw_dir = Path(raw_dir)
@@ -200,6 +204,62 @@ class DocumentService:
         self.markdown_dir = Path(markdown_dir)
         self.pdf_service = pdf_service or PdfService()
         self.ocr_engine = ocr_engine
+        self.office_converter = office_converter or OfficePdfConverter()
+
+    def import_document(
+        self,
+        file_content: bytes | bytearray | memoryview | BinaryIO,
+        filename: str,
+        title: str | None = None,
+        progress_callback: Callable[[int, int], None] | None = None,
+    ) -> ImportResult:
+        """Import PDF, Word or PowerPoint through the existing PDF page pipeline.
+
+        Office originals are saved locally before conversion.  The generated
+        PDF is derived input for rendering, OCR and page-number citations; the
+        original Office file remains untouched in ``raw/originals``.
+        """
+
+        safe_filename = self._safe_document_filename(filename)
+        extension = Path(safe_filename).suffix.lower()
+        if extension == ".pdf":
+            return self.import_pdf(
+                file_content,
+                safe_filename,
+                title=title,
+                progress_callback=progress_callback,
+            )
+        if extension not in OFFICE_EXTENSIONS:
+            raise DocumentImportError("目前支持 PDF、Word 和 PowerPoint 文件。")
+
+        content = self._read_upload(file_content)
+        if not content:
+            raise DocumentImportError("上传的文件为空，请选择有效文件。")
+        sha256 = hashlib.sha256(content).hexdigest()
+        original_path = self._choose_original_path(sha256, safe_filename)
+        self._save_original_document(original_path, content, sha256)
+        conversion_root = self.raw_dir / ".office-conversion"
+        conversion_root.mkdir(parents=True, exist_ok=True)
+        try:
+            with TemporaryDirectory(dir=conversion_root) as temporary_directory:
+                converted_path = Path(temporary_directory) / f"{Path(safe_filename).stem}.pdf"
+                self.office_converter.convert(original_path, converted_path)
+                return self.import_pdf(
+                    converted_path.read_bytes(),
+                    f"{Path(safe_filename).stem}.pdf",
+                    title=(title or "").strip() or Path(safe_filename).stem,
+                    progress_callback=progress_callback,
+                )
+        except DocumentImportError:
+            raise
+        except Exception as exc:
+            LOGGER.exception("Office 文档转换失败：filename=%s", safe_filename)
+            raise DocumentImportError(
+                "无法在本机读取这份 Word 或 PowerPoint 文件；原文件已安全保留。"
+            ) from exc
+        finally:
+            with suppress(OSError):
+                conversion_root.rmdir()
 
     def import_pdf(
         self,
@@ -789,6 +849,46 @@ class DocumentService:
         if Path(sanitized).suffix.lower() != ".pdf":
             raise DocumentImportError("仅支持导入扩展名为 .pdf 的文件。")
         return sanitized
+
+    @staticmethod
+    def _safe_document_filename(filename: str) -> str:
+        """Return a traversal-safe filename for supported user documents."""
+
+        if not isinstance(filename, str):
+            raise TypeError("文件名必须是字符串。")
+        basename = Path(filename).name
+        sanitized = INVALID_FILENAME_CHARACTERS.sub("_", basename).strip(" .")
+        if not sanitized:
+            raise DocumentImportError("文件名为空或无效。")
+        if Path(sanitized).suffix.lower() not in {".pdf", *OFFICE_EXTENSIONS}:
+            raise DocumentImportError("目前支持 PDF、Word 和 PowerPoint 文件。")
+        return sanitized
+
+    def _choose_original_path(self, sha256: str, filename: str) -> Path:
+        """Return a content-addressed path for a non-PDF uploaded original."""
+
+        filename_path = Path(filename)
+        stem = filename_path.stem[:MAX_STORED_STEM_LENGTH].rstrip(" .") or "document"
+        return self.raw_dir / "originals" / f"{sha256}_{stem}{filename_path.suffix.lower()}"
+
+    def _save_original_document(self, path: Path, content: bytes, sha256: str) -> None:
+        """Atomically save one Office original without overwriting unrelated data."""
+
+        resolved_root = (self.raw_dir / "originals").resolve(strict=False)
+        resolved_path = path.resolve(strict=False)
+        if resolved_path.parent != resolved_root:
+            raise DocumentImportError("原文件目标路径不在受管目录内。")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if path.is_file() and self.pdf_service.calculate_sha256(path) == sha256:
+            return
+        temporary = path.with_name(f"{path.name}{TEMP_RAW_INFIX}{uuid4().hex[:12]}")
+        try:
+            _write_pdf_content(temporary, content)
+            if self.pdf_service.calculate_sha256(temporary) != sha256:
+                raise DocumentImportError("原文件保存后校验失败。")
+            os.replace(temporary, path)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _choose_raw_path(self, sha256: str, filename: str) -> Path:
         """Return the content-addressed raw path for one upload.

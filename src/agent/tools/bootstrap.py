@@ -20,6 +20,8 @@ The Phase 1 registry deliberately registers exactly seven read-only tools:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from src.agent.tools.adapters import (
     GET_EVIDENCE_DEFINITION,
     GET_KNOWLEDGE_MEMORY_DEFINITION,
@@ -46,6 +48,9 @@ from src.knowledge_object_service import KnowledgeObjectService
 from src.knowledge_search_service import KnowledgeSearchService
 from src.search_service import SearchService
 
+if TYPE_CHECKING:
+    from src.agent.tools.adapters.page_search import PageReadingLookup
+
 
 def phase1_tool_definitions() -> tuple[ToolDefinition, ...]:
     """Return the seven frozen Phase 1 read-only Tool definitions."""
@@ -68,7 +73,12 @@ def build_phase1_registry() -> ToolRegistry:
     return registry
 
 
-def build_phase1_handlers(database: Database) -> dict[str, ToolHandler]:
+def build_phase1_handlers(
+    database: Database,
+    *,
+    page_readings: PageReadingLookup | None = None,
+    require_agent_read: bool = False,
+) -> dict[str, ToolHandler]:
     """Build the callable handler map for the seven Phase 1 tools.
 
     Services are constructed from the caller-provided ``database``; no global
@@ -78,7 +88,10 @@ def build_phase1_handlers(database: Database) -> dict[str, ToolHandler]:
     kb_uuid = database.get_knowledge_base_uuid()
     return {
         "page_search": PageSearchAdapter(
-            SearchService(database), kb_uuid=kb_uuid
+            SearchService(database),
+            kb_uuid=kb_uuid,
+            page_readings=page_readings,
+            require_agent_read=require_agent_read,
         ),
         "knowledge_search": KnowledgeSearchAdapter(
             KnowledgeSearchService(database)

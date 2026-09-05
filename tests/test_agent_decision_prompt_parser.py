@@ -100,6 +100,8 @@ def test_prompt_does_not_request_reasoning_or_final_answer() -> None:
     # The prompt must prohibit, never ask for, tool_calls / reasoning output.
     assert "不要输出 tool_calls 数组" in prompt
     assert "不要输出解释、推理、思考过程" in prompt
+    assert "版本 修订 适用条件" in prompt
+    assert "不得猜测具体版本号或答案" in prompt
 
 
 def test_prompt_is_deterministic() -> None:

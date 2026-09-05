@@ -187,12 +187,15 @@ def test_object_source_link_action(tmp_path: Path, monkeypatch) -> None:
 def test_memory_page_lists_entries(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     memory_service = KnowledgeMemoryService(database)
+    document_id, page_id = _seed_document_and_page(database)
     memory_service.create_entry(
         kind=KnowledgeMemoryEntryKind.PROBLEM_SOLVING,
         title="STM32 电机控制异常",
         content="修改 PWM、调整 PID 均无效。",
         root_cause="编码器中断配置错误。",
         lesson="高速控制系统优先检查时序问题。",
+        document_id=document_id,
+        page_id=page_id,
     )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
@@ -202,26 +205,46 @@ def test_memory_page_lists_entries(tmp_path: Path, monkeypatch) -> None:
     app = AppTest.from_file(KNOWLEDGE_MEMORY_PAGE).run(timeout=30)
 
     assert not app.exception
+    assert app.title[0].value == "我保存过的内容"
+    assert any("删除原资料后，副本仍会保留" in item.value for item in app.caption)
+    assert not app.selectbox
+    assert not app.number_input
     markdown = [item.value for item in app.markdown]
-    assert any("STM32 电机控制异常" in value for value in markdown)
-    assert any("编码器中断配置错误" in value for value in markdown)
-    assert any("经验教训" in value for value in markdown)
+    assert any("关于 测试手册 的讨论" in value for value in markdown)
+    assert any(button.label == "查看" for button in app.button)
+    assert any(button.label == "删除" for button in app.button)
+    visible_text = "\n".join(markdown)
+    assert "问题解决" not in visible_text
+    assert "现行" not in visible_text
+    assert "ID 1" not in visible_text
+
+    app.button(key="saved_view_1").click().run()
+    assert not app.exception
+    opened_markdown = "\n".join(item.value for item in app.markdown)
+    assert "编码器中断配置错误" in opened_markdown
+    assert "以后可以这样做" in opened_markdown
 
 
-def test_memory_page_create_entry(tmp_path: Path, monkeypatch) -> None:
+def test_memory_page_deletes_only_after_confirmation(tmp_path: Path, monkeypatch) -> None:
     database = _make_database(tmp_path)
     memory_service = KnowledgeMemoryService(database)
+    entry = memory_service.create_entry(
+        kind=KnowledgeMemoryEntryKind.EXPERIENCE,
+        title="新经验",
+        content="经验内容",
+    )
     monkeypatch.setattr(runtime, "application_database", lambda: database)
     monkeypatch.setattr(
         runtime, "application_knowledge_memory_service", lambda: memory_service
     )
 
     app = AppTest.from_file(KNOWLEDGE_MEMORY_PAGE).run(timeout=30)
-    app.selectbox(key="km_new_kind").set_value(KnowledgeMemoryEntryKind.EXPERIENCE)
-    app.text_input(key="km_new_title").set_value("新经验")
-    app.text_area(key="km_new_content").set_value("经验内容")
-    app.button(key="km_create").click().run()
+    app.button(key=f"saved_delete_{entry.id}").click().run()
 
     assert not app.exception
     assert database.count_knowledge_memory_entries() == 1
-    assert database.list_knowledge_memory_entries()[0].title == "新经验"
+    assert any(button.label == "确认删除" for button in app.button)
+
+    app.button(key=f"saved_confirm_delete_{entry.id}").click().run()
+    assert not app.exception
+    assert database.count_knowledge_memory_entries() == 0

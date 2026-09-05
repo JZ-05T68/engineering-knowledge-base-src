@@ -243,6 +243,26 @@ def test_crash_after_partial_move_restores_everything(tmp_path: Path) -> None:
         assert path.is_file()
 
 
+def test_crash_restores_agent_reading_file_with_document(tmp_path: Path) -> None:
+    database, _, data_dir, raw_dir, pages_dir, markdown_dir = _make_env(tmp_path)
+    document, page = _create_document(
+        database, raw_dir, pages_dir, title="甲", sha_letter="a"
+    )
+    reading = data_dir / "agent-readings" / "pages" / f"page_{page.id}.json"
+    reading.parent.mkdir(parents=True)
+    reading.write_text('{"derived": true}\n', encoding="utf-8")
+    files = [Path(document.source_path), page.image_path, reading]
+    operation_dir, _ = _forge_operation(
+        data_dir, document, files, moved={0, 1, 2}
+    )
+
+    report = _reconcile(database, data_dir, raw_dir, pages_dir, markdown_dir)
+
+    assert report.operations[0].status == STATUS_RESTORED
+    assert not operation_dir.exists()
+    assert reading.is_file()
+
+
 def test_all_quarantined_with_document_present_restores_fully(tmp_path: Path) -> None:
     database, _, data_dir, raw_dir, pages_dir, markdown_dir = _make_env(tmp_path)
     document, page = _create_document(database, raw_dir, pages_dir, title="甲", sha_letter="a")

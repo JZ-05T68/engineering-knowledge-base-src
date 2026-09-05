@@ -147,7 +147,9 @@ def test_empty_state_without_documents(tmp_path: Path, monkeypatch) -> None:
     assert not app.exception
     assert any("还没有已导入的文档" in info.value for info in app.info)
     assert not app.selectbox
-    assert not app.button
+    # Empty data has no document actions; shared sidebar navigation stays available.
+    assert not app.main.button
+    assert any(link.label == "首页" for link in app.sidebar.get("page_link"))
 
 
 # --- target selection ----------------------------------------------------------

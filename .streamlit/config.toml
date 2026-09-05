@@ -5,6 +5,13 @@ headless = true
 [browser]
 gatherUsageStats = false
 
+[client]
+showSidebarNavigation = false
+
 [theme]
 base = "light"
-primaryColor = "#2563EB"
+primaryColor = "#167D65"
+backgroundColor = "#F6F8F7"
+secondaryBackgroundColor = "#EEF3F0"
+textColor = "#20312F"
+font = "sans serif"

@@ -1,10 +1,4 @@
-"""Streamlit UI helpers for the v0.5.2 knowledge-memory page (Phase 2B).
-
-The page is a personal-memory surface: user-authored problem-solving /
-experience / decision entries can be created, edited, archived and deleted.
-System change records live in ``knowledge_object_revisions`` and are never
-shown here (Phase 5 will add a dedicated revision history view).
-"""
+"""Plain-language UI for content the user explicitly chose to save."""
 
 from __future__ import annotations
 
@@ -12,149 +6,132 @@ import logging
 
 import streamlit as st
 
+from src.database import Database
 from src.knowledge_memory_service import (
     KnowledgeMemoryEntryNotFoundError,
     KnowledgeMemoryService,
-    KnowledgeMemoryValidationError,
 )
-from src.models import KnowledgeMemoryEntryKind, KnowledgeMemoryStatus
+from src.models import KnowledgeMemoryEntry
 
 LOGGER = logging.getLogger(__name__)
 
-PAGE_SIZE = 20
-
-_USER_KINDS = (
-    KnowledgeMemoryEntryKind.PROBLEM_SOLVING,
-    KnowledgeMemoryEntryKind.EXPERIENCE,
-    KnowledgeMemoryEntryKind.DECISION,
-)
-
-_STATUS_OPTIONS = [None, *KnowledgeMemoryStatus]
+PAGE_SIZE = 100
+_OPEN_ENTRY_KEY = "saved_content_open_entry_id"
+_DELETE_ENTRY_KEY = "saved_content_delete_entry_id"
 
 
-def render_knowledge_memory_page(service: KnowledgeMemoryService) -> None:
-    """Render the knowledge-memory browsing and entry-creation surface."""
+def render_knowledge_memory_page(
+    service: KnowledgeMemoryService, *, database: Database | None = None
+) -> None:
+    """Render saved items without exposing internal types, IDs or status fields."""
 
-    _render_create_form(service)
-    filter_columns = st.columns([2, 2])
-    kind = filter_columns[0].selectbox(
-        "类型",
-        options=[None, *_USER_KINDS],
-        format_func=lambda value: "全部" if value is None else value.label,
-        key="km_filter_kind",
-    )
-    status = filter_columns[1].selectbox(
-        "状态",
-        options=_STATUS_OPTIONS,
-        format_func=lambda value: "全部" if value is None else value.label,
-        key="km_filter_status",
-    )
-    entries = service.list(kind=kind, status=status, limit=PAGE_SIZE)
-    total = service.count(kind=kind, status=status)
-    if total == 0:
-        st.info(
-            "还没有记忆条目。记录问题解决过程、经验和决策，让知识真正留下来。"
-        )
-        return
-    st.caption(f"共 {total} 条记忆（本页显示前 {min(total, PAGE_SIZE)} 条）")
-    for entry in entries:
-        _render_entry(service, entry)
-
-
-def _render_create_form(service: KnowledgeMemoryService) -> None:
-    flash = st.session_state.pop("km_flash", "")
+    flash = st.session_state.pop("saved_content_flash", "")
     if flash:
         st.success(flash)
-    with st.expander("新建记忆条目", expanded=False):
-        kind = st.selectbox(
-            "类型",
-            options=list(_USER_KINDS),
-            format_func=lambda value: value.label,
-            key="km_new_kind",
-        )
-        title = st.text_input("标题", key="km_new_title", max_chars=200)
-        content = st.text_area("内容", key="km_new_content", height=140)
-        root_cause = st.text_area(
-            "最终原因（可选，问题解决类建议填写）",
-            key="km_new_root_cause",
-            height=80,
-        )
-        lesson = st.text_area(
-            "经验教训（可选）", key="km_new_lesson", height=80
-        )
-        link_columns = st.columns(3)
-        ko_id = link_columns[0].number_input(
-            "关联知识对象 ID（可选）",
-            min_value=0,
-            step=1,
-            key="km_new_ko_id",
-        )
-        document_id = link_columns[1].number_input(
-            "关联文档 ID（可选）",
-            min_value=0,
-            step=1,
-            key="km_new_document_id",
-        )
-        page_id = link_columns[2].number_input(
-            "关联页面 ID（可选）",
-            min_value=0,
-            step=1,
-            key="km_new_page_id",
-        )
-        if st.button("创建记忆条目", key="km_create", type="primary"):
-            try:
-                entry = service.create_entry(
-                    kind=kind,
-                    title=title,
-                    content=content,
-                    root_cause=root_cause,
-                    lesson=lesson,
-                    knowledge_object_id=int(ko_id) if int(ko_id) > 0 else None,
-                    document_id=int(document_id) if int(document_id) > 0 else None,
-                    page_id=int(page_id) if int(page_id) > 0 else None,
-                )
-            except (KnowledgeMemoryValidationError, ValueError) as exc:
-                st.error(f"创建失败：{exc}")
-            else:
-                st.session_state["km_flash"] = f"已创建记忆条目「{entry.title}」。"
-                st.rerun()
+    entries = service.list(limit=PAGE_SIZE)
+    total = service.count()
+    if total == 0:
+        st.info("你还没有保存过内容。向 Agent 提问后，可以手动保存有用的问答。")
+        return
+    st.caption(f"共保存了 {total} 条内容")
+    for entry in entries:
+        _render_entry(service, entry, database=database)
 
 
-def _render_entry(service: KnowledgeMemoryService, entry) -> None:
+def _render_entry(
+    service: KnowledgeMemoryService,
+    entry: KnowledgeMemoryEntry,
+    *,
+    database: Database | None,
+) -> None:
+    """Render one compact card with only date, title, preview and two actions."""
+
+    opened = st.session_state.get(_OPEN_ENTRY_KEY) == entry.id
+    pending_delete = st.session_state.get(_DELETE_ENTRY_KEY) == entry.id
     with st.container(border=True):
-        st.markdown(
-            f"**{entry.title}**　`{entry.kind.label}`　`{entry.status.label}`"
-        )
-        st.caption(f"ID {entry.id} · 更新于 {entry.updated_at:%Y-%m-%d %H:%M}")
-        if entry.content.strip():
-            st.write(entry.content)
-        if entry.root_cause.strip():
-            st.markdown(f"**最终原因**：{entry.root_cause}")
-        if entry.lesson.strip():
-            st.markdown(f"**经验教训**：{entry.lesson}")
-        link_parts = []
-        if entry.knowledge_object_id is not None:
-            link_parts.append(f"知识对象 {entry.knowledge_object_id}")
-        if entry.document_id is not None:
-            link_parts.append(f"文档 {entry.document_id}")
-        if entry.page_id is not None:
-            link_parts.append(f"页面 {entry.page_id}")
-        if link_parts:
-            st.caption("关联：" + "、".join(link_parts))
+        st.caption(_friendly_date(entry.created_at))
+        st.markdown(f"**{_display_title(entry, database)}**")
+        preview = _content_preview(entry.content)
+        if preview:
+            st.write(f"“{preview}”")
         action_columns = st.columns([1, 1])
-        if entry.status is KnowledgeMemoryStatus.ACTIVE:
-            if action_columns[0].button("归档", key=f"km_archive_{entry.id}"):
-                service.set_status(entry.id, status="archived")
+        if action_columns[0].button(
+            "收起" if opened else "查看",
+            key=f"saved_view_{entry.id}",
+            use_container_width=True,
+        ):
+            st.session_state[_OPEN_ENTRY_KEY] = None if opened else entry.id
+            st.rerun()
+        if action_columns[1].button(
+            "删除", key=f"saved_delete_{entry.id}", use_container_width=True
+        ):
+            st.session_state[_DELETE_ENTRY_KEY] = entry.id
+            st.rerun()
+
+        if opened:
+            st.markdown("#### 保存的完整内容")
+            st.write(entry.content or "（没有正文）")
+            if entry.root_cause.strip():
+                st.markdown(f"**原因**：{entry.root_cause}")
+            if entry.lesson.strip():
+                st.markdown(f"**以后可以这样做**：{entry.lesson}")
+
+        if pending_delete:
+            st.warning("确定删除这条内容吗？删除后无法恢复，但不会删除原始资料。")
+            confirm_column, cancel_column = st.columns([1, 1])
+            if confirm_column.button(
+                "确认删除",
+                key=f"saved_confirm_delete_{entry.id}",
+                type="primary",
+                use_container_width=True,
+            ):
+                _delete_entry(service, entry.id)
+            if cancel_column.button(
+                "取消", key=f"saved_cancel_delete_{entry.id}", use_container_width=True
+            ):
+                st.session_state.pop(_DELETE_ENTRY_KEY, None)
                 st.rerun()
-        else:
-            if action_columns[0].button("重新启用", key=f"km_unarchive_{entry.id}"):
-                service.set_status(entry.id, status="active")
-                st.rerun()
-        if action_columns[1].button("删除记忆条目", key=f"km_delete_{entry.id}"):
-            try:
-                service.delete_entry(entry.id)
-            except KnowledgeMemoryEntryNotFoundError as exc:
-                st.error(str(exc))
-            else:
-                st.session_state["km_flash"] = "记忆条目已删除。"
-                st.rerun()
+
+
+def _delete_entry(service: KnowledgeMemoryService, entry_id: int) -> None:
+    """Delete only after the user confirms the specific saved item."""
+
+    try:
+        service.delete_entry(entry_id)
+    except KnowledgeMemoryEntryNotFoundError as exc:
+        st.error(str(exc))
+    else:
+        if st.session_state.get(_OPEN_ENTRY_KEY) == entry_id:
+            st.session_state.pop(_OPEN_ENTRY_KEY, None)
+        st.session_state.pop(_DELETE_ENTRY_KEY, None)
+        st.session_state["saved_content_flash"] = "这条内容已删除。"
+        st.rerun()
+
+
+def _friendly_date(value) -> str:
+    """Return a short date a non-technical user can scan quickly."""
+
+    local_value = value.astimezone() if value.tzinfo is not None else value
+    return f"{local_value.month} 月 {local_value.day} 日"
+
+
+def _display_title(entry: KnowledgeMemoryEntry, database: Database | None) -> str:
+    """Use a document name when available, without exposing its internal ID."""
+
+    if database is not None and entry.document_id is not None:
+        document = database.get_document(entry.document_id)
+        if document is not None:
+            return f"关于 {document.title} 的讨论"
+    return entry.title
+
+
+def _content_preview(content: str, *, limit: int = 140) -> str:
+    """Prefer the saved Agent answer and keep the card preview compact."""
+
+    text = content.strip()
+    if "Agent 回答：" in text:
+        text = text.split("Agent 回答：", 1)[1].strip()
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "……"

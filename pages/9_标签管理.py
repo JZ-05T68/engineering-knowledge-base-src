@@ -7,10 +7,12 @@ import logging
 import streamlit as st
 
 from src.runtime import application_database
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="标签管理｜工程知识库 v0.6.0", page_icon="🏷️", layout="wide")
+render_workspace("pages/9_标签管理.py")
 st.title("标签管理")
 st.caption("同名标签会自动复用；删除标签只删除关联，不删除文档、页面或笔记。")
 
@@ -63,8 +65,9 @@ with left:
                 key=f"tag_document_{document.id}",
                 use_container_width=True,
             ):
-                st.query_params["document"] = str(document.id)
-                st.switch_page("pages/3_浏览资料.py")
+                st.switch_page(
+                    "pages/3_浏览资料.py", query_params={"document": str(document.id)}
+                )
     else:
         st.caption("暂无直接关联文档。")
 with right:
@@ -77,10 +80,10 @@ with right:
                 key=f"tag_page_{page.id}",
                 use_container_width=True,
             ):
-                st.query_params.update(
-                    {"document": str(document.id), "page": str(page.page_number)}
+                st.switch_page(
+                    "pages/3_浏览资料.py",
+                    query_params={"document": str(document.id), "page": str(page.page_number)},
                 )
-                st.switch_page("pages/3_浏览资料.py")
     else:
         st.caption("暂无直接关联页面。")
 

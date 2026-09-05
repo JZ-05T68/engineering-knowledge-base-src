@@ -5,8 +5,10 @@ from __future__ import annotations
 import streamlit as st
 
 from src.runtime import application_settings
+from src.workspace_ui import render_workspace
 
 st.set_page_config(page_title="运行说明｜工程知识库 v0.6.0", page_icon="⚙️", layout="wide")
+render_workspace("pages/13_运行说明.py")
 st.title("设置与运行说明")
 
 settings = application_settings()

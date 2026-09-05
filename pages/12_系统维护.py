@@ -28,6 +28,7 @@ from src.runtime import (
     application_settings,
     run_quarantine_reconciliation,
 )
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,7 @@ st.set_page_config(
     page_icon="🛡️",
     layout="wide",
 )
+render_workspace("pages/12_系统维护.py")
 st.title("系统维护")
 st.caption("完整备份、安全恢复预检、只读诊断和默认脱敏报告；所有操作均在本机完成。")
 

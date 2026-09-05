@@ -9,10 +9,12 @@ import streamlit as st
 from src.aggregation_service import AggregationService
 from src.aggregation_ui import render_aggregation_page
 from src.runtime import application_database
+from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
 
 st.set_page_config(page_title="知识聚合｜工程知识库 v0.6.0", page_icon="🧩", layout="wide")
+render_workspace("pages/8_知识聚合.py")
 st.title("知识聚合")
 st.caption("按项目或标签汇总分散在多个资料中的笔记与证据，并保留原始出处。")
 

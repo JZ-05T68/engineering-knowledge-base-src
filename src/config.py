@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     raw_dir: Path = PROJECT_ROOT / "data" / "raw"
     pages_dir: Path = PROJECT_ROOT / "data" / "pages"
     markdown_dir: Path = PROJECT_ROOT / "data" / "markdown"
+    agent_readings_dir: Path = PROJECT_ROOT / "data" / "agent-readings"
     database_dir: Path = PROJECT_ROOT / "data" / "database"
     database_path: Path = PROJECT_ROOT / "data" / "database" / "knowledge.db"
     backups_dir: Path = PROJECT_ROOT / "backups"
@@ -107,6 +108,7 @@ class Settings(BaseSettings):
             self.raw_dir,
             self.pages_dir,
             self.markdown_dir,
+            self.agent_readings_dir,
             self.database_dir,
             self.backups_dir,
             self.logs_dir,

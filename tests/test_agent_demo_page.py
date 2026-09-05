@@ -1,9 +1,8 @@
-"""v0.6.1 Agent Workspace page tests (Streamlit AppTest) + Mode 1 client.
+"""Knowledge Agent page tests plus the legacy loopback HTTP client contract.
 
-Covers the competition page end to end in mock mode (presets A/B/C, empty,
-failed, source viewer, mode-switch reset), plus the loopback Mode-1 client
-against a local throwaway HTTP server (frozen-contract parsing and failure
-normalization). No external network, no production DB, no real AI.
+The user-facing page is intentionally limited to real, locally imported
+documents.  Frozen mock responses are injected only as deterministic display
+fixtures; the page no longer exposes presets or a mock-mode switch.
 """
 
 from __future__ import annotations
@@ -19,9 +18,12 @@ from streamlit.testing.v1 import AppTest
 
 import src.runtime as runtime
 from src.database import Database
+from src.demo import MockDemoClient
 from src.demo.contracts import DemoHTTPError
 from src.demo.presets import PRESETS
+from src.demo_ui import AgentMode, AskRecord
 from src.evidence_basket_service import EvidenceBasketService
+from src.knowledge_memory_service import KnowledgeMemoryService
 from src.models import ContextFingerprintState, ContextItemType
 
 PAGE_PATH = str(next((Path(__file__).parents[1] / "pages").glob("0_*.py")))
@@ -47,14 +49,36 @@ def _button(app: AppTest, key: str):
 # ---------------------------------------------------------------------------
 
 
-def test_initial_render_shows_workspace_and_presets(app: AppTest) -> None:
+def test_initial_render_only_offers_real_document_questions(app: AppTest) -> None:
     assert not app.exception
     markdown = "\n".join(item.value for item in app.markdown)
-    assert "知识 Agent 工作台" in markdown
-    assert "EKB · Engineering Knowledge Base" in markdown
-    assert "预置离线演示" in markdown
-    for preset_id in ("A", "B", "C"):
-        assert _button(app, f"preset_{preset_id}")
+    assert "问问知识 Agent" in markdown
+    assert "使用我已读的资料" in markdown
+    assert "问问你添加过的资料" in markdown
+    assert "预置离线演示" not in markdown
+    assert not [button for button in app.button if (button.key or "").startswith("preset_")]
+    assert app.radio == []
+
+
+def _app_with_preset_response(preset_id: str) -> AppTest:
+    """Inject one frozen response to exercise answer/source presentation only."""
+
+    client = MockDemoClient()
+    question = QUESTIONS[preset_id]
+    response = client.run_agent(question)
+    metadata = {source_id: client.get_source(source_id) for source_id in response.citations}
+    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
+    app.session_state["agent_request_seq"] = 1
+    app.session_state["agent_result"] = AskRecord(
+        sequence=1,
+        mode=AgentMode.LOCAL_AGENT,
+        question=question,
+        response=response,
+        source_metadata=metadata,
+    )
+    app.run(timeout=30)
+    assert not app.exception
+    return app
 
 
 # ---------------------------------------------------------------------------
@@ -63,27 +87,129 @@ def test_initial_render_shows_workspace_and_presets(app: AppTest) -> None:
 
 
 def test_scenario_a_grounded_answer_and_source_viewer() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
+    app = _app_with_preset_response("A")
 
     assert not app.exception
     markdown = "\n".join(item.value for item in app.markdown)
-    assert "有依据回答" in markdown
-    assert "引用来源 2 条" in markdown
+    assert "已在资料中找到" in markdown
+    assert "依据 2 条" in markdown
     assert "PID 调整时，比例项与积分项分别影响什么？" in markdown
     assert "预置演示数据" in markdown
+    assert "**" not in markdown
 
     source_buttons = [b for b in app.button if (b.key or "").startswith("src_")]
     assert len(source_buttons) == 2
+    assert all("《" in (button.label or "") for button in source_buttons)
 
     _button(app, "src_0_" + f"{KB}:page:1").click()
     app.run(timeout=30)
     markdown = "\n".join(item.value for item in app.markdown)
-    assert "来源详情" in markdown
+    assert "原始资料" in markdown
     assert "PID 控制器调试手册" in markdown
     assert "第 12 页" in markdown
     assert "演示预置状态" not in markdown  # scenario A sources carry no integrity state
+
+
+def test_completed_answer_can_be_saved_only_by_clicking_memory_button(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = Database(tmp_path / "knowledge.db")
+    memories = KnowledgeMemoryService(database)
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+    monkeypatch.setattr(
+        runtime, "application_knowledge_memory_service", lambda: memories
+    )
+
+    client = MockDemoClient()
+    question = QUESTIONS["A"]
+    response = client.run_agent(question)
+    metadata = {source_id: client.get_source(source_id) for source_id in response.citations}
+    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
+    app.session_state["agent_request_seq"] = 1
+    app.session_state["agent_result"] = AskRecord(
+        sequence=1,
+        mode=AgentMode.LOCAL_AGENT,
+        question=question,
+        response=response,
+        source_metadata=metadata,
+    )
+    app.run(timeout=30)
+
+    assert memories.count() == 0
+    save_button = _button(app, "save_agent_memory_1")
+    assert save_button.label == "保存这次问答"
+    captions = "\n".join(item.value for item in app.caption)
+    assert "保存的是这个问题和这次回答" in captions
+    assert "不会自动改变以后回答" in captions
+    save_button.click().run(timeout=30)
+    assert not app.exception
+    assert memories.count() == 1
+    saved = memories.list()[0]
+    assert saved.title == question
+    assert saved.content.startswith(f"问题：{question}\n\nAgent 回答：")
+    assert "Agent 回答" in saved.content
+    assert any(
+        "可在“我保存过的内容”中再次查看" in item.value
+        for item in app.success
+    )
+
+
+def test_saved_answer_title_says_when_two_documents_were_used(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    database = Database(tmp_path / "knowledge.db")
+    first = database.create_document(
+        title="第一份资料",
+        filename="first.pdf",
+        source_path=tmp_path / "first.pdf",
+        sha256="1" * 64,
+        page_count=1,
+    )
+    second = database.create_document(
+        title="第二份资料",
+        filename="second.pdf",
+        source_path=tmp_path / "second.pdf",
+        sha256="2" * 64,
+        page_count=1,
+    )
+    database.create_page(
+        document_id=first.id,
+        page_number=1,
+        image_path=tmp_path / "first.png",
+        extracted_text="第一份资料的内容",
+    )
+    database.create_page(
+        document_id=second.id,
+        page_number=1,
+        image_path=tmp_path / "second.png",
+        extracted_text="第二份资料的内容",
+    )
+    memories = KnowledgeMemoryService(database)
+    monkeypatch.setattr(runtime, "application_database", lambda: database)
+    monkeypatch.setattr(
+        runtime, "application_knowledge_memory_service", lambda: memories
+    )
+
+    client = MockDemoClient()
+    question = QUESTIONS["A"]
+    response = client.run_agent(question)
+    metadata = {source_id: client.get_source(source_id) for source_id in response.citations}
+    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
+    app.session_state["agent_request_seq"] = 1
+    app.session_state["agent_result"] = AskRecord(
+        sequence=1,
+        mode=AgentMode.LOCAL_AGENT,
+        question=question,
+        response=response,
+        source_metadata=metadata,
+    )
+    app.run(timeout=30)
+
+    _button(app, "save_agent_memory_1").click().run(timeout=30)
+    assert not app.exception
+    saved = memories.list()[0]
+    assert saved.title == "关于 2 份资料的讨论"
+    assert saved.document_id == first.id
 
 
 # ---------------------------------------------------------------------------
@@ -92,21 +218,19 @@ def test_scenario_a_grounded_answer_and_source_viewer() -> None:
 
 
 def test_scenario_b_warning_and_memory_source() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_B").click()
-    app.run(timeout=30)
+    app = _app_with_preset_response("B")
 
     assert not app.exception
     markdown = "\n".join(item.value for item in app.markdown)
-    assert "有依据回答" in markdown
-    assert "来源存在限制" in markdown
+    assert "已在资料中找到" in markdown
+    assert "这份资料需要再检查" in markdown
     source_buttons = [b for b in app.button if (b.key or "").startswith("src_")]
     assert len(source_buttons) == 1
     assert "编码器接线错误导致 PID 震荡的问题解决记录" in (source_buttons[0].label or "")
     source_buttons[0].click()
     app.run(timeout=30)
     markdown = "\n".join(item.value for item in app.markdown)
-    assert "知识记忆" in markdown
+    assert "我保存过的内容" in markdown
     assert "编码器接线错误导致 PID 震荡的问题解决记录" in markdown
 
 
@@ -116,9 +240,7 @@ def test_scenario_b_warning_and_memory_source() -> None:
 
 
 def test_scenario_c_integrity_viewer_state() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_C").click()
-    app.run(timeout=30)
+    app = _app_with_preset_response("C")
 
     assert not app.exception
     _button(app, "src_0_" + f"{KB}:knowledge_object:1").click()
@@ -135,25 +257,20 @@ def test_scenario_c_integrity_viewer_state() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_empty_state_is_honest_with_suggestions() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_EMPTY").click()
-    app.run(timeout=30)
+def test_empty_state_is_honest_without_demo_suggestions() -> None:
+    app = _app_with_preset_response("EMPTY")
 
     assert not app.exception
     markdown = "\n".join(item.value for item in app.markdown)
     assert "当前知识库中没有找到足够资料支持这个问题。" in markdown
-    assert "未找到可支持资料" in markdown
+    assert "资料里没有找到答案" in markdown
     source_buttons = [b for b in app.button if (b.key or "").startswith("src_")]
     assert source_buttons == []
-    for preset_id in ("A", "B", "C"):
-        assert _button(app, f"suggest_{preset_id}")
+    assert not [button for button in app.button if (button.key or "").startswith("suggest_")]
 
 
 def test_rehearsal_failed_state_is_safe() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_REHEARSAL_FAILED").click()
-    app.run(timeout=30)
+    app = _app_with_preset_response("REHEARSAL_FAILED")
 
     assert not app.exception
     markdown = "\n".join(item.value for item in app.markdown)
@@ -165,7 +282,7 @@ def test_rehearsal_failed_state_is_safe() -> None:
     # business failure keeps the sources panel in a pending state, never the
     # "no supporting material" no-evidence copy
     assert "请求未完成，暂时没有来源可显示" in markdown
-    assert "未找到可支持资料" not in markdown
+    assert "资料里没有找到答案" not in markdown
 
 
 def test_rate_limited_state_renders_distinctly() -> None:
@@ -175,17 +292,15 @@ def test_rate_limited_state_renders_distinctly() -> None:
     assert "本次请求未完成" not in markdown.split("请求过于频繁")[0]
 
 
-def test_backend_unavailable_state_offers_explicit_mock_switch() -> None:
+def test_backend_unavailable_state_does_not_offer_fake_answer_switch() -> None:
     app = _app_with_failure(failure_http_status=0)
     markdown = "\n".join(item.value for item in app.markdown)
     assert "本机 Agent 服务当前不可用" in markdown
     assert _button(app, "failure_retry")
-    assert _button(app, "failure_switch_mock")
+    assert not [button for button in app.button if button.key == "failure_switch_mock"]
 
 
 def _app_with_failure(**failure: object) -> AppTest:
-    from src.demo_ui import AgentMode, AskRecord
-
     app = AppTest.from_file(PAGE_PATH).run(timeout=30)
     app.session_state["agent_request_seq"] = 1
     app.session_state["agent_result"] = AskRecord(
@@ -200,116 +315,26 @@ def _app_with_failure(**failure: object) -> AppTest:
 
 
 # ---------------------------------------------------------------------------
-# Page: mode switch clears state
-# ---------------------------------------------------------------------------
-
-
-def test_mode_switch_clears_previous_result() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
-    assert _button(app, "src_0_" + f"{KB}:page:1")
-
-    app.radio[0].set_value("本机 Agent 服务（需先启动）")
-    app.run(timeout=30)
-
-    assert not app.exception
-    markdown = "\n".join(item.value for item in app.markdown)
-    assert "向你的工程知识库提问" in markdown
-    source_buttons = [b for b in app.button if (b.key or "").startswith("src_")]
-    assert source_buttons == []
-
-
-# ---------------------------------------------------------------------------
-# Repeated-run reliability (freeze rehearsal): transitions without state bleed
-# ---------------------------------------------------------------------------
-
-
-def _outcome_text(app: AppTest) -> str:
-    return "\n".join(item.value for item in app.markdown)
-
-
-def test_sequential_scenario_transitions_do_not_contaminate_state() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-
-    # A -> B -> C -> A: each run shows only its own answer, badges and sources.
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
-    assert "引用来源 2 条" in _outcome_text(app)
-    assert _button(app, "src_0_" + f"{KB}:page:1")
-
-    _button(app, "preset_B").click()
-    app.run(timeout=30)
-    text = _outcome_text(app)
-    assert "来源存在限制" in text
-    assert "引用来源 1 条" in text
-    assert "引用来源 2 条" not in text
-
-    _button(app, "preset_C").click()
-    app.run(timeout=30)
-    _button(app, "src_0_" + f"{KB}:knowledge_object:1").click()
-    app.run(timeout=30)
-    assert "来源发生变化" in _outcome_text(app)
-
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
-    text = _outcome_text(app)
-    assert "有依据回答" in text
-    # C's integrity state must not leak into scenario A's sources
-    assert "来源发生变化" not in text
-
-    # A -> empty -> A -> failed -> A: recovery transitions
-    _button(app, "preset_EMPTY").click()
-    app.run(timeout=30)
-    assert "当前知识库中没有找到足够资料支持这个问题。" in _outcome_text(app)
-
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
-    assert "有依据回答" in _outcome_text(app)
-
-    _button(app, "preset_REHEARSAL_FAILED").click()
-    app.run(timeout=30)
-    assert "本次请求未完成" in _outcome_text(app)
-
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
-    text = _outcome_text(app)
-    assert "有依据回答" in text
-    assert "本次请求未完成" not in text
-    assert not app.exception
-
-
-def test_demo_reset_returns_page_to_clean_initial_state() -> None:
-    app = AppTest.from_file(PAGE_PATH).run(timeout=30)
-    _button(app, "preset_A").click()
-    app.run(timeout=30)
-    _button(app, "src_0_" + f"{KB}:page:1").click()
-    app.run(timeout=30)
-    assert "来源详情" in _outcome_text(app)
-
-    _button(app, "demo_reset").click()
-    app.run(timeout=30)
-
-    assert not app.exception
-    text = _outcome_text(app)
-    assert "向你的工程知识库提问" in text
-    assert "有依据回答" not in text
-    assert "来源详情" not in text
-    source_buttons = [b for b in app.button if (b.key or "").startswith("src_")]
-    assert source_buttons == []
-    # reset restores the default mock demo mode (radio value is the raw option)
-    assert app.radio[0].value == "mock_demo"
-
-
-# ---------------------------------------------------------------------------
 # Home page entry point
 # ---------------------------------------------------------------------------
 
 
-def _stub_home_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def _stub_home_runtime(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    *,
+    with_document: bool = False,
+) -> None:
     database_dir = tmp_path / "data" / "database"
     database_dir.mkdir(parents=True, exist_ok=True)
     database = Database(database_dir / "knowledge.db")
+    if with_document:
+        database.create_document(
+            title="首页测试资料",
+            filename="home-test.pdf",
+            source_path=tmp_path / "home-test.pdf",
+            sha256="9" * 64,
+        )
     monkeypatch.setattr(runtime, "application_settings", lambda: SimpleNamespace(
         data_dir="data", host="127.0.0.1", port=8501
     ))
@@ -327,11 +352,36 @@ def _stub_home_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
 def test_home_page_offers_one_click_agent_entry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    _stub_home_runtime(monkeypatch, tmp_path)
+    _stub_home_runtime(monkeypatch, tmp_path, with_document=True)
     app = AppTest.from_file(HOME_PATH).run(timeout=30)
     assert not app.exception
-    entries = [b for b in app.button if "进入知识 Agent" in (b.label or "")]
+    entries = [b for b in app.button if "问问 Agent" in (b.label or "")]
     assert entries
+
+
+@pytest.mark.parametrize("query", ["  STM32 定时器  ", "电" * 510, "   "])
+def test_home_search_handoff_preserves_query_without_calling_ai(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, query: str,
+) -> None:
+    """The search form uses the existing local-search handoff, including empty input."""
+
+    import streamlit as st
+
+    _stub_home_runtime(monkeypatch, tmp_path, with_document=True)
+    destinations: list[str] = []
+    monkeypatch.setattr(st, "switch_page", destinations.append)
+    app = AppTest.from_file(HOME_PATH).run(timeout=30)
+    app.text_input(key="home_search_query").input(query)
+    next(button for button in app.main.button if button.label == "搜索").click()
+    app.run(timeout=30)
+    assert not app.exception
+    if query.strip():
+        assert destinations == ["pages/4_检索资料.py"]
+        assert app.session_state["pending_search_query_params"] == {"q": query.strip()[:500]}
+    else:
+        assert not destinations
+        assert any("请输入你想找的内容" in item.value for item in app.info)
+        assert "pending_search_query_params" not in app.session_state
 
 
 # ---------------------------------------------------------------------------
