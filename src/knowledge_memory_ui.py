@@ -44,6 +44,7 @@ _PURGE_ENTRY_KEY = "saved_content_purge_entry_id"
 _EXPERIENCE_DRAFT_SOURCE_KEY = "saved_experience_draft_source_id"
 _EXPERIENCE_DRAFT_KEY = "saved_experience_draft"
 _EXPERIENCE_DRAFT_HASH_KEY = "saved_experience_draft_hash"
+_EXPERIENCE_DRAFT_REVIEW_KEY = "saved_experience_draft_review"
 
 _DRAFT_FIELD_LABELS: tuple[tuple[str, str, int], ...] = (
     ("title", "标题", 200),
@@ -198,6 +199,13 @@ def _render_promote_section(
     st.divider()
     draft_active = st.session_state.get(_EXPERIENCE_DRAFT_SOURCE_KEY) == entry.id
     if not draft_active:
+        already_done = (
+            database is not None
+            and service.find_experience_for_raw_qa(entry.id) is not None
+        )
+        if already_done:
+            st.caption("这条问答已经整理过经验，可在下方“整理好的经验”里查看。")
+            return
         st.caption(
             "这条问答只是一个副本。如果它对你有长期价值，可以整理成一条经验。"
         )
@@ -212,6 +220,9 @@ def _render_promote_section(
     if not isinstance(draft, ExperienceDraft):
         st.session_state.pop(_EXPERIENCE_DRAFT_SOURCE_KEY, None)
         st.rerun()
+        return
+    if st.session_state.get(_EXPERIENCE_DRAFT_REVIEW_KEY) is not None:
+        _render_experience_review(service, entry)
         return
     _render_experience_draft_form(service, entry, draft)
 
@@ -328,14 +339,84 @@ def _render_experience_draft_form(
         )
 
     assembled = _assemble_experience_content(fields)
-    st.session_state[_EXPERIENCE_DRAFT_HASH_KEY] = _draft_hash(
-        assembled, root_cause_confirmed
-    )
     with st.expander("确认前请核对：将要保存的完整内容", expanded=True):
         st.write(assembled or "（还没有内容）")
         st.markdown(f"**最终原因**：{fields['root_cause'].strip() or '（未填写）'}")
         st.markdown(f"**经验教训**：{fields['lesson'].strip() or '（未填写）'}")
 
+    if st.button(
+        "核对无误，进入最后确认",
+        key=f"saved_exp_review_{entry.id}",
+        type="primary",
+        use_container_width=True,
+    ):
+        # Freeze a snapshot of exactly what the user just reviewed. The final
+        # confirm screen renders from this snapshot with no editable widgets,
+        # so the committed content is the displayed content by construction.
+        st.session_state[_EXPERIENCE_DRAFT_REVIEW_KEY] = {
+            "fields": fields,
+            "root_cause_confirmed": root_cause_confirmed,
+            "hash": _draft_hash(assembled, root_cause_confirmed),
+        }
+        # Keep the editable draft in sync so 返回修改 restores the edits.
+        st.session_state[_EXPERIENCE_DRAFT_KEY] = ExperienceDraft(
+            fields=dict(fields), is_mock=draft.is_mock
+        )
+        st.rerun()
+    if st.button(
+        "放弃整理", key=f"saved_exp_cancel_{entry.id}", use_container_width=True
+    ):
+        _clear_experience_draft()
+        st.rerun()
+
+
+def _render_experience_review(
+    service: KnowledgeMemoryService,
+    entry: KnowledgeMemoryEntry,
+) -> None:
+    """Render the read-only final confirmation screen (display == commit)."""
+
+    review = st.session_state.get(_EXPERIENCE_DRAFT_REVIEW_KEY)
+    if not isinstance(review, dict):
+        st.session_state.pop(_EXPERIENCE_DRAFT_REVIEW_KEY, None)
+        st.rerun()
+        return
+    fields: dict[str, str] = review["fields"]
+    root_cause_confirmed: bool = review["root_cause_confirmed"]
+    st.markdown("##### 最后确认（内容已锁定）")
+    st.caption(
+        "以下内容与将要保存的内容完全一致。如需修改，请返回上一步。"
+    )
+    # The disabled widgets reuse the form's widget keys so the keys stay alive
+    # between runs (removing them would drop pending edits with a
+    # session-state error), and they display the exact server-side values
+    # that will be committed.
+    for field, label, max_chars in _DRAFT_FIELD_LABELS:
+        widget_key = f"saved_exp_draft_{entry.id}_{field}"
+        if field == "title":
+            st.text_input(
+                label,
+                value=fields.get(field, ""),
+                key=widget_key,
+                max_chars=max_chars,
+                disabled=True,
+            )
+        else:
+            st.text_area(
+                label,
+                value=fields.get(field, ""),
+                key=widget_key,
+                max_chars=max_chars,
+                height=72,
+                disabled=True,
+            )
+    st.checkbox(
+        "我确认“最终原因”的判断与我的实际情况相符",
+        key=f"saved_exp_draft_{entry.id}_confirmed",
+        value=root_cause_confirmed,
+        disabled=True,
+    )
+    st.write(_assemble_experience_content(fields) or "（还没有内容）")
     confirm_column, cancel_column = st.columns([1, 1])
     if confirm_column.button(
         "确认保存为经验",
@@ -343,16 +424,11 @@ def _render_experience_draft_form(
         type="primary",
         use_container_width=True,
     ):
-        if st.session_state.get(_EXPERIENCE_DRAFT_HASH_KEY) != _draft_hash(
-            assembled, root_cause_confirmed
-        ):
-            st.warning("内容刚刚发生变化，请重新核对后再保存。")
-            return
         _save_experience_draft(service, entry, fields, root_cause_confirmed)
     if cancel_column.button(
-        "放弃整理", key=f"saved_exp_cancel_{entry.id}", use_container_width=True
+        "返回修改", key=f"saved_exp_back_{entry.id}", use_container_width=True
     ):
-        _clear_experience_draft()
+        st.session_state.pop(_EXPERIENCE_DRAFT_REVIEW_KEY, None)
         st.rerun()
 
 
@@ -594,6 +670,7 @@ def _clear_experience_draft() -> None:
     st.session_state.pop(_EXPERIENCE_DRAFT_SOURCE_KEY, None)
     st.session_state.pop(_EXPERIENCE_DRAFT_KEY, None)
     st.session_state.pop(_EXPERIENCE_DRAFT_HASH_KEY, None)
+    st.session_state.pop(_EXPERIENCE_DRAFT_REVIEW_KEY, None)
 
 
 def _restore_entry(service: KnowledgeMemoryService, entry_id: int) -> None:

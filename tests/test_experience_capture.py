@@ -243,6 +243,10 @@ def test_full_capture_flow_edit_confirm_and_traceability(
 
     # The AI root-cause judgment only becomes confirmed via an explicit gesture.
     app.checkbox(key=f"saved_exp_draft_{raw_qa.id}_confirmed").check().run(timeout=30)
+    # Two-phase confirm: freeze the reviewed snapshot, then commit it.
+    app.button(key=f"saved_exp_review_{raw_qa.id}").click().run(timeout=30)
+    review_markdown = "\n".join(item.value for item in app.markdown)
+    assert "最后确认（内容已锁定）" in review_markdown
     app.button(key=f"saved_exp_confirm_{raw_qa.id}").click().run(timeout=30)
     assert not app.exception
 
@@ -300,7 +304,8 @@ def test_capture_without_confirmation_keeps_root_cause_unconfirmed(
     app.button(key=f"saved_view_{raw_qa.id}").click().run(timeout=30)
     app.button(key=f"saved_promote_{raw_qa.id}").click().run(timeout=30)
     _by_label(app.text_area, "最终原因").set_value("AI 推断的根因。").run(timeout=30)
-    # No checkbox gesture: save as-is.
+    # No checkbox gesture: save as-is (two-phase confirm).
+    app.button(key=f"saved_exp_review_{raw_qa.id}").click().run(timeout=30)
     app.button(key=f"saved_exp_confirm_{raw_qa.id}").click().run(timeout=30)
     assert not app.exception
 
@@ -310,3 +315,34 @@ def test_capture_without_confirmation_keeps_root_cause_unconfirmed(
     assert len(experiences) == 1
     assert experiences[0].root_cause == "AI 推断的根因。"
     assert experiences[0].root_cause_confirmed is False
+
+
+def test_promote_same_raw_qa_twice_is_rejected(tmp_path: Path) -> None:
+    """v0.7.3: one saved Q&A distills into at most one active experience."""
+
+    database = _database(tmp_path)
+    _, page_id = _document_and_page(
+        database, title="手册", sha256="e" * 64, text="说明。"
+    )
+    service = KnowledgeMemoryService(database)
+    raw_qa = _raw_qa(service, page_id)
+
+    service.promote_raw_qa_to_experience(
+        raw_qa.id, title="第一次整理", content="遇到的问题：测试。"
+    )
+    with pytest.raises(KnowledgeMemoryValidationError, match="已经整理过经验"):
+        service.promote_raw_qa_to_experience(
+            raw_qa.id, title="重复整理", content="遇到的问题：测试。"
+        )
+
+    # After the experience is deleted, re-promotion is allowed again.
+    experience = next(
+        item
+        for item in service.list()
+        if item.kind.value == "experience"
+    )
+    service.delete_entry(experience.id)
+    again = service.promote_raw_qa_to_experience(
+        raw_qa.id, title="重新整理", content="遇到的问题：测试。"
+    )
+    assert again.title == "重新整理"

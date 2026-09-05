@@ -205,6 +205,14 @@ class KnowledgeMemoryService:
         except (ValueError, DatabaseError) as exc:
             raise KnowledgeMemoryValidationError(str(exc)) from exc
 
+    def find_experience_for_raw_qa(self, raw_qa_id: int) -> KnowledgeMemoryEntry | None:
+        """Return the active experience distilled from one raw Q&A, if any."""
+
+        entry = self.get(raw_qa_id)
+        if entry is None or entry.kind is not KnowledgeMemoryEntryKind.RAW_QA:
+            return None
+        return self._database.find_active_experience_by_source(raw_qa_id)
+
     def promote_raw_qa_to_experience(
         self,
         raw_qa_id: int,
@@ -245,6 +253,12 @@ class KnowledgeMemoryService:
         if source.status is not KnowledgeMemoryStatus.ACTIVE:
             raise KnowledgeMemoryValidationError(
                 "这条内容已被删除或归档，不能整理成经验。"
+            )
+        existing = self._database.find_active_experience_by_source(source.id)
+        if existing is not None:
+            raise KnowledgeMemoryValidationError(
+                f"这条问答已经整理过经验（{existing.title}），"
+                "不用重复整理；你可以在“整理好的经验”里查看或修改它。"
             )
         normalized_title = title.strip()
         if not normalized_title:

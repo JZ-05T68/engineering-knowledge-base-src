@@ -2628,6 +2628,27 @@ class Database:
             ).fetchone()
         return _knowledge_memory_entry_from_row(row) if row is not None else None
 
+    def find_active_experience_by_source(
+        self, source_entry_id: int
+    ) -> KnowledgeMemoryEntry | None:
+        """Return the active experience distilled from one raw Q&A (v0.7.3).
+
+        Guards against promoting the same saved Q&A into duplicate
+        experiences; tombstoned or purged sources do not block re-promotion.
+        """
+
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM knowledge_memory_entries
+                WHERE kind = 'experience' AND status = 'active'
+                  AND source_entry_id = ?
+                ORDER BY id LIMIT 1
+                """,
+                (source_entry_id,),
+            ).fetchone()
+        return _knowledge_memory_entry_from_row(row) if row is not None else None
+
     def delete_knowledge_memory_entry(self, entry_id: int) -> None:
         """Permanently purge one memory entry (v13 hard delete).
 
