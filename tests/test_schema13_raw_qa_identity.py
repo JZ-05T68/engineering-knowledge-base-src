@@ -138,11 +138,11 @@ def _seed_legacy_memory_rows(database_path: Path) -> dict[str, int]:
     return ids
 
 
-def test_fresh_database_migrates_to_v13(tmp_path: Path) -> None:
+def test_fresh_database_migrates_to_v14(tmp_path: Path) -> None:
     database = Database(tmp_path / "knowledge.db")
 
-    assert SCHEMA_VERSION == 13
-    assert database.SCHEMA_VERSION == 13
+    assert SCHEMA_VERSION == 14
+    assert database.SCHEMA_VERSION == 14
     with sqlite3.connect(database.database_path) as connection:
         versions = [
             row[0]
@@ -150,7 +150,7 @@ def test_fresh_database_migrates_to_v13(tmp_path: Path) -> None:
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
         ]
-        assert versions == list(range(1, 14))
+        assert versions == list(range(1, 15))
         columns = _table_columns(connection, "knowledge_memory_entries")
         assert {
             "creation_origin",
@@ -258,7 +258,7 @@ def test_v13_migration_failure_rolls_back_completely(
 
     backup_path = migrate_database(database_path)
     assert backup_path is not None
-    assert _read_schema_version(database_path) == 13
+    assert _read_schema_version(database_path) == 14
 
 
 def test_v13_check_constraints_and_fts_survive_rebuild(
@@ -301,11 +301,11 @@ def test_v13_database_supports_sqlite_backup_round_trip(tmp_path: Path) -> None:
 
     database_path = tmp_path / "knowledge.db"
     Database(database_path)
-    backup_path = backup_database(database_path, 13)
+    backup_path = backup_database(database_path, 14)
 
     connection = sqlite3.connect(backup_path)
     connection.row_factory = sqlite3.Row
-    assert _read_schema_version(backup_path) == 13
+    assert _read_schema_version(backup_path) == 14
     columns = _table_columns(connection, "knowledge_memory_entries")
     assert "creation_origin" in columns and "source_entry_id" in columns
     connection.close()
