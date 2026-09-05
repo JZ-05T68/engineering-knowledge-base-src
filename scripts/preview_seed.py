@@ -47,14 +47,13 @@ _IGNORED_IN_COPY: Final = shutil.ignore_patterns(
 
 
 def _preview_data_dir() -> Path:
-    """Return the preview data directory and refuse any other write root."""
+    """Return the preview data directory, refusing any other write root."""
 
     data_dir = DEFAULT_STAGING_ROOT / "data"
     resolved_root = DEFAULT_STAGING_ROOT.resolve()
-    if resolved_root == PROJECT_ROOT.resolve() or PROJECT_ROOT.resolve() in (
-        resolved_root.parents
-    ):
-        raise SystemExit("拒绝执行：预览数据根目录不得指向 canonical workspace 内部。")
+    expected_root = (PROJECT_ROOT / "staging-data").resolve()
+    if resolved_root != expected_root:
+        raise SystemExit("拒绝执行：预览数据根目录必须是 canonical 的 staging-data/。")
     return data_dir
 
 

@@ -61,6 +61,7 @@ def _require_clean_checkpoint() -> str:
             capture_output=True,
             text=True,
             encoding="utf-8",
+            errors="replace",
             check=False,
         )
         if result.returncode != 0:
