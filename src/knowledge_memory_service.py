@@ -235,7 +235,7 @@ class KnowledgeMemoryService:
           messages, exactly like the raw-QA save path.
         """
 
-        source = self.get(raw_qa_id)
+        source = self.get(raw_qa_id, include_deleted=True)
         if source is None:
             raise KnowledgeMemoryEntryNotFoundError(f"记忆条目不存在：{raw_qa_id}")
         if source.kind is not KnowledgeMemoryEntryKind.RAW_QA:

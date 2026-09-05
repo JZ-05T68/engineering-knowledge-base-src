@@ -28,6 +28,7 @@ PRODUCTION_LIKE_PATHS = (
     "raw_dir",
     "pages_dir",
     "markdown_dir",
+    "agent_readings_dir",
     "database_dir",
     "database_path",
     "backups_dir",

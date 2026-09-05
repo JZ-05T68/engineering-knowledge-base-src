@@ -171,6 +171,7 @@ def staging_settings(root: Path | None = None) -> Settings:
         raw_dir=data_dir / "raw",
         pages_dir=data_dir / "pages",
         markdown_dir=data_dir / "markdown",
+        agent_readings_dir=data_dir / "agent-readings",
         database_dir=database_dir,
         database_path=database_dir / "knowledge.db",
         backups_dir=staging_root / "backups",

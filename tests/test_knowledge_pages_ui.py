@@ -210,7 +210,9 @@ def test_memory_page_lists_entries(tmp_path: Path, monkeypatch) -> None:
     assert not app.selectbox
     assert not app.number_input
     markdown = [item.value for item in app.markdown]
-    assert any("关于 测试手册 的讨论" in value for value in markdown)
+    # v0.7.0: authored/structured entries show their own title; the document
+    # conversation title is reserved for raw saved Q&A.
+    assert any("STM32 电机控制异常" in value for value in markdown)
     assert any(button.label == "查看" for button in app.button)
     assert any(button.label == "删除" for button in app.button)
     # The plain-language type chip is shown; internal IDs/status are not.

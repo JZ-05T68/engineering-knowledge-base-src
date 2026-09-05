@@ -236,7 +236,6 @@ def _generate_experience_draft(
     task = f"把这条用户保存的问答整理成一条结构化的个人经验：{question}"
     try:
         from src import __version__
-
         from src.knowledge_context import ContextItemProjector
         from src.knowledge_context_packager import KnowledgeContextPackager
 
@@ -253,14 +252,12 @@ def _generate_experience_draft(
     from src.ai.rag_answer_service import MockCompletionProvider
     from src.runtime import application_experience_model_service
 
-    is_mock = False
     try:
         output = application_experience_model_service().generate(task, package)
     except AIUnavailableError:
         output = ExperienceModelService(MockCompletionProvider()).generate(
             task, package
         )
-        is_mock = True
     except AIError as exc:
         st.error(f"AI 服务调用失败，这次没有生成整理草稿：{exc}")
         return
@@ -268,6 +265,7 @@ def _generate_experience_draft(
         LOGGER.exception("AI 整理经验失败")
         st.error(f"AI 整理经验失败：{exc}")
         return
+    is_mock = bool(output.is_mock)
     candidate = output.candidate
     fields = {
         "title": candidate.title,
@@ -468,6 +466,31 @@ def _render_citation_history(entry: KnowledgeMemoryEntry, database: Database) ->
     st.markdown("##### 保存时引用的原始资料")
     for citation in citations:
         st.write(_citation_line(citation, database))
+        _render_open_original_page(citation, database)
+
+
+def _render_open_original_page(citation: MemoryCitation, database: Database) -> None:
+    """Offer one click back to the original page when the material still exists.
+
+    Deleted material stays an honest historical note: only a live document and
+    page get an open button, never a dead link.
+    """
+
+    if citation.document_id is None or citation.page_id is None:
+        return
+    if (
+        database.get_document(citation.document_id) is None
+        or database.get_page(citation.page_id) is None
+    ):
+        return
+    if st.button(
+        "打开原页",
+        key=f"saved_open_page_{citation.page_id}",
+        use_container_width=True,
+    ):
+        st.query_params["document"] = str(citation.document_id)
+        st.query_params["page"] = str(citation.page_number)
+        st.switch_page("pages/17_我的资料.py")
 
 
 def _citation_line(citation: MemoryCitation, database: Database) -> str:
@@ -620,9 +643,14 @@ def _friendly_date(value) -> str:
 
 
 def _display_title(entry: KnowledgeMemoryEntry, database: Database | None) -> str:
-    """Use a document name when available, without exposing its internal ID."""
+    """Raw Q&A keeps the document-conversation title; experiences show their
+    user-confirmed title."""
 
-    if database is not None and entry.document_id is not None:
+    if (
+        entry.kind.value == "raw_qa"
+        and database is not None
+        and entry.document_id is not None
+    ):
         document = database.get_document(entry.document_id)
         if document is not None:
             return f"关于 {document.title} 的讨论"
