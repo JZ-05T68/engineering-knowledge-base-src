@@ -8,6 +8,7 @@ import streamlit as st
 
 from src.agent.local_client import LocalDocumentAgentClient
 from src.agent_document_reader import AgentReadingStore
+from src.page_jump_ui import render_page_jump
 from src.runtime import (
     application_ai_provider,
     application_database,
@@ -17,6 +18,30 @@ from src.runtime import (
 from src.workspace_ui import render_workspace
 
 LOGGER = logging.getLogger(__name__)
+
+_DOCUMENT_SELECTOR_KEY = "simple_reader_document_id"
+_PAGE_SELECTOR_KEY = "simple_reader_page_number"
+
+
+def _remember_document_selection() -> None:
+    """Keep a document choice and its URL in sync during the same user action."""
+
+    st.query_params["document"] = str(st.session_state[_DOCUMENT_SELECTOR_KEY])
+    if "page" in st.query_params:
+        del st.query_params["page"]
+    st.session_state.pop(_PAGE_SELECTOR_KEY, None)
+
+
+def _remember_page_selection() -> None:
+    """Write the newly selected page before Streamlit reruns the page."""
+
+    st.query_params["page"] = str(st.session_state[_PAGE_SELECTOR_KEY])
+
+
+def _go_to_page(page_number: int) -> None:
+    """Use the same state transition for the buttons and the page selector."""
+
+    st.query_params["page"] = str(page_number)
 
 
 def _agent_client() -> LocalDocumentAgentClient:
@@ -64,16 +89,20 @@ if requested_document_id not in document_by_id:
     else:
         requested_document_id = documents[0].id
 
+if st.session_state.get(_DOCUMENT_SELECTOR_KEY) != requested_document_id:
+    st.session_state[_DOCUMENT_SELECTOR_KEY] = requested_document_id
 document_id = st.selectbox(
     "选择资料",
     options=list(document_by_id),
-    index=list(document_by_id).index(requested_document_id),
+    key=_DOCUMENT_SELECTOR_KEY,
     format_func=lambda value: (
         f"{document_by_id[value].title}（{document_by_id[value].page_count} 页）"
     ),
+    on_change=_remember_document_selection,
 )
 document = document_by_id[document_id]
-st.query_params["document"] = str(document.id)
+if str(st.query_params.get("document", "")) != str(document.id):
+    st.query_params["document"] = str(document.id)
 
 pages = sorted(database.list_pages(document.id), key=lambda item: item.page_number)
 if not pages:
@@ -88,6 +117,8 @@ except ValueError:
     initial_page = pages[0].page_number
 if initial_page not in page_by_number:
     initial_page = pages[0].page_number
+if st.session_state.get(_PAGE_SELECTOR_KEY) != initial_page:
+    st.session_state[_PAGE_SELECTOR_KEY] = initial_page
 
 st.markdown(f"### {document.title}")
 st.caption(f"原文件：{document.filename}　·　共 {len(pages)} 页")
@@ -95,26 +126,38 @@ st.caption(f"原文件：{document.filename}　·　共 {len(pages)} 页")
 navigation = st.columns([1, 1, 3])
 page_numbers = list(page_by_number)
 current_index = page_numbers.index(initial_page)
-if navigation[0].button(
-    "← 上一页", disabled=current_index == 0, use_container_width=True
-):
-    st.query_params["page"] = str(page_numbers[current_index - 1])
-    st.rerun()
-if navigation[1].button(
-    "下一页 →", disabled=current_index == len(page_numbers) - 1,
+navigation[0].button(
+    "← 上一页",
+    disabled=current_index == 0,
     use_container_width=True,
-):
-    st.query_params["page"] = str(page_numbers[current_index + 1])
-    st.rerun()
+    on_click=_go_to_page,
+    args=(page_numbers[max(0, current_index - 1)],),
+)
+navigation[1].button(
+    "下一页 →",
+    disabled=current_index == len(page_numbers) - 1,
+    use_container_width=True,
+    on_click=_go_to_page,
+    args=(page_numbers[min(len(page_numbers) - 1, current_index + 1)],),
+)
 page_number = navigation[2].selectbox(
     "页码",
     options=page_numbers,
-    index=current_index,
+    key=_PAGE_SELECTOR_KEY,
     format_func=lambda value: f"第 {value} 页",
     label_visibility="collapsed",
+    on_change=_remember_page_selection,
 )
-st.query_params["page"] = str(page_number)
+if str(st.query_params.get("page", "")) != str(page_number):
+    st.query_params["page"] = str(page_number)
 page = page_by_number[page_number]
+
+jump_target = render_page_jump(
+    total_pages=len(pages), key_prefix=f"simple_reader_jump_{document.id}"
+)
+if jump_target is not None:
+    _go_to_page(jump_target)
+    st.rerun()
 
 original_text = page.ocr_text.strip() or page.extracted_text.strip()
 editable_text = page.markdown_content if page.markdown_content.strip() else original_text

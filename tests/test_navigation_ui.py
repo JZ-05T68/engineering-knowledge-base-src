@@ -152,6 +152,16 @@ def _reader_page_selector(app: AppTest):
     return next(selectbox for selectbox in app.selectbox if selectbox.label == "页码")
 
 
+def _simple_reader_path() -> Path:
+    return next((Path(__file__).parents[1] / "pages").glob("17_*.py"))
+
+
+def _simple_reader_document_selector(app: AppTest):
+    return next(
+        selectbox for selectbox in app.selectbox if selectbox.label == "选择资料"
+    )
+
+
 def _reader_button(app: AppTest, label: str):
     return next(button for button in app.button if button.label == label)
 
@@ -261,6 +271,118 @@ def test_reader_query_target_uses_same_sorted_document_navigation(
     assert _has_caption(app, "普通下一页：第 5 页")
 
 
+def test_simple_reader_dropdown_opens_target_page_on_first_selection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """The ordinary reader must not require selecting the same page twice."""
+
+    _, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
+    app = AppTest.from_file(str(_simple_reader_path()))
+    app.query_params = {"document": str(document_id), "page": "1"}
+    app.run(timeout=10)
+
+    assert not app.exception
+    assert _reader_page_selector(app).value == 1
+    assert app.query_params["page"] == ["1"]
+
+    # One human action must update the selector, URL, heading, and page text together.
+    _reader_page_selector(app).set_value(4).run(timeout=10)
+
+    assert not app.exception
+    assert _reader_page_selector(app).value == 4
+    assert app.query_params["page"] == ["4"]
+    assert any(item.value == "原文第 4 页" for item in app.subheader)
+    corrected_text = next(
+        item for item in app.text_area if item.label == "修改后的文字"
+    )
+    assert "NAV-0004" in corrected_text.value
+
+    # A second, different choice must also work on its first attempt.
+    _reader_page_selector(app).set_value(7).run(timeout=10)
+
+    assert _reader_page_selector(app).value == 7
+    assert app.query_params["page"] == ["7"]
+    assert any(item.value == "原文第 7 页" for item in app.subheader)
+    corrected_text = next(
+        item for item in app.text_area if item.label == "修改后的文字"
+    )
+    assert "NAV-0007" in corrected_text.value
+
+
+def test_simple_reader_document_switch_resets_page_in_one_selection(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Changing documents must not retain a page number from the previous file."""
+
+    database, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
+    other_document_id = next(
+        document.id
+        for document in database.list_documents()
+        if document.id != document_id
+    )
+    app = AppTest.from_file(str(_simple_reader_path()))
+    app.query_params = {"document": str(document_id), "page": "7"}
+    app.run(timeout=10)
+
+    _simple_reader_document_selector(app).set_value(other_document_id).run(timeout=10)
+
+    assert not app.exception
+    assert _simple_reader_document_selector(app).value == other_document_id
+    assert app.query_params["document"] == [str(other_document_id)]
+    assert app.query_params["page"] == ["1"]
+    assert _reader_page_selector(app).value == 1
+    assert any(item.value == "原文第 1 页" for item in app.subheader)
+    corrected_text = next(
+        item for item in app.text_area if item.label == "修改后的文字"
+    )
+    assert corrected_text.value == "OTHER DOCUMENT PAGE 1"
+
+
+def test_simple_reader_direct_jump_shares_state_with_every_navigation_control(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Direct input is an action; every control must still agree on one page."""
+
+    _, document_id = _reader_navigation_runtime(tmp_path, monkeypatch)
+    app = AppTest.from_file(str(_simple_reader_path()))
+    app.query_params = {"document": str(document_id), "page": "1"}
+    app.run(timeout=10)
+
+    jump_input_key = f"simple_reader_jump_{document_id}_input"
+    app.text_input(key=jump_input_key).input(" 0005 ").run(timeout=10)
+    _reader_button(app, "跳转").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 5
+    assert app.query_params["page"] == ["5"]
+    assert any(item.value == "原文第 5 页" for item in app.subheader)
+    assert "NAV-0005" in next(
+        item for item in app.text_area if item.label == "修改后的文字"
+    ).value
+
+    _reader_button(app, "下一页 →").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 6
+    assert app.query_params["page"] == ["6"]
+
+    _reader_page_selector(app).set_value(3).run(timeout=10)
+    assert _reader_page_selector(app).value == 3
+    assert app.query_params["page"] == ["3"]
+
+    _reader_button(app, "← 上一页").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 2
+    assert app.query_params["page"] == ["2"]
+
+    app.text_input(key=jump_input_key).input("7").run(timeout=10)
+    _reader_button(app, "跳转").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 7
+    assert app.query_params["page"] == ["7"]
+    assert any(item.value == "原文第 7 页" for item in app.subheader)
+
+    app.text_input(key=jump_input_key).input("0").run(timeout=10)
+    _reader_button(app, "跳转").click().run(timeout=10)
+    assert _reader_page_selector(app).value == 7
+    assert app.query_params["page"] == ["7"]
+    assert any("1 到 8" in warning.value for warning in app.warning)
+
+
 def test_home_and_browser_show_review_continuation_entry(tmp_path: Path, monkeypatch) -> None:
     _local_runtime(tmp_path, monkeypatch)
     project_root = Path(__file__).parents[1]
@@ -317,7 +439,11 @@ def test_home_review_entry_preserves_target_page(tmp_path: Path, monkeypatch) ->
     _reader_button(home, "查看识别结果").click().run(timeout=10)
 
     assert not home.exception
-    assert home.query_params == {"page_id": [str(target.id)]}
+    assert home.query_params == {
+        "page_id": [str(target.id)],
+        "document": [str(target.document_id)],
+        "page": [str(target.page_number)],
+    }
 
 
 def test_sidebar_uses_direct_links_instead_of_source_page_rerun_buttons(

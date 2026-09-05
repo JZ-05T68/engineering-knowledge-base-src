@@ -23,6 +23,7 @@ from src.ocr_ui import (
     page_ocr_feedback,
     page_ocr_unavailable_feedback,
 )
+from src.page_jump_ui import render_page_jump
 from src.review_shortcuts import review_shortcuts_html
 from src.runtime import (
     application_classification_metadata_service,
@@ -35,6 +36,7 @@ from src.workspace_ui import render_workspace
 LOGGER = logging.getLogger(__name__)
 _ACTIVE_PAGE_KEY = "review_active_page_id"
 _SELECTOR_KEY = "review_page_selector"
+_DOCUMENT_FILTER_KEY = "review_document_filter"
 _PENDING_TARGET_KEY = "review_pending_target_id"
 _FLASH_KEY = "review_flash"
 _BATCH_NUMBER_KEY = "review_visible_batch_number"
@@ -66,16 +68,37 @@ def _activate_page(page_id: int) -> None:
     st.session_state.pop(_PENDING_TARGET_KEY, None)
 
 
+def _go_to_page(page_id: int) -> None:
+    """Send every review-page navigation control through one guarded path."""
+
+    current = st.session_state.get(_ACTIVE_PAGE_KEY)
+    if current is not None and page_id != int(current) and _is_dirty(int(current)):
+        st.session_state[_PENDING_TARGET_KEY] = page_id
+        return
+    _activate_page(page_id)
+    target = database.get_page(page_id)
+    if target is not None:
+        st.query_params["document"] = str(target.document_id)
+        st.query_params["page"] = str(target.page_number)
+        st.query_params["page_id"] = str(target.id)
+
+
 def _on_page_selector_change() -> None:
     requested = int(st.session_state[_SELECTOR_KEY])
     current = int(st.session_state[_ACTIVE_PAGE_KEY])
     if requested == current:
         return
-    if _is_dirty(current):
-        st.session_state[_PENDING_TARGET_KEY] = requested
-        st.session_state[_SELECTOR_KEY] = current
-        return
-    _activate_page(requested)
+    _go_to_page(requested)
+
+
+def _on_document_filter_change() -> None:
+    """Move to the first review page of the newly selected document."""
+
+    selected = st.session_state.get(_DOCUMENT_FILTER_KEY)
+    st.session_state[_BATCH_NUMBER_KEY] = 1
+    target = database.get_first_review_page(selected)
+    if target is not None:
+        _go_to_page(target.id)
 
 
 def _page_label(page: Page, document_titles: dict[int, str]) -> str:
@@ -100,11 +123,20 @@ except Exception as exc:
 
 document_options = {document.id: document for document in documents}
 document_titles = {document.id: document.title for document in documents}
+if _DOCUMENT_FILTER_KEY not in st.session_state:
+    query_document = st.query_params.get("document")
+    try:
+        query_document_id = int(query_document) if query_document else None
+    except ValueError:
+        query_document_id = None
+    if query_document_id in document_options:
+        st.session_state[_DOCUMENT_FILTER_KEY] = query_document_id
 selected_document = st.selectbox(
     "选择一份资料",
     options=[None, *document_options],
     format_func=lambda value: "全部文档" if value is None else document_options[value].title,
-    key="review_document_filter",
+    key=_DOCUMENT_FILTER_KEY,
+    on_change=_on_document_filter_change,
 )
 current_batch_value = st.session_state.get(_BATCH_NUMBER_KEY, 1)
 try:
@@ -175,6 +207,22 @@ if document is None:
     st.error("当前页面所属文档不存在。")
     st.stop()
 st.query_params["page_id"] = str(page.id)
+st.query_params["document"] = str(document.id)
+st.query_params["page"] = str(page.page_number)
+
+jump_target = render_page_jump(
+    total_pages=document.page_count,
+    key_prefix=f"review_page_jump_{document.id}",
+)
+if jump_target is not None:
+    target_page = database.get_page_by_number(document.id, jump_target)
+    if target_page is None:
+        st.warning(
+            f"第 {jump_target} 页暂时无法查看。请输入 1 到 {document.page_count} 之间的页码。"
+        )
+    else:
+        _go_to_page(target_page.id)
+        st.rerun()
 
 flash = st.session_state.pop(_FLASH_KEY, None)
 if flash is not None:
@@ -321,10 +369,8 @@ if st.button(
     disabled=continuation_page is None,
     use_container_width=True,
 ):
-    if continuation_page is not None and _is_dirty(page.id):
-        st.session_state[_PENDING_TARGET_KEY] = continuation_page.id
-    elif continuation_page is not None:
-        _activate_page(continuation_page.id)
+    if continuation_page is not None:
+        _go_to_page(continuation_page.id)
     st.rerun()
 
 image_column, editor_column = st.columns([1, 1], gap="large")
@@ -506,10 +552,10 @@ with editor_column:
             direction_label = "上一" if go_previous else "下一"
             st.info(f"当前队列没有{direction_label}待处理页。")
         elif dirty:
-            st.session_state[_PENDING_TARGET_KEY] = requested_navigation.id
+            _go_to_page(requested_navigation.id)
             st.rerun()
         else:
-            _activate_page(requested_navigation.id)
+            _go_to_page(requested_navigation.id)
             st.rerun()
 
 if page.status is PageStatus.FAILED:
