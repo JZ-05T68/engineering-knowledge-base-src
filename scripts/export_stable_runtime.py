@@ -128,7 +128,10 @@ def _seed_formal_data(target: Path) -> None:
         source_subdir = PROJECT_ROOT / "data" / subdir
         if source_subdir.is_dir():
             shutil.copytree(
-                source_subdir, target / "data" / subdir, ignore=_IGNORED_IN_COPY
+                source_subdir,
+                target / "data" / subdir,
+                ignore=_IGNORED_IN_COPY,
+                dirs_exist_ok=True,
             )
             print(f"已复制 {subdir}/")
     _backup_sqlite(source_database, target_database)
