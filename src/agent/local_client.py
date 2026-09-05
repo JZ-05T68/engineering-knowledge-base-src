@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from uuid import uuid4
 
 from src.agent.local_document import LocalDocumentAgent
@@ -30,12 +31,18 @@ class LocalDocumentAgentClient:
         provider: CompletionProvider | None,
         readings: AgentReadingStore,
         model: str,
+        vision_provider: object | None = None,
+        vision_model: str | None = None,
+        pages_dir: Path | None = None,
     ) -> None:
         self._agent = LocalDocumentAgent(
             database=database,
             provider=provider,
             readings=readings,
             model=model,
+            vision_provider=vision_provider,
+            vision_model=vision_model,
+            pages_dir=pages_dir,
         )
         self._sources = SourceMetadataService(
             kb_uuid=database.get_knowledge_base_uuid(),

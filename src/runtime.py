@@ -145,6 +145,7 @@ def application_ai_provider() -> AuditedAIProvider | None:
         llm_model_hard=settings.ai_llm_model_hard,
         embedding_model=settings.ai_embedding_model,
         rerank_model=settings.ai_rerank_model,
+        vision_model=settings.ai_vision_model,
         timeout_seconds=settings.ai_timeout_seconds,
         max_extra_attempts=settings.ai_max_extra_attempts,
         transport=urllib_transport,

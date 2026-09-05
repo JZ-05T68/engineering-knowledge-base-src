@@ -193,6 +193,7 @@ class QwenProvider:
         llm_model_hard: str,
         embedding_model: str,
         rerank_model: str,
+        vision_model: str = "",
         base_url: str = DEFAULT_BASE_URL,
         timeout_seconds: float = 30.0,
         max_extra_attempts: int = MAX_EXTRA_ATTEMPTS,
@@ -208,6 +209,7 @@ class QwenProvider:
         self._llm_model_hard = llm_model_hard
         self._embedding_model = embedding_model
         self._rerank_model = rerank_model
+        self._vision_model = vision_model
         self._base_url = base_url.rstrip("/")
         self._timeout_seconds = timeout_seconds
         self._max_extra_attempts = max_extra_attempts
@@ -240,6 +242,55 @@ class QwenProvider:
         payload: dict[str, Any] = {
             "model": chosen_model,
             "messages": [{"role": "user", "content": prompt}],
+            "enable_thinking": self._enable_thinking,
+            "stream": False,
+        }
+        if max_completion_tokens is not None:
+            if max_completion_tokens <= 0:
+                raise ValueError("max_completion_tokens 必须为正数")
+            payload["max_completion_tokens"] = max_completion_tokens
+        response, retry_count = self._post("/chat/completions", payload)
+        return self._parse_completion(response, chosen_model, retry_count=retry_count)
+
+    def complete_vision(
+        self,
+        prompt: str,
+        image_png_base64: str,
+        *,
+        model: str | None = None,
+        max_completion_tokens: int | None = None,
+    ) -> CompletionResult:
+        """Return one completion over a prompt plus a PNG image (v0.7.2).
+
+        The image is sent inline as a base64 data URL to a vision-capable
+        model. Budget/audit responsibility stays with the caller's wrapper;
+        this method only shapes the vendor payload.
+        """
+
+        self._require_credential()
+        if not image_png_base64.strip():
+            raise ValueError("视觉调用必须提供图片内容")
+        chosen_model = model or self._vision_model
+        if not chosen_model:
+            raise AIUnavailableError(
+                "未配置视觉模型，无法读取页面图片。"
+            )
+        payload: dict[str, Any] = {
+            "model": chosen_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/png;base64,{image_png_base64}"
+                            },
+                        },
+                    ],
+                }
+            ],
             "enable_thinking": self._enable_thinking,
             "stream": False,
         }

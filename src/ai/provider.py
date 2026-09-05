@@ -481,6 +481,77 @@ class AuditedAIProvider:
         )
         return result
 
+    def complete_vision(
+        self,
+        prompt: str,
+        image_png_base64: str,
+        *,
+        model: str | None = None,
+        max_completion_tokens: int | None = None,
+        source_feature: str | None = None,
+        target_refs: Sequence[str] | None = None,
+    ) -> CompletionResult:
+        """Return one vision completion with a full audit record (v0.7.2).
+
+        Mirrors :meth:`complete` for image-bearing calls: same ledger fields,
+        capability ``vision``, prompt hash over text plus image payload.
+        """
+
+        chosen_model = model or self._default_model
+        # A vision call is a multimodal completion; the ledger schema pins
+        # capability to completion/embedding/rerank, so it is recorded as a
+        # completion and distinguished by source_feature.
+        base: dict[str, object] = {
+            "call_uuid": str(uuid.uuid4()),
+            "capability": "completion",
+            "model": chosen_model,
+            "prompt_sha256": _sha256_text(prompt + "\n" + image_png_base64),
+            "input_chars": len(prompt) + len(image_png_base64),
+            "source_feature": source_feature or self._source_feature,
+            "target_refs": (
+                tuple(target_refs) if target_refs is not None else self._target_refs
+            ),
+            "created_at": _utc_timestamp(),
+        }
+        self._ensure_allowed("vision", base)
+        started = time.monotonic()
+        try:
+            result = self._wrapped.complete_vision(  # type: ignore[attr-defined]
+                prompt,
+                image_png_base64,
+                model=model,
+                max_completion_tokens=max_completion_tokens,
+            )
+        except AIUnavailableError:
+            self._record(
+                base,
+                status="error",
+                error_class="unavailable",
+                latency_ms=_elapsed_ms(started),
+            )
+            raise
+        except AIExecutionError as exc:
+            self._record(
+                base,
+                status="error",
+                error_class=exc.error_class,
+                retry_count=exc.retry_count,
+                latency_ms=_elapsed_ms(started),
+            )
+            raise
+        usage = result.usage
+        self._record(
+            base,
+            status="success",
+            retry_count=result.retry_count,
+            latency_ms=_elapsed_ms(started),
+            prompt_tokens=usage.prompt_tokens if usage else None,
+            completion_tokens=usage.completion_tokens if usage else None,
+            total_tokens=usage.total_tokens if usage else None,
+            finish_reason=result.finish_reason,
+        )
+        return result
+
     def embed(
         self,
         texts: Sequence[str],

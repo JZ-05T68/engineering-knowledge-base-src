@@ -249,6 +249,9 @@ def _resolve_client(mode: AgentMode) -> Any:
         provider=application_ai_provider(),
         readings=AgentReadingStore(settings.agent_readings_dir),
         model=settings.ai_llm_model_hard,
+        vision_provider=application_ai_provider(),
+        vision_model=settings.ai_vision_model,
+        pages_dir=settings.pages_dir,
     )
     st.session_state[LIVE_CLIENT_KEY] = client
     return client

@@ -633,6 +633,8 @@ def test_trace_is_in_memory_only(tmp_path: Path) -> None:
 
 
 def test_production_registry_still_exactly_seven_tools() -> None:
+    """AI-less compositions keep the original seven-tool surface."""
+
     registry = build_phase1_registry()
 
     assert [item.name for item in registry.list_definitions()] == [

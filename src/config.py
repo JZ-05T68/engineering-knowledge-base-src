@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     ai_llm_model_hard: str = "qwen3.8-max"
     ai_embedding_model: str = "qwen3.7-text-embedding"
     ai_rerank_model: str = "qwen3-rerank"
+    ai_vision_model: str = "qwen3-vl-plus"
     ai_timeout_seconds: float = Field(default=30.0, gt=0, le=600)
     # Bounded retry and token budgets (v0.5.3). Budget unit is tokens, never
     # currency; 0 means unlimited. Retry ceiling is capped at 2 extra attempts.

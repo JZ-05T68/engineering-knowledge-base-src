@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from pathlib import Path
 
 from src.agent.decision.provider import ModelDecisionProvider
 from src.agent.execution.contracts import AgentRequest
@@ -36,6 +37,9 @@ class LocalDocumentAgent:
         provider: CompletionProvider | None,
         readings: AgentReadingStore,
         model: str,
+        vision_provider: object | None = None,
+        vision_model: str | None = None,
+        pages_dir: Path | None = None,
     ) -> None:
         if not model.strip():
             raise ValueError("Agent 模型不能为空")
@@ -46,13 +50,21 @@ class LocalDocumentAgent:
             store=readings,
             model=self._model,
         )
-        registry = build_phase1_registry()
+        has_vision = (
+            vision_provider is not None
+            and hasattr(vision_provider, "complete_vision")
+            and pages_dir is not None
+        )
+        registry = build_phase1_registry(include_visual=has_vision)
         executor = SingleStepAgentExecutor(
             registry,
             handlers=build_phase1_handlers(
                 database,
                 page_readings=readings,
                 require_agent_read=True,
+                vision_provider=vision_provider,
+                vision_model=vision_model,
+                pages_dir=pages_dir,
             ),
         )
         self._decision = ModelDecisionProvider(

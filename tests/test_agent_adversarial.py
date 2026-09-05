@@ -346,6 +346,8 @@ def test_single_item_stable_id_must_match_tool_reference_lineage() -> None:
 
 
 def test_production_registry_remains_exactly_seven_read_only_tools() -> None:
+    """AI-less compositions keep the original seven-tool surface."""
+
     definitions = build_phase1_registry().list_definitions()
     assert tuple(item.name for item in definitions) == (
         "get_evidence",
@@ -355,6 +357,24 @@ def test_production_registry_remains_exactly_seven_read_only_tools() -> None:
         "inspect_source_integrity",
         "knowledge_search",
         "page_search",
+    )
+    assert all(item.side_effect is ToolSideEffect.READ_ONLY for item in definitions)
+    assert "rag_answer" not in {item.name for item in definitions}
+
+
+def test_vision_capable_registry_adds_only_page_visual_search() -> None:
+    """v0.7.2: vision compositions gain exactly one extra read-only tool."""
+
+    definitions = build_phase1_registry(include_visual=True).list_definitions()
+    assert tuple(item.name for item in definitions) == (
+        "get_evidence",
+        "get_knowledge_memory",
+        "get_knowledge_object",
+        "inspect_provenance",
+        "inspect_source_integrity",
+        "knowledge_search",
+        "page_search",
+        "page_visual_search",
     )
     assert all(item.side_effect is ToolSideEffect.READ_ONLY for item in definitions)
     assert "rag_answer" not in {item.name for item in definitions}
