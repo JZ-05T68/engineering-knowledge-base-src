@@ -39,7 +39,7 @@ class HostedStorageError(RuntimeError):
 
 # Column inventory from the existing v1-v13 migrations, including FTS5 shadow
 # tables. No DDL or second migration engine. Unknown/missing storage is rejected.
-V13_COLUMNS = {
+V14_COLUMNS = {
     "ai_calls": (
         "id call_uuid capability model prompt_sha256 input_chars status error_class "
         "retry_count latency_ms prompt_tokens completion_tokens total_tokens "
@@ -139,6 +139,9 @@ V13_COLUMNS = {
     "schema_migrations": ("version applied_at").split(),
     "sqlite_sequence": ("name seq").split(),
     "tags": ("id name normalized_name created_at").split(),
+    "knowledge_memory_links": (
+        "id from_entry_id to_entry_id relation_type note created_at"
+    ).split(),
 }
 PATH_COLUMNS = {
     "documents": ("source_path",),
@@ -222,13 +225,13 @@ def readonly_database(path: Path, *, artifact: bool = False) -> Iterator[sqlite3
 
 
 def validate_identity(connection: sqlite3.Connection, expected_uuid: str) -> None:
-    if SCHEMA_VERSION != 13:
+    if SCHEMA_VERSION != 14:
         raise HostedStorageError(StorageFailure.SCHEMA)
     versions = tuple(
         row[0]
         for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version")
     )
-    if versions != tuple(range(1, 14)) or any(type(value) is not int for value in versions):
+    if versions != tuple(range(1, 15)) or any(type(value) is not int for value in versions):
         raise HostedStorageError(StorageFailure.SCHEMA)
     rows = connection.execute("SELECT id, kb_uuid FROM knowledge_base_meta").fetchall()
     if rows != [(1, expected_uuid)] or str(UUID(expected_uuid)) != expected_uuid:
@@ -239,9 +242,9 @@ def validate_schema(connection: sqlite3.Connection) -> None:
     names = {
         row[0] for row in connection.execute("SELECT name FROM sqlite_schema WHERE type='table'")
     }
-    if names != set(V13_COLUMNS):
+    if names != set(V14_COLUMNS):
         raise HostedStorageError(StorageFailure.SCHEMA)
-    for name, columns in V13_COLUMNS.items():
+    for name, columns in V14_COLUMNS.items():
         actual = [row[1] for row in connection.execute(f'PRAGMA table_info("{name}")')]
         if actual != columns:
             raise HostedStorageError(StorageFailure.SCHEMA)

@@ -247,6 +247,41 @@ class KnowledgeMemoryAdapter:
             )
         return self._to_result(stable_id, entry)
 
+    def _evolution_links(self, entry_id: int) -> list[dict[str, object]]:
+        """Return plain-language evolution relations for the answer model.
+
+        A superseded or contradicted experience must never be presented as
+        current advice; the note travels with the data so the boundary is
+        visible where the content is.
+        """
+
+        try:
+            links = self._service.list_experience_relations(entry_id)
+        except Exception:
+            return []
+        notes: list[dict[str, object]] = []
+        for link in links:
+            if link.get("direction") == "incoming":
+                if link["relation_type"] == "supersedes":
+                    notes.append(
+                        {
+                            "note": (
+                                "这条经验已有更新的经验代替，"
+                                "不得再作为当前建议直接给出。"
+                            )
+                        }
+                    )
+                elif link["relation_type"] == "contradicts":
+                    notes.append(
+                        {
+                            "note": (
+                                "后来有新证据与这条经验不一致，"
+                                "引用时必须说明存在不一致。"
+                            )
+                        }
+                    )
+        return notes
+
     def _to_result(
         self, stable_id: str, entry: KnowledgeMemoryEntry
     ) -> ToolResult:
@@ -273,6 +308,7 @@ class KnowledgeMemoryAdapter:
             "root_cause_confirmed": entry.root_cause_confirmed,
             "source_entry_id": entry.source_entry_id,
             "source_title": entry.source_title,
+            "evolution_links": self._evolution_links(entry.id),
             "knowledge_object_id": entry.knowledge_object_id,
             "document_id": entry.document_id,
             "page_id": entry.page_id,

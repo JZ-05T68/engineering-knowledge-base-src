@@ -12,7 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 # 仅用于 Phase 2B-V 失败注入验证；生产运行时恒为 None，永不触发。
 _V10_INJECTION_POINT: str | None = None
@@ -22,6 +22,8 @@ _V11_INJECTION_POINT: str | None = None
 _V12_INJECTION_POINT: str | None = None
 # 仅用于 v0.7 Phase 1 v13 失败注入验证；生产运行时恒为 None，永不触发。
 _V13_INJECTION_POINT: str | None = None
+# 仅用于 v0.7.4 v14 失败注入验证；生产运行时恒为 None，永不触发。
+_V14_INJECTION_POINT: str | None = None
 
 
 def _inject_v10_failure(point: str) -> None:
@@ -50,6 +52,13 @@ def _inject_v13_failure(point: str) -> None:
 
     if _V13_INJECTION_POINT == point:
         raise MigrationError(f"v13 迁移失败注入点：{point}")
+
+
+def _inject_v14_failure(point: str) -> None:
+    """Raise inside ``_apply_version_fourteen`` when ``point`` matches the hook."""
+
+    if _V14_INJECTION_POINT == point:
+        raise MigrationError(f"v14 迁移失败注入点：{point}")
 
 
 class MigrationError(RuntimeError):
@@ -127,6 +136,9 @@ def migrate_database(database_path: Path) -> Path | None:
         if current_version < 13:
             _apply_version_thirteen(connection)
             current_version = 13
+        if current_version < 14:
+            _apply_version_fourteen(connection)
+            current_version = 14
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -2241,6 +2253,58 @@ def _knowledge_data_fingerprint(connection: sqlite3.Connection) -> tuple[object,
         relation_count,
         revision_rows,
     )
+
+
+def _apply_version_fourteen(connection: sqlite3.Connection) -> None:
+    """Add the experience-evolution link table (v0.7.4, pure additive).
+
+    v14 creates ``knowledge_memory_links``: one experience may confirm, refine,
+    contradict or supersede another. Existing rows and tables are untouched;
+    the migration is a single transaction with a failure-injection hook and a
+    version record, following the v7-v13 discipline.
+    """
+
+    migration_timestamp = _utc_now()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE knowledge_memory_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_entry_id INTEGER NOT NULL
+                    REFERENCES knowledge_memory_entries(id) ON DELETE CASCADE,
+                to_entry_id INTEGER NOT NULL
+                    REFERENCES knowledge_memory_entries(id) ON DELETE CASCADE,
+                relation_type TEXT NOT NULL
+                    CHECK (relation_type IN (
+                        'confirms', 'refines', 'contradicts', 'supersedes'
+                    )),
+                note TEXT NOT NULL DEFAULT '' CHECK (length(note) <= 500),
+                created_at TEXT NOT NULL,
+                CHECK (from_entry_id <> to_entry_id),
+                UNIQUE (from_entry_id, to_entry_id, relation_type)
+            )
+            """
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_links_from"
+            " ON knowledge_memory_links(from_entry_id)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_links_to"
+            " ON knowledge_memory_links(to_entry_id)"
+        )
+        _inject_v14_failure("v14_links_table")
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (14, ?)",
+            (migration_timestamp,),
+        )
+        _inject_v14_failure("v14_version_record")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v14")
+    except Exception:
+        connection.rollback()
+        raise
 
 
 def _legacy_change_title_snapshot(title: str) -> str:

@@ -195,7 +195,7 @@ def test_v6_to_v7_upgrade_preserves_rows_and_maps_legacy_values(tmp_path: Path) 
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
     assert before == after  # 19 个旧列逐行原样保留
-    assert version == SCHEMA_VERSION == 13
+    assert version == SCHEMA_VERSION == 14
     assert mapped == [
         ("text_selection", None, None, None, None, None, None, None, "unconfirmed", None),
         ("text_selection", None, None, None, None, None, None, None, "unconfirmed", None),
@@ -224,7 +224,7 @@ def test_remigration_is_noop(tmp_path: Path) -> None:
             )
         ]
         item_count = connection.execute("SELECT COUNT(*) FROM evidence_items").fetchone()[0]
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
     assert item_count == len(LEGACY_ROWS)
     assert len(list((tmp_path / "backups").glob("*.db"))) == 1
 

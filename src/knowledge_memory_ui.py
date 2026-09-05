@@ -185,6 +185,7 @@ def _render_entry_detail(
     if entry.kind.value == "raw_qa":
         _render_promote_section(service, entry, database=database)
     else:
+        _render_evolution_relations(service, entry)
         _render_source_link(service, entry)
 
 
@@ -499,6 +500,95 @@ def _raw_qa_question(content: str) -> str:
     if "Agent 回答：" in text:
         text = text.split("Agent 回答：", 1)[0]
     return text.strip() or "（这条问答没有可识别的问题）"
+
+
+
+_RELATION_OPTIONS = (
+    ("refines", "补充了条件或细节"),
+    ("confirms", "进一步确认了这条经验"),
+    ("contradicts", "后来发现与它不一致"),
+    ("supersedes", "它已经过时，我用新的经验代替"),
+)
+
+
+def _render_evolution_relations(
+    service: KnowledgeMemoryService, entry: KnowledgeMemoryEntry
+) -> None:
+    """Show and add plain-language evolution history for one experience."""
+
+    links = service.list_experience_relations(entry.id)
+    if links:
+        st.markdown("##### 这条经验的演变")
+        for link in links:
+            if link["direction"] == "outgoing":
+                st.write(f"这条经验：{link['relation_label']}（见另一条相关经验）")
+            else:
+                st.write(f"另一条经验：{link['relation_label']}")
+            if link.get("note"):
+                st.caption(str(link["note"]))
+    _render_add_relation_form(service, entry)
+
+
+def _render_add_relation_form(
+    service: KnowledgeMemoryService, entry: KnowledgeMemoryEntry
+) -> None:
+    """Offer the user an explicit way to record how experiences evolved."""
+
+    others = [
+        item
+        for item in service.list(limit=PAGE_SIZE)
+        if item.kind.value == "experience" and item.id != entry.id
+    ]
+    if not others:
+        return
+    with st.expander("记录经验之间的演变"):
+        st.caption(
+            "如果后来的经历证实、补充或推翻了某条经验，在这里如实记录；"
+            "旧的经验不会消失，历史会保留。"
+        )
+        relation = st.selectbox(
+            "这条经验和哪条经验是什么关系？",
+            options=_RELATION_OPTIONS,
+            format_func=lambda item: item[1],
+            key=f"saved_evolution_relation_{entry.id}",
+        )
+        target = st.selectbox(
+            "另一条经验",
+            options=[item.id for item in others],
+            format_func=lambda item_id: _experience_title_for(
+                service, item_id
+            ),
+            key=f"saved_evolution_target_{entry.id}",
+        )
+        note = st.text_input(
+            "补充说明（可选）",
+            key=f"saved_evolution_note_{entry.id}",
+            max_chars=500,
+        )
+        if st.button(
+            "记录这条演变", key=f"saved_evolution_save_{entry.id}"
+        ):
+            try:
+                service.link_experience_relation(
+                    from_entry_id=entry.id,
+                    to_entry_id=target,
+                    relation_type=relation[0],
+                    note=note,
+                )
+            except Exception as exc:
+                st.error(f"没有记录成功：{exc}")
+            else:
+                st.session_state["saved_content_flash"] = "演变记录已保存。"
+                st.rerun()
+
+
+def _experience_title_for(service: KnowledgeMemoryService, entry_id: int) -> str:
+    """Return a plain display title for the relation target selector."""
+
+    entry = service.get(entry_id, include_deleted=True)
+    if entry is None:
+        return f"经验 {entry_id}"
+    return entry.title or f"经验 {entry_id}"
 
 
 def _render_source_link(

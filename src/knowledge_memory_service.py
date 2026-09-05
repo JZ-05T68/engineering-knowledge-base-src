@@ -30,6 +30,7 @@ from src.models import (
     PAGE_STABLE_TYPE,
     KnowledgeMemoryEntry,
     KnowledgeMemoryEntryKind,
+    KnowledgeMemoryRelationType,
     KnowledgeMemoryStatus,
     MemoryCitation,
     MemoryCitationSnapshotError,
@@ -204,6 +205,78 @@ class KnowledgeMemoryService:
             )
         except (ValueError, DatabaseError) as exc:
             raise KnowledgeMemoryValidationError(str(exc)) from exc
+
+    def link_experience_relation(
+        self,
+        *,
+        from_entry_id: int,
+        to_entry_id: int,
+        relation_type: str,
+        note: str = "",
+    ) -> None:
+        """Record how one experience relates to another (v0.7.4 evolution).
+
+        Both entries must be active structured experiences, self-links are
+        rejected, and the same relation between the same pair cannot be
+        recorded twice. Relations are user-authored history, never inferred.
+        """
+
+        source = self.get(from_entry_id)
+        target = self.get(to_entry_id)
+        if source is None or target is None:
+            raise KnowledgeMemoryValidationError("要关联的经验不存在或已删除。")
+        if source.kind is not KnowledgeMemoryEntryKind.EXPERIENCE or (
+            target.kind is not KnowledgeMemoryEntryKind.EXPERIENCE
+        ):
+            raise KnowledgeMemoryValidationError(
+                "只有整理好的经验之间才能建立演化关系。"
+            )
+        if from_entry_id == to_entry_id:
+            raise KnowledgeMemoryValidationError("不能把一条经验和它自己关联。")
+        try:
+            relation = KnowledgeMemoryRelationType(relation_type)
+        except ValueError as exc:
+            raise KnowledgeMemoryValidationError(
+                "经验关系类型必须是：进一步确认、补充条件、与新证据不一致或已有更新。"
+            ) from exc
+        existing = self._database.list_knowledge_memory_links(from_entry_id)
+        for link in existing:
+            if (
+                link["from_entry_id"] == to_entry_id
+                and link["to_entry_id"] == from_entry_id
+                and link["relation_type"] == relation.value
+            ):
+                raise KnowledgeMemoryValidationError("这两条经验之间已经存在同样的关系。")
+        try:
+            self._database.create_knowledge_memory_link(
+                from_entry_id=from_entry_id,
+                to_entry_id=to_entry_id,
+                relation_type=relation.value,
+                note=note.strip()[:500],
+            )
+        except (ValueError, DatabaseError) as exc:
+            raise KnowledgeMemoryValidationError(str(exc)) from exc
+
+    def list_experience_relations(self, entry_id: int) -> list[dict[str, object]]:
+        """Return evolution relations of one experience with plain labels."""
+
+        links = self._database.list_knowledge_memory_links(entry_id)
+        for link in links:
+            try:
+                relation = KnowledgeMemoryRelationType(link["relation_type"])
+            except ValueError:
+                continue
+            link["relation_label"] = relation.label
+            incoming = link["to_entry_id"] == entry_id
+            link["direction"] = "incoming" if incoming else "outgoing"
+            other_id = (
+                link["from_entry_id"] if incoming else link["to_entry_id"]
+            )
+            other = self.get(other_id, include_deleted=True)
+            link["other_entry_id"] = other_id
+            link["other_title"] = other.title if other else "（已删除）"
+            link["other_visible"] = other is not None
+        return links
 
     def find_experience_for_raw_qa(self, raw_qa_id: int) -> KnowledgeMemoryEntry | None:
         """Return the active experience distilled from one raw Q&A, if any."""

@@ -118,7 +118,7 @@ def test_absent_database_not_created(settings: HostedSettings) -> None:
     agent.run.assert_not_called()
 
 
-@pytest.mark.parametrize("version", [None, 11, 14])
+@pytest.mark.parametrize("version", [None, 11, 15])
 def test_incompatible_schema_not_migrated(settings: HostedSettings, version: int | None) -> None:
     settings.database_dir.mkdir()
     with sqlite3.connect(settings.database_path) as db:

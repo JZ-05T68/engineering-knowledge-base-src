@@ -430,7 +430,7 @@ def test_adapter_internal_exception_log_is_sanitized(caplog: pytest.LogCaptureFi
 
 
 def test_static_dependency_schema_and_no_persistence_invariants() -> None:
-    assert SCHEMA_VERSION == 13
+    assert SCHEMA_VERSION == 14
     source_root = Path("src")
     agent_root = source_root / "agent"
 

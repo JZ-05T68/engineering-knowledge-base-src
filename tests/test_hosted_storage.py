@@ -244,7 +244,7 @@ def test_artifact_config_env_only_and_digest_normalized(demo, monkeypatch):
     "change",
     [
         "DELETE FROM schema_migrations WHERE version=12",
-        "INSERT INTO schema_migrations VALUES (14,'future')",
+        "INSERT INTO schema_migrations VALUES (15,'future')",
         "DROP TABLE schema_migrations",
         "DELETE FROM schema_migrations WHERE version=4",
         "DROP TABLE ai_outputs",
@@ -551,7 +551,7 @@ def test_runtime_reuses_target_with_audit_without_artifact_or_hash_equality(demo
     [
         "UPDATE knowledge_base_meta SET kb_uuid='22222222-2222-4222-8222-222222222222'",
         "DELETE FROM schema_migrations WHERE version=12",
-        "INSERT INTO schema_migrations VALUES (14,'future')",
+        "INSERT INTO schema_migrations VALUES (15,'future')",
         "DROP TABLE knowledge_base_meta",
     ],
 )

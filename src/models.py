@@ -1522,6 +1522,38 @@ class KnowledgeSearchResult:
     root_cause_confirmed: bool = False
 
 
+class KnowledgeMemoryRelationType(StrEnum):
+    """How one structured experience relates to another (v0.7.4 evolution)."""
+
+    CONFIRMS = "confirms"
+    REFINES = "refines"
+    CONTRADICTS = "contradicts"
+    SUPERSEDES = "supersedes"
+
+    @property
+    def label(self) -> str:
+        """Return the plain-language relation label shown in the UI."""
+
+        return {
+            self.CONFIRMS: "进一步确认",
+            self.REFINES: "补充了条件",
+            self.CONTRADICTS: "与新证据不一致",
+            self.SUPERSEDES: "已有更新的经验",
+        }[self]
+
+
+@dataclass(frozen=True, slots=True)
+class KnowledgeMemoryLink:
+    """One evolution relation between two structured experiences (v0.7.4)."""
+
+    id: int
+    from_entry_id: int
+    to_entry_id: int
+    relation_type: KnowledgeMemoryRelationType
+    note: str
+    created_at: datetime
+
+
 @dataclass(frozen=True, slots=True)
 class KnowledgeRevision:
     """One append-only knowledge object revision event (schema v10)."""

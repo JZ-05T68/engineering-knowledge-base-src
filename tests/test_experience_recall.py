@@ -11,11 +11,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from src.agent.tools.adapters.knowledge_read import KnowledgeMemoryAdapter
 from src.agent.tools.adapters.knowledge_search import KnowledgeSearchAdapter
 from src.agent.tools.contracts import ToolContext, ToolInput
 from src.database import Database
-from src.knowledge_memory_service import KnowledgeMemoryService
+from src.knowledge_memory_service import (
+    KnowledgeMemoryService,
+    KnowledgeMemoryValidationError,
+)
 from src.knowledge_search_service import KnowledgeSearchService
 
 
@@ -242,3 +247,70 @@ def test_mapper_prepends_recall_note_to_memory_content(tmp_path: Path) -> None:
     assert "【表述要求】" in memory_items[0].content
     assert "你之前整理过一条经验" in memory_items[0].content
     assert "未经你确认" in memory_items[0].content
+
+
+def test_v14_evolution_link_roundtrip(tmp_path: Path) -> None:
+    """v0.7.4: experiences can record evolution relations with plain labels."""
+
+    from src.models import KnowledgeMemoryRelationType
+
+    database = _database(tmp_path)
+    _, page_id = _document_and_page(
+        database, title="电机手册", sha256="b" * 64, text="闭环控制说明。"
+    )
+    service = KnowledgeMemoryService(database)
+    raw_qa = service.create_raw_qa_entry(
+        question="电机闭环方向异常怎么处理？",
+        answer="交换 A/B 相。",
+        cited_page_ids=(page_id,),
+    ).entry
+    first = service.promote_raw_qa_to_experience(
+        raw_qa.id,
+        title="方向异常：换相处理",
+        content="遇到的问题：方向反。\n\n处理方式：对调 A/B 相。",
+        root_cause="疑似 A/B 相接反",
+        root_cause_confirmed=False,
+    )
+    raw_qa2 = service.create_raw_qa_entry(
+        question="电机方向反的真正原因是什么？",
+        answer="DIR_INV=1 配置错误，换相只是绕过。",
+        cited_page_ids=(page_id,),
+    ).entry
+    second = service.promote_raw_qa_to_experience(
+        raw_qa2.id,
+        title="方向异常：真正根因 DIR_INV=1",
+        content="遇到的问题：方向反。\n\n处理方式：修正 DIR_INV=1 配置。",
+        root_cause="DIR_INV=1 配置错误",
+        root_cause_confirmed=True,
+    )
+
+    service.link_experience_relation(
+        from_entry_id=second.id,
+        to_entry_id=first.id,
+        relation_type=KnowledgeMemoryRelationType.CONTRADICTS.value,
+        note="DIR_INV=1 才是根因，换相只是绕过。",
+    )
+
+    links = service.list_experience_relations(first.id)
+    assert len(links) == 1
+    assert links[0]["direction"] == "incoming"
+    assert links[0]["relation_label"] == "与新证据不一致"
+    assert links[0]["other_title"] == "方向异常：真正根因 DIR_INV=1"
+
+    # History is preserved: the old experience stays active and untouched.
+    assert service.get(first.id).status.value == "active"
+    assert service.get(first.id).title == "方向异常：换相处理"
+
+    # Duplicates and self-links are refused.
+    with pytest.raises(KnowledgeMemoryValidationError, match="已经存在同样的关系"):
+        service.link_experience_relation(
+            from_entry_id=first.id,
+            to_entry_id=second.id,
+            relation_type=KnowledgeMemoryRelationType.CONTRADICTS.value,
+        )
+    with pytest.raises(KnowledgeMemoryValidationError, match="它自己"):
+        service.link_experience_relation(
+            from_entry_id=first.id,
+            to_entry_id=first.id,
+            relation_type=KnowledgeMemoryRelationType.REFINES.value,
+        )

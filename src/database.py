@@ -2628,6 +2628,47 @@ class Database:
             ).fetchone()
         return _knowledge_memory_entry_from_row(row) if row is not None else None
 
+    def create_knowledge_memory_link(
+        self,
+        *,
+        from_entry_id: int,
+        to_entry_id: int,
+        relation_type: str,
+        note: str = "",
+        created_at: str | None = None,
+    ) -> None:
+        """Persist one evolution relation between two experiences (v0.7.4)."""
+
+        timestamp = created_at or _utc_now()
+        try:
+            with self._connection() as connection:
+                connection.execute(
+                    """
+                    INSERT INTO knowledge_memory_links(
+                        from_entry_id, to_entry_id, relation_type, note, created_at
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (from_entry_id, to_entry_id, relation_type, note, timestamp),
+                )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError(f"经验关系写入失败：{exc}") from exc
+
+    def list_knowledge_memory_links(self, entry_id: int) -> list[dict[str, object]]:
+        """Return every evolution relation touching one experience."""
+
+        with self._connection() as connection:
+            connection.row_factory = sqlite3.Row
+            rows = connection.execute(
+                """
+                SELECT id, from_entry_id, to_entry_id, relation_type, note, created_at
+                FROM knowledge_memory_links
+                WHERE from_entry_id = ? OR to_entry_id = ?
+                ORDER BY created_at DESC, id DESC
+                """,
+                (entry_id, entry_id),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def find_active_experience_by_source(
         self, source_entry_id: int
     ) -> KnowledgeMemoryEntry | None:
