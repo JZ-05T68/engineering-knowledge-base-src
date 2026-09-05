@@ -2308,12 +2308,25 @@ class Database:
         status: KnowledgeMemoryStatus | str = KnowledgeMemoryStatus.ACTIVE,
         outcome: str = "",
         context_conditions: str = "",
+        creation_origin: str | None = None,
+        citation_snapshot: str = "",
+        content_fingerprint: str | None = None,
+        source_entry_id: int | None = None,
+        source_title: str | None = None,
+        root_cause_confirmed: bool = False,
     ) -> KnowledgeMemoryEntry:
         """Persist one user-authored memory entry with optional links.
 
         ``content_revision`` starts at 1; ``outcome`` and
         ``context_conditions`` are the v12 Experience Model ground fields and
         are stored verbatim as user-supplied text, never auto-filled.
+
+        The v13 identity fields are stored as supplied by the service layer:
+        ``creation_origin`` (``human_saved`` / ``agent_assisted``), the
+        service-validated ``citation_snapshot`` JSON, the exact-duplicate
+        ``content_fingerprint``, the structured-experience source link
+        (``source_entry_id`` / ``source_title``) and the explicit
+        ``root_cause_confirmed`` gesture flag.
         """
 
         normalized_kind = KnowledgeMemoryEntryKind(kind)
@@ -2333,9 +2346,21 @@ class Database:
             raise ValueError("结果不能超过 4000 个字符")
         if len(context_conditions) > 4000:
             raise ValueError("适用条件不能超过 4000 个字符")
+        if len(citation_snapshot) > 20000:
+            raise ValueError("引用快照不能超过 20000 个字符")
+        if content_fingerprint is not None and len(content_fingerprint) != 64:
+            raise ValueError("内容指纹必须是 64 位十六进制摘要")
+        if source_title is not None and len(source_title.strip()) > 200:
+            raise ValueError("来源问答标题不能超过 200 个字符")
+        if creation_origin is not None and creation_origin not in (
+            "human_saved",
+            "agent_assisted",
+        ):
+            raise ValueError("记忆来源标识必须是 human_saved 或 agent_assisted")
         knowledge_object_id = _optional_positive_id(knowledge_object_id, "知识对象 ID")
         document_id = _optional_positive_id(document_id, "文档 ID")
         page_id = _optional_positive_id(page_id, "页面 ID")
+        source_entry_id = _optional_positive_id(source_entry_id, "来源记忆 ID")
         timestamp = _utc_now()
         try:
             with self._connection() as connection:
@@ -2345,9 +2370,12 @@ class Database:
                         kind, title, content, root_cause, lesson,
                         knowledge_object_id, document_id, page_id, status,
                         content_revision, outcome, context_conditions,
+                        creation_origin, citation_snapshot, content_fingerprint,
+                        source_entry_id, source_title, root_cause_confirmed,
                         search_title, search_content, search_root_cause,
                         search_lesson, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?,
+                              ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         normalized_kind.value,
@@ -2361,6 +2389,12 @@ class Database:
                         normalized_status.value,
                         outcome.strip(),
                         context_conditions.strip(),
+                        creation_origin,
+                        citation_snapshot,
+                        content_fingerprint,
+                        source_entry_id,
+                        source_title.strip() if source_title is not None else None,
+                        1 if root_cause_confirmed else 0,
                         _tokenize_for_fts(normalized_title),
                         _tokenize_for_fts(content),
                         _tokenize_for_fts(root_cause),
@@ -2473,7 +2507,12 @@ class Database:
         *,
         status: KnowledgeMemoryStatus | str,
     ) -> KnowledgeMemoryEntry:
-        """Archive or reactivate one personal memory entry."""
+        """Transition one memory entry's lifecycle status.
+
+        v13 adds the ``deleted`` soft-delete tombstone alongside the existing
+        ``active`` / ``archived`` values; visibility rules live in the service
+        and search layers, never here.
+        """
 
         normalized_status = KnowledgeMemoryStatus(status)
         timestamp = _utc_now()
@@ -2506,7 +2545,12 @@ class Database:
         limit: int = 100,
         offset: int = 0,
     ) -> list[KnowledgeMemoryEntry]:
-        """List memory entries with stable filters, newest update first."""
+        """List memory entries with stable filters, newest update first.
+
+        Tombstoned (``deleted``) rows are excluded unless the caller filters
+        with ``status='deleted'`` explicitly; they stay reachable for the
+        restore flow only.
+        """
 
         self._validate_knowledge_pagination(limit, offset)
         conditions: list[str] = []
@@ -2517,6 +2561,8 @@ class Database:
         if status is not None:
             conditions.append("status = ?")
             parameters.append(KnowledgeMemoryStatus(status).value)
+        else:
+            conditions.append("status != 'deleted'")
         if knowledge_object_id is not None:
             conditions.append("knowledge_object_id = ?")
             parameters.append(knowledge_object_id)
@@ -2546,6 +2592,8 @@ class Database:
         if status is not None:
             conditions.append("status = ?")
             parameters.append(KnowledgeMemoryStatus(status).value)
+        else:
+            conditions.append("status != 'deleted'")
         if knowledge_object_id is not None:
             conditions.append("knowledge_object_id = ?")
             parameters.append(knowledge_object_id)
@@ -2558,11 +2606,36 @@ class Database:
                 ).fetchone()[0]
             )
 
-    def delete_knowledge_memory_entry(self, entry_id: int) -> None:
-        """Delete one memory entry; linked source material is never touched.
+    def find_active_raw_qa_by_fingerprint(
+        self, content_fingerprint: str
+    ) -> KnowledgeMemoryEntry | None:
+        """Return the active saved Q&A with this exact fingerprint, if any.
 
+        Only ``kind='raw_qa'`` rows with ``status='active'`` participate in
+        duplicate detection: a tombstoned copy the user explicitly removed
+        never blocks saving the same Q&A again.
+        """
+
+        with self._connection() as connection:
+            row = connection.execute(
+                """
+                SELECT * FROM knowledge_memory_entries
+                WHERE kind = 'raw_qa' AND status = 'active'
+                  AND content_fingerprint = ?
+                ORDER BY id LIMIT 1
+                """,
+                (content_fingerprint,),
+            ).fetchone()
+        return _knowledge_memory_entry_from_row(row) if row is not None else None
+
+    def delete_knowledge_memory_entry(self, entry_id: int) -> None:
+        """Permanently purge one memory entry (v13 hard delete).
+
+        This is the explicit "永久删除" step behind the soft-delete tombstone.
         Project links pointing at this entry are removed together with it;
-        the project itself is never affected.
+        the project itself is never affected. Linked source material is
+        never touched, and a structured experience that referenced this
+        entry keeps its own copied citation snapshot.
         """
 
         with self._connection() as connection:
@@ -3586,6 +3659,22 @@ def _knowledge_memory_entry_from_row(row: sqlite3.Row) -> KnowledgeMemoryEntry:
         content_revision=int(row["content_revision"]),
         outcome=str(row["outcome"]),
         context_conditions=str(row["context_conditions"]),
+        creation_origin=(
+            str(row["creation_origin"])
+            if row["creation_origin"] is not None
+            else None
+        ),
+        citation_snapshot=str(row["citation_snapshot"]),
+        content_fingerprint=(
+            str(row["content_fingerprint"])
+            if row["content_fingerprint"] is not None
+            else None
+        ),
+        source_entry_id=_optional_int(row["source_entry_id"]),
+        source_title=(
+            str(row["source_title"]) if row["source_title"] is not None else None
+        ),
+        root_cause_confirmed=bool(row["root_cause_confirmed"]),
     )
 
 

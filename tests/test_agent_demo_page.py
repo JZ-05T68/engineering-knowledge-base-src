@@ -24,7 +24,7 @@ from src.demo.presets import PRESETS
 from src.demo_ui import AgentMode, AskRecord
 from src.evidence_basket_service import EvidenceBasketService
 from src.knowledge_memory_service import KnowledgeMemoryService
-from src.models import ContextFingerprintState, ContextItemType
+from src.models import ContextFingerprintState, ContextItemType, parse_memory_citations
 
 PAGE_PATH = str(next((Path(__file__).parents[1] / "pages").glob("0_*.py")))
 HOME_PATH = str(Path(__file__).parents[1] / "app.py")
@@ -139,12 +139,14 @@ def test_completed_answer_can_be_saved_only_by_clicking_memory_button(
     save_button = _button(app, "save_agent_memory_1")
     assert save_button.label == "保存这次问答"
     captions = "\n".join(item.value for item in app.caption)
-    assert "保存的是这个问题和这次回答" in captions
-    assert "不会自动改变以后回答" in captions
+    assert "保存的是这个问题和这次回答的副本" in captions
+    assert "不代表你的亲身经验" in captions
     save_button.click().run(timeout=30)
     assert not app.exception
     assert memories.count() == 1
     saved = memories.list()[0]
+    assert saved.kind.value == "raw_qa"
+    assert saved.creation_origin == "human_saved"
     assert saved.title == question
     assert saved.content.startswith(f"问题：{question}\n\nAgent 回答：")
     assert "Agent 回答" in saved.content
@@ -210,6 +212,10 @@ def test_saved_answer_title_says_when_two_documents_were_used(
     saved = memories.list()[0]
     assert saved.title == "关于 2 份资料的讨论"
     assert saved.document_id == first.id
+    # v0.7 Phase 1: the full citation snapshot keeps both sources.
+    citations = parse_memory_citations(saved.citation_snapshot)
+    assert len(citations) == 2
+    assert {c.document_title for c in citations} == {"第一份资料", "第二份资料"}
 
 
 # ---------------------------------------------------------------------------

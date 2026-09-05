@@ -459,7 +459,13 @@ def _render_answer_area() -> None:
 
 
 def _render_save_memory_button() -> None:
-    """Offer one explicit user-controlled write after a completed answer."""
+    """Offer one explicit user-controlled write after a completed answer.
+
+    The saved record is a raw Q&A copy (``kind='raw_qa'``): it only means the
+    user chose to keep this exact question and answer. It is never presented
+    as user experience, and the save path neither truncates silently nor
+    creates exact duplicates.
+    """
 
     record = st.session_state.get(RESULT_KEY)
     sequence = st.session_state.get(SEQ_KEY, 0)
@@ -474,8 +480,8 @@ def _render_save_memory_button() -> None:
         return
     st.divider()
     st.caption(
-        "保存的是这个问题和这次回答。保存后可在“我保存过的内容”中再次查看，"
-        "不会自动改变以后回答。"
+        "保存的是这个问题和这次回答的副本，只表示你留下了这一问一答，"
+        "不代表你的亲身经验。保存后可在“我保存过的内容”中再次查看。"
     )
     saved = st.session_state.get(SAVED_MEMORY_KEY) == sequence
     if st.button(
@@ -485,48 +491,47 @@ def _render_save_memory_button() -> None:
         disabled=saved,
         use_container_width=False,
     ):
-        document_id = None
-        page_id = None
-        memory_title = (record.question.strip() or "Agent 对话")[:200]
-        database = application_database()
-        source_document_titles: dict[int, str] = {}
+        cited_page_ids: list[int] = []
         for stable_id in record.response.citations:
             try:
                 _, kind, local_id = parse_source_id(stable_id)
             except InvalidSourceId:
                 continue
-            if kind != "page":
-                continue
-            page = database.get_page(local_id)
-            if page is not None:
-                if page_id is None:
-                    page_id = page.id
-                    document_id = page.document_id
-                document = database.get_document(page.document_id)
-                if document is not None:
-                    source_document_titles[document.id] = document.title
-        if len(source_document_titles) == 1:
-            title = next(iter(source_document_titles.values()))
-            memory_title = f"关于 {title} 的讨论"[:200]
-        elif len(source_document_titles) > 1:
-            memory_title = f"关于 {len(source_document_titles)} 份资料的讨论"
-        content = f"问题：{record.question}\n\nAgent 回答：\n{record.response.answer}"
+            if kind == "page":
+                cited_page_ids.append(local_id)
         try:
-            application_knowledge_memory_service().create_entry(
-                kind="experience",
-                title=memory_title,
-                content=content[:20000],
-                document_id=document_id,
-                page_id=page_id,
+            result = application_knowledge_memory_service().create_raw_qa_entry(
+                question=record.question,
+                answer=record.response.answer,
+                cited_page_ids=tuple(cited_page_ids),
             )
         except Exception as exc:
             LOGGER.exception("保存 Agent 对话失败")
             st.error(f"这次对话没有保存成功：{exc}")
+            return
+        st.session_state[SAVED_MEMORY_KEY] = sequence
+        if result.entry is None and result.duplicate_of is not None:
+            existing = result.duplicate_of
+            st.info(
+                "这次问答已经保存过（"
+                f"{_saved_date(existing.created_at)}），没有重复创建。"
+            )
         else:
-            st.session_state[SAVED_MEMORY_KEY] = sequence
             st.success("这次问答已保存，可在“我保存过的内容”中再次查看。")
+            if result.skipped_citations:
+                st.warning(
+                    f"有 {result.skipped_citations} 条引用无法在本机解析，"
+                    "没有写入保存副本。"
+                )
     elif saved:
         st.success("这次问答已经保存，可在“我保存过的内容”中再次查看。")
+
+
+def _saved_date(value: Any) -> str:
+    """Return a short local date for duplicate-save messages."""
+
+    local_value = value.astimezone() if getattr(value, "tzinfo", None) else value
+    return f"{local_value.month} 月 {local_value.day} 日"
 
 
 # ---------------------------------------------------------------------------

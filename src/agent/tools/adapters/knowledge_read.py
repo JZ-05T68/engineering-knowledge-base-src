@@ -64,7 +64,11 @@ GET_KNOWLEDGE_OBJECT_DEFINITION = ToolDefinition(
 
 GET_KNOWLEDGE_MEMORY_DEFINITION = ToolDefinition(
     name="get_knowledge_memory",
-    description="按 stable_id 读取一条已整理的个人 Knowledge Memory。",
+    description=(
+        "按 stable_id 读取一条个人知识记录。结果带有明确的记录类型："
+        "保存的问答（raw_qa，只是用户曾主动留下的一问一答副本，不是用户经验或已确认事实）"
+        "或经验（experience）。必须按返回的类型表述，不得把 raw_qa 称为用户经验。"
+    ),
     side_effect=ToolSideEffect.READ_ONLY,
     input_schema={
         "stable_id": {
@@ -251,6 +255,12 @@ class KnowledgeMemoryAdapter:
             "id": entry.id,
             "kind": entry.kind.value,
             "kind_label": entry.kind.label,
+            "record_type_note": (
+                "保存的问答：用户曾主动保存的一问一答副本，不是用户经验或已确认事实"
+                if entry.kind.value == "raw_qa"
+                else entry.kind.label
+            ),
+            "creation_origin": entry.creation_origin,
             "title": entry.title,
             "content": entry.content,
             "content_length": len(entry.content),

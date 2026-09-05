@@ -39,7 +39,11 @@ MAX_QUERY_LENGTH = 500
 
 KNOWLEDGE_SEARCH_DEFINITION = ToolDefinition(
     name="knowledge_search",
-    description="搜索已整理的 Knowledge Object 和 Knowledge Memory，返回分组结构化结果。",
+    description=(
+        "搜索用户的个人知识记录（Knowledge Object 与知识记忆），返回分组结构化结果。"
+        "知识记忆条目带有明确类型：保存的问答（raw_qa，只是用户曾主动保存的一问一答，"
+        "不是用户经验）或经验（experience）；表述时必须使用返回的类型标签。"
+    ),
     side_effect=ToolSideEffect.READ_ONLY,
     input_schema={
         "query": {

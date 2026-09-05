@@ -206,15 +206,18 @@ def test_memory_page_lists_entries(tmp_path: Path, monkeypatch) -> None:
 
     assert not app.exception
     assert app.title[0].value == "我保存过的内容"
-    assert any("删除原资料后，副本仍会保留" in item.value for item in app.caption)
+    assert any("保存的副本仍会保留" in item.value for item in app.caption)
     assert not app.selectbox
     assert not app.number_input
     markdown = [item.value for item in app.markdown]
     assert any("关于 测试手册 的讨论" in value for value in markdown)
     assert any(button.label == "查看" for button in app.button)
     assert any(button.label == "删除" for button in app.button)
-    visible_text = "\n".join(markdown)
-    assert "问题解决" not in visible_text
+    # The plain-language type chip is shown; internal IDs/status are not.
+    visible_text = "\n".join(
+        [item.value for item in app.markdown] + [item.value for item in app.caption]
+    )
+    assert "问题解决" in visible_text
     assert "现行" not in visible_text
     assert "ID 1" not in visible_text
 

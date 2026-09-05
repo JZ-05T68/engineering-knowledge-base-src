@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import sqlite3
 from contextlib import closing
@@ -10,7 +12,7 @@ from pathlib import Path
 from uuid import uuid4
 
 LOGGER = logging.getLogger(__name__)
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 # 仅用于 Phase 2B-V 失败注入验证；生产运行时恒为 None，永不触发。
 _V10_INJECTION_POINT: str | None = None
@@ -18,6 +20,8 @@ _V10_INJECTION_POINT: str | None = None
 _V11_INJECTION_POINT: str | None = None
 # 仅用于 Phase 2-A v12 失败注入验证；生产运行时恒为 None，永不触发。
 _V12_INJECTION_POINT: str | None = None
+# 仅用于 v0.7 Phase 1 v13 失败注入验证；生产运行时恒为 None，永不触发。
+_V13_INJECTION_POINT: str | None = None
 
 
 def _inject_v10_failure(point: str) -> None:
@@ -39,6 +43,13 @@ def _inject_v12_failure(point: str) -> None:
 
     if _V12_INJECTION_POINT == point:
         raise MigrationError(f"v12 迁移失败注入点：{point}")
+
+
+def _inject_v13_failure(point: str) -> None:
+    """Raise inside ``_apply_version_thirteen`` when ``point`` matches the hook."""
+
+    if _V13_INJECTION_POINT == point:
+        raise MigrationError(f"v13 迁移失败注入点：{point}")
 
 
 class MigrationError(RuntimeError):
@@ -113,6 +124,9 @@ def migrate_database(database_path: Path) -> Path | None:
         if current_version < 12:
             _apply_version_twelve(connection)
             current_version = 12
+        if current_version < 13:
+            _apply_version_thirteen(connection)
+            current_version = 13
         connection.execute("PRAGMA foreign_keys = ON")
         integrity = connection.execute("PRAGMA integrity_check").fetchone()[0]
         if integrity != "ok":
@@ -1740,6 +1754,345 @@ def _apply_version_twelve(connection: sqlite3.Connection) -> None:
     except Exception:
         connection.rollback()
         raise
+
+
+# v13 确定性 raw_qa 分类条件：只有内容精确匹配保存问答按钮写入格式
+# （以“问题：”开头且包含“Agent 回答：”标记）的 experience 行才会被重分类。
+# 该表达式在迁移前指纹与迁移复制中逐字复用，保证分类与校验完全一致。
+_V13_RAW_QA_KIND_CASE = (
+    "CASE WHEN kind = 'experience' "
+    "AND substr(content, 1, 3) = '问题：' "
+    "AND instr(content, 'Agent 回答：') > 0 "
+    "THEN 'raw_qa' ELSE kind END"
+)
+_V13_RAW_QA_ORIGIN_CASE = (
+    "CASE WHEN kind = 'experience' "
+    "AND substr(content, 1, 3) = '问题：' "
+    "AND instr(content, 'Agent 回答：') > 0 "
+    "THEN 'human_saved' ELSE NULL END"
+)
+
+
+def _apply_version_thirteen(connection: sqlite3.Connection) -> None:
+    """Separate raw saved Q&A from personal experience (v0.7 Phase 1).
+
+    v13 changes (Raw Q&A Identity Remediation):
+
+    - ``knowledge_memory_entries`` is rebuilt in place, because the ``kind``
+      and ``status`` CHECK constraints cannot be widened by ALTER:
+      * ``kind`` gains ``raw_qa`` — a verbatim saved question + agent answer
+        that is explicitly not user experience;
+      * ``status`` gains the ``deleted`` soft-delete tombstone;
+      * new columns ``creation_origin`` (``human_saved`` / ``agent_assisted``,
+        NULL = legacy row with unverifiable origin), ``citation_snapshot``
+        (constrained JSON), ``content_fingerprint`` (exact-duplicate key),
+        ``source_title`` and ``root_cause_confirmed``; ``source_entry_id``
+        is added after the rebuild so its self-reference resolves against the
+        final table name;
+    - legacy classification is deterministic only: an ``experience`` row whose
+      content matches the exact save-button format becomes ``raw_qa`` with
+      ``creation_origin='human_saved'``; every other row keeps its kind and
+      receives ``creation_origin=NULL`` — unknown origins are never guessed;
+    - classified rows are backfilled with ``content_fingerprint`` and a
+      citation snapshot rebuilt from their surviving document/page links;
+    - ids, FTS shadow columns and all other tables are preserved verbatim;
+      the memory FTS triggers are recreated and the FTS index rebuilt.
+    """
+
+    fingerprint = _v13_data_fingerprint(connection)
+    migration_timestamp = _utc_now()
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute(
+            """
+            CREATE TABLE knowledge_memory_entries_v13 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                kind TEXT NOT NULL CHECK (kind IN (
+                    'problem_solving', 'experience', 'decision', 'raw_qa'
+                )),
+                title TEXT NOT NULL CHECK (
+                    length(trim(title)) BETWEEN 1 AND 200
+                ),
+                content TEXT NOT NULL DEFAULT ''
+                    CHECK (length(content) <= 20000),
+                root_cause TEXT NOT NULL DEFAULT ''
+                    CHECK (length(root_cause) <= 4000),
+                lesson TEXT NOT NULL DEFAULT ''
+                    CHECK (length(lesson) <= 4000),
+                knowledge_object_id INTEGER
+                    REFERENCES knowledge_objects(id) ON DELETE SET NULL,
+                document_id INTEGER
+                    REFERENCES documents(id) ON DELETE SET NULL,
+                page_id INTEGER
+                    REFERENCES pages(id) ON DELETE SET NULL,
+                status TEXT NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'archived', 'deleted')),
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                content_revision INTEGER NOT NULL DEFAULT 1
+                    CHECK (content_revision >= 1),
+                outcome TEXT NOT NULL DEFAULT '',
+                context_conditions TEXT NOT NULL DEFAULT '',
+                creation_origin TEXT
+                    CHECK (creation_origin IS NULL OR creation_origin IN (
+                        'human_saved', 'agent_assisted'
+                    )),
+                citation_snapshot TEXT NOT NULL DEFAULT ''
+                    CHECK (length(citation_snapshot) <= 20000),
+                content_fingerprint TEXT
+                    CHECK (content_fingerprint IS NULL
+                        OR length(content_fingerprint) = 64),
+                source_title TEXT
+                    CHECK (source_title IS NULL OR length(source_title) <= 200),
+                root_cause_confirmed INTEGER NOT NULL DEFAULT 0
+                    CHECK (root_cause_confirmed IN (0, 1)),
+                search_title TEXT NOT NULL DEFAULT '',
+                search_content TEXT NOT NULL DEFAULT '',
+                search_root_cause TEXT NOT NULL DEFAULT '',
+                search_lesson TEXT NOT NULL DEFAULT ''
+            )
+            """
+        )
+        _inject_v13_failure("v13_create_table")
+        connection.execute(
+            f"""
+            INSERT INTO knowledge_memory_entries_v13 (
+                id, kind, title, content, root_cause, lesson,
+                knowledge_object_id, document_id, page_id, status,
+                created_at, updated_at, content_revision, outcome,
+                context_conditions, creation_origin, citation_snapshot,
+                content_fingerprint, source_title, root_cause_confirmed,
+                search_title, search_content, search_root_cause, search_lesson
+            )
+            SELECT
+                id,
+                {_V13_RAW_QA_KIND_CASE},
+                title, content, root_cause, lesson,
+                knowledge_object_id, document_id, page_id, status,
+                created_at, updated_at, content_revision, outcome,
+                context_conditions,
+                {_V13_RAW_QA_ORIGIN_CASE},
+                '',
+                NULL,
+                NULL,
+                0,
+                search_title, search_content, search_root_cause, search_lesson
+            FROM knowledge_memory_entries
+            ORDER BY id
+            """
+        )
+        _inject_v13_failure("v13_memory_copy")
+        _backfill_v13_raw_qa_classifications(connection)
+        _inject_v13_failure("v13_memory_backfill")
+        connection.execute("DROP TABLE knowledge_memory_entries")
+        _inject_v13_failure("v13_drop_old")
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries_v13 RENAME TO knowledge_memory_entries"
+        )
+        _inject_v13_failure("v13_rename")
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_kind "
+            "ON knowledge_memory_entries(kind, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_ko "
+            "ON knowledge_memory_entries(knowledge_object_id, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_status "
+            "ON knowledge_memory_entries(status, updated_at DESC)"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_fingerprint "
+            "ON knowledge_memory_entries(content_fingerprint) "
+            "WHERE content_fingerprint IS NOT NULL"
+        )
+        _inject_v13_failure("v13_indexes")
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_memory_fts_insert
+            AFTER INSERT ON knowledge_memory_entries BEGIN
+                INSERT INTO knowledge_memory_search(
+                    rowid, search_title, search_content, search_root_cause, search_lesson
+                ) VALUES (
+                    new.id, new.search_title, new.search_content,
+                    new.search_root_cause, new.search_lesson
+                );
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_memory_fts_delete
+            AFTER DELETE ON knowledge_memory_entries BEGIN
+                INSERT INTO knowledge_memory_search(
+                    knowledge_memory_search, rowid, search_title, search_content,
+                    search_root_cause, search_lesson
+                ) VALUES (
+                    'delete', old.id, old.search_title, old.search_content,
+                    old.search_root_cause, old.search_lesson
+                );
+            END
+            """
+        )
+        connection.execute(
+            """
+            CREATE TRIGGER knowledge_memory_fts_update
+            AFTER UPDATE ON knowledge_memory_entries BEGIN
+                INSERT INTO knowledge_memory_search(
+                    knowledge_memory_search, rowid, search_title, search_content,
+                    search_root_cause, search_lesson
+                ) VALUES (
+                    'delete', old.id, old.search_title, old.search_content,
+                    old.search_root_cause, old.search_lesson
+                );
+                INSERT INTO knowledge_memory_search(
+                    rowid, search_title, search_content, search_root_cause, search_lesson
+                ) VALUES (
+                    new.id, new.search_title, new.search_content,
+                    new.search_root_cause, new.search_lesson
+                );
+            END
+            """
+        )
+        _inject_v13_failure("v13_triggers")
+        connection.execute(
+            "INSERT INTO knowledge_memory_search(knowledge_memory_search) VALUES ('rebuild')"
+        )
+        _inject_v13_failure("v13_rebuild")
+        connection.execute(
+            "ALTER TABLE knowledge_memory_entries "
+            "ADD COLUMN source_entry_id INTEGER "
+            "REFERENCES knowledge_memory_entries(id) ON DELETE SET NULL"
+        )
+        connection.execute(
+            "CREATE INDEX idx_knowledge_memory_source "
+            "ON knowledge_memory_entries(source_entry_id) "
+            "WHERE source_entry_id IS NOT NULL"
+        )
+        _inject_v13_failure("v13_source_column")
+        connection.execute(
+            "INSERT INTO schema_migrations(version, applied_at) VALUES (13, ?)",
+            (migration_timestamp,),
+        )
+        _inject_v13_failure("v13_version_record")
+        if _v13_data_fingerprint(connection) != fingerprint:
+            raise MigrationError(
+                "schema v13 迁移改变了现有知识记忆的稳定内容或分类结果"
+            )
+        _inject_v13_failure("v13_before_commit")
+        connection.commit()
+        LOGGER.info("数据库已迁移到 schema v13")
+    except Exception:
+        connection.rollback()
+        raise
+
+
+def _backfill_v13_raw_qa_classifications(connection: sqlite3.Connection) -> None:
+    """Backfill fingerprint + citation snapshot for classified ``raw_qa`` rows.
+
+    Runs inside the migration transaction on the ``_v13`` staging table. The
+    snapshot is rebuilt only from the row's surviving ``document_id`` /
+    ``page_id`` links (the single citation legacy saves kept); deleted targets
+    yield an honest sparse item instead of a fabricated reference.
+    """
+
+    kb_row = connection.execute(
+        "SELECT kb_uuid FROM knowledge_base_meta WHERE id = 1"
+    ).fetchone()
+    kb_uuid = str(kb_row["kb_uuid"]) if kb_row is not None else ""
+    rows = connection.execute(
+        "SELECT id, content, document_id, page_id FROM knowledge_memory_entries_v13 "
+        "WHERE kind = 'raw_qa' ORDER BY id"
+    ).fetchall()
+    for row in rows:
+        canonical = (
+            str(row["content"]).replace("\r\n", "\n").replace("\r", "\n").strip()
+        )
+        digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        snapshot = _v13_legacy_citation_snapshot(
+            connection, kb_uuid, row["document_id"], row["page_id"]
+        )
+        connection.execute(
+            "UPDATE knowledge_memory_entries_v13 "
+            "SET content_fingerprint = ?, citation_snapshot = ? WHERE id = ?",
+            (digest, snapshot, int(row["id"])),
+        )
+
+
+def _v13_legacy_citation_snapshot(
+    connection: sqlite3.Connection,
+    kb_uuid: str,
+    document_id: object,
+    page_id: object,
+) -> str:
+    """Build the single-item legacy citation snapshot, or '' when no link."""
+
+    from src.models import PAGE_STABLE_TYPE, build_stable_id  # noqa: PLC0415
+
+    if document_id is None and page_id is None:
+        return ""
+    item: dict[str, object] = {
+        "document_id": None,
+        "document_title": "",
+        "document_sha256": None,
+        "page_id": None,
+        "page_number": None,
+        "stable_id": "",
+    }
+    page_row = None
+    if page_id is not None:
+        page_row = connection.execute(
+            "SELECT id, document_id, page_number FROM pages WHERE id = ?",
+            (page_id,),
+        ).fetchone()
+        if page_row is not None:
+            item["page_id"] = int(page_row["id"])
+            item["page_number"] = int(page_row["page_number"])
+            if kb_uuid:
+                item["stable_id"] = build_stable_id(
+                    kb_uuid, PAGE_STABLE_TYPE, int(page_row["id"])
+                )
+    effective_document_id = document_id
+    if effective_document_id is None and page_row is not None:
+        effective_document_id = page_row["document_id"]
+    if effective_document_id is not None:
+        document_row = connection.execute(
+            "SELECT id, title, sha256 FROM documents WHERE id = ?",
+            (effective_document_id,),
+        ).fetchone()
+        if document_row is not None:
+            item["document_id"] = int(document_row["id"])
+            item["document_title"] = str(document_row["title"])
+            item["document_sha256"] = (
+                str(document_row["sha256"])
+                if document_row["sha256"] is not None
+                else None
+            )
+    return json.dumps([item], ensure_ascii=False, separators=(",", ":"))
+
+
+def _v13_data_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:
+    """Return invariants the v13 rebuild must preserve.
+
+    Rows are fingerprinted on the stable columns only; ``kind`` is evaluated
+    through the exact classification CASE both before (against the v12 table)
+    and after (against the rebuilt table), so the check simultaneously proves
+    that content was copied verbatim and that reclassification matched the
+    deterministic rule.
+    """
+
+    return tuple(
+        tuple(row)
+        for row in connection.execute(
+            "SELECT id, "
+            + _V13_RAW_QA_KIND_CASE
+            + ", title, content, root_cause, lesson,"
+            " knowledge_object_id, document_id, page_id, status, created_at,"
+            " updated_at, content_revision, outcome, context_conditions"
+            " FROM knowledge_memory_entries ORDER BY id"
+        ).fetchall()
+    )
 
 
 def _v12_data_fingerprint(connection: sqlite3.Connection) -> tuple[object, ...]:

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 
 class ImportStatus(StrEnum):
@@ -1057,15 +1059,20 @@ class KnowledgeRelationType(StrEnum):
 
 
 class KnowledgeMemoryEntryKind(StrEnum):
-    """The three user-authored personal-memory kinds (schema v10).
+    """The record-semantics kinds of the personal-memory table (schema v13).
 
-    System change records are no longer stored in this table; they live in the
-    append-only ``knowledge_object_revisions`` table instead (ADR-05).
+    ``kind`` answers "what this record IS". ``raw_qa`` (v13) is a verbatim
+    question + agent-answer pair the user explicitly saved; it is not user
+    experience and must never be presented as one. ``creation_origin`` is the
+    separate "how this record came into being" dimension (schema v13).
+    System change records live in the append-only ``knowledge_object_revisions``
+    table instead (ADR-05), never here.
     """
 
     PROBLEM_SOLVING = "problem_solving"
     EXPERIENCE = "experience"
     DECISION = "decision"
+    RAW_QA = "raw_qa"
 
     @property
     def label(self) -> str:
@@ -1074,14 +1081,21 @@ class KnowledgeMemoryEntryKind(StrEnum):
             self.PROBLEM_SOLVING: "问题解决",
             self.EXPERIENCE: "经验",
             self.DECISION: "决策",
+            self.RAW_QA: "保存的问答",
         }[self]
 
 
 class KnowledgeMemoryStatus(StrEnum):
-    """Lifecycle state of one personal memory entry (schema v10)."""
+    """Lifecycle state of one personal memory entry (schema v13).
+
+    ``deleted`` (v13) is a soft-delete tombstone: hidden from normal reads
+    and search, restorable until it is permanently purged. It is deliberately
+    distinct from ``archived`` ("kept but inactive").
+    """
 
     ACTIVE = "active"
     ARCHIVED = "archived"
+    DELETED = "deleted"
 
     @property
     def label(self) -> str:
@@ -1089,6 +1103,7 @@ class KnowledgeMemoryStatus(StrEnum):
         return {
             self.ACTIVE: "现行",
             self.ARCHIVED: "已归档",
+            self.DELETED: "已删除",
         }[self]
 
 
@@ -1289,12 +1304,21 @@ class KnowledgeRelation:
 
 @dataclass(frozen=True, slots=True)
 class KnowledgeMemoryEntry:
-    """One user-authored personal memory entry (schema v10, v12 extended).
+    """One user-authored personal memory entry (schema v13).
 
     ``content_revision`` is the lightweight per-entry version counter added in
     v12: it starts at 1 and increments on content edits, giving future agents
     a citable version number without a full revision table. ``outcome`` and
     ``context_conditions`` are the Experience Model ground fields (V53-ADR-03).
+
+    v13 identity fields: ``creation_origin`` says how the record came into
+    being (``human_saved`` / ``agent_assisted``; ``None`` = legacy row whose
+    creation path cannot be verified); ``citation_snapshot`` is the constrained
+    JSON of all citations captured at save time; ``content_fingerprint`` is the
+    exact-duplicate key for raw saved Q&A; ``source_entry_id``/``source_title``
+    link a structured experience back to the raw Q&A it was distilled from;
+    ``root_cause_confirmed`` records an explicit user confirmation gesture and
+    never flips automatically.
     """
 
     id: int
@@ -1312,6 +1336,129 @@ class KnowledgeMemoryEntry:
     content_revision: int = 1
     outcome: str = ""
     context_conditions: str = ""
+    creation_origin: str | None = None
+    citation_snapshot: str = ""
+    content_fingerprint: str | None = None
+    source_entry_id: int | None = None
+    source_title: str | None = None
+    root_cause_confirmed: bool = False
+
+
+CREATION_ORIGINS: Final[tuple[str, ...]] = ("human_saved", "agent_assisted")
+MAX_CITATION_SNAPSHOT_ITEMS = 50
+MAX_CITATION_SNAPSHOT_LENGTH = 20000
+MAX_CITATION_TITLE_LENGTH = 200
+
+
+@dataclass(frozen=True, slots=True)
+class MemoryCitation:
+    """One frozen citation captured when a memory entry was saved (v13).
+
+    The snapshot is intentionally self-describing: after the referenced
+    document or page is deleted, the stored title and page number still say
+    what the answer once cited, while live availability is checked at display
+    time against the current database.
+    """
+
+    document_id: int | None
+    document_title: str
+    document_sha256: str | None
+    page_id: int | None
+    page_number: int | None
+    stable_id: str
+
+    def to_dict(self) -> dict[str, object]:
+        """Return the canonical JSON-mappable form of one citation."""
+
+        return {
+            "document_id": self.document_id,
+            "document_title": self.document_title,
+            "document_sha256": self.document_sha256,
+            "page_id": self.page_id,
+            "page_number": self.page_number,
+            "stable_id": self.stable_id,
+        }
+
+
+class MemoryCitationSnapshotError(ValueError):
+    """Raised when a citation snapshot violates the v13 constraints."""
+
+
+def serialize_memory_citations(citations: Sequence[MemoryCitation]) -> str:
+    """Serialize validated citations into the constrained snapshot JSON.
+
+    Fail closed on any constraint violation so malformed snapshots can never
+    reach the database.
+    """
+
+    if len(citations) > MAX_CITATION_SNAPSHOT_ITEMS:
+        raise MemoryCitationSnapshotError(
+            f"引用快照最多保存 {MAX_CITATION_SNAPSHOT_ITEMS} 条。"
+        )
+    items: list[dict[str, object]] = []
+    for citation in citations:
+        title = citation.document_title.strip()
+        if not title or len(title) > MAX_CITATION_TITLE_LENGTH:
+            raise MemoryCitationSnapshotError("引用快照的资料标题不能为空且不超过 200 字。")
+        if not citation.stable_id.strip():
+            raise MemoryCitationSnapshotError("引用快照的 stable_id 不能为空。")
+        items.append(citation.to_dict())
+    if not items:
+        return ""
+    payload = json.dumps(items, ensure_ascii=False, separators=(",", ":"))
+    if len(payload) > MAX_CITATION_SNAPSHOT_LENGTH:
+        raise MemoryCitationSnapshotError(
+            f"引用快照超过 {MAX_CITATION_SNAPSHOT_LENGTH} 个字符。"
+        )
+    return payload
+
+
+def parse_memory_citations(snapshot: str) -> tuple[MemoryCitation, ...]:
+    """Parse one snapshot column value back into citations.
+
+    Read-path strictness: an empty string is the normal "no citations" case,
+    while structurally invalid JSON raises so callers can show an honest
+    message instead of silently hiding saved history.
+    """
+
+    text = (snapshot or "").strip()
+    if not text:
+        return ()
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise MemoryCitationSnapshotError("引用快照数据无法解析。") from exc
+    if not isinstance(payload, list):
+        raise MemoryCitationSnapshotError("引用快照数据格式不正确。")
+    citations: list[MemoryCitation] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            raise MemoryCitationSnapshotError("引用快照数据格式不正确。")
+        citations.append(
+            MemoryCitation(
+                document_id=_optional_int_value(item.get("document_id")),
+                document_title=str(item.get("document_title") or ""),
+                document_sha256=(
+                    str(item["document_sha256"])
+                    if item.get("document_sha256") is not None
+                    else None
+                ),
+                page_id=_optional_int_value(item.get("page_id")),
+                page_number=_optional_int_value(item.get("page_number")),
+                stable_id=str(item.get("stable_id") or ""),
+            )
+        )
+    return tuple(citations)
+
+
+def _optional_int_value(value: object) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value)
+    return None
 
 
 @dataclass(frozen=True, slots=True)
