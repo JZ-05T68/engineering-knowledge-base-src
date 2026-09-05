@@ -25,11 +25,11 @@ def _table_columns(connection: sqlite3.Connection, table: str) -> set[str]:
     }
 
 
-def test_fresh_database_migrates_to_v12(tmp_path: Path) -> None:
+def test_fresh_database_migrates_to_v13(tmp_path: Path) -> None:
     database = Database(tmp_path / "knowledge.db")
 
-    assert SCHEMA_VERSION == 12
-    assert database.SCHEMA_VERSION == 12
+    assert SCHEMA_VERSION == 13
+    assert database.SCHEMA_VERSION == 13
     with sqlite3.connect(database.database_path) as connection:
         versions = [
             row[0]
@@ -37,7 +37,7 @@ def test_fresh_database_migrates_to_v12(tmp_path: Path) -> None:
                 "SELECT version FROM schema_migrations ORDER BY version"
             )
         ]
-        assert versions == list(range(1, 13))
+        assert versions == list(range(1, 14))
         for table in ("ai_calls", "ai_outputs", "knowledge_project_links"):
             assert connection.execute(
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
@@ -80,7 +80,7 @@ def test_v11_to_v12_migration_preserves_legacy_memory_and_backfills_defaults(
 
     backup_path = migrate_database(database_path)
     assert backup_path is not None
-    assert _read_schema_version(database_path) == 12
+    assert _read_schema_version(database_path) == 13
 
     with sqlite3.connect(database_path) as connection:
         row = connection.execute(
@@ -97,7 +97,7 @@ def test_v11_to_v12_migration_preserves_legacy_memory_and_backfills_defaults(
 
     # Re-running the migration is safe and creates no extra backup.
     assert migrate_database(database_path) is None
-    assert _read_schema_version(database_path) == 12
+    assert _read_schema_version(database_path) == 13
 
 
 def test_ai_calls_is_append_only_and_stores_no_plaintext(tmp_path: Path) -> None:

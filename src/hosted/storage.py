@@ -187,7 +187,7 @@ def _initialize_runtime(settings: HostedSettings) -> HostedStorage:
     migration_logger.addFilter(diagnostics)
     observer: sqlite3.Connection | None = None
     try:
-        # Both seed and existing branches passed exact v12 before this constructor.
+        # Both seed and existing branches passed exact v13 before this constructor.
         database = Database(target)
         if database.last_backup_path is not None or backup_dir.exists():
             raise HostedStorageError(StorageFailure.INITIALIZATION)
@@ -222,7 +222,7 @@ def bootstrap_hosted_storage(
     process_count: int = HOSTED_PROCESS_COUNT,
     worker_count: int = HOSTED_WORKER_COUNT,
 ) -> HostedStorage:
-    """Validate -> controlled seed/reuse -> exact v12 -> existing init -> verify WAL.
+    """Validate -> controlled seed/reuse -> exact v13 -> existing init -> verify WAL.
 
     Existing targets are never reset/deleted. Only this call's fresh seed is
     removed on failed initialization. The input artifact is never migrated.

@@ -1,4 +1,4 @@
-"""Read-only v12/demo structure validation; never proof of public-content consent."""
+"""Read-only v13/demo structure validation; never proof of public-content consent."""
 
 from __future__ import annotations
 
@@ -37,9 +37,9 @@ class HostedStorageError(RuntimeError):
         super().__init__(f"Hosted 存储不可用（{code.value}）。")
 
 
-# Column inventory from the existing v1-v12 migrations, including FTS5 shadow
+# Column inventory from the existing v1-v13 migrations, including FTS5 shadow
 # tables. No DDL or second migration engine. Unknown/missing storage is rejected.
-V12_COLUMNS = {
+V13_COLUMNS = {
     "ai_calls": (
         "id call_uuid capability model prompt_sha256 input_chars status error_class "
         "retry_count latency_ms prompt_tokens completion_tokens total_tokens "
@@ -71,8 +71,10 @@ V12_COLUMNS = {
     "knowledge_base_meta": ("id kb_uuid created_at").split(),
     "knowledge_memory_entries": (
         "id kind title content root_cause lesson knowledge_object_id document_id "
-        "page_id status created_at updated_at search_title search_content "
-        "search_root_cause search_lesson content_revision outcome context_conditions"
+        "page_id status created_at updated_at content_revision outcome "
+        "context_conditions creation_origin citation_snapshot content_fingerprint "
+        "source_title root_cause_confirmed search_title search_content "
+        "search_root_cause search_lesson source_entry_id"
     ).split(),
     "knowledge_memory_search": (
         "search_title search_content search_root_cause search_lesson"
@@ -220,13 +222,13 @@ def readonly_database(path: Path, *, artifact: bool = False) -> Iterator[sqlite3
 
 
 def validate_identity(connection: sqlite3.Connection, expected_uuid: str) -> None:
-    if SCHEMA_VERSION != 12:
+    if SCHEMA_VERSION != 13:
         raise HostedStorageError(StorageFailure.SCHEMA)
     versions = tuple(
         row[0]
         for row in connection.execute("SELECT version FROM schema_migrations ORDER BY version")
     )
-    if versions != tuple(range(1, 13)) or any(type(value) is not int for value in versions):
+    if versions != tuple(range(1, 14)) or any(type(value) is not int for value in versions):
         raise HostedStorageError(StorageFailure.SCHEMA)
     rows = connection.execute("SELECT id, kb_uuid FROM knowledge_base_meta").fetchall()
     if rows != [(1, expected_uuid)] or str(UUID(expected_uuid)) != expected_uuid:
@@ -237,9 +239,9 @@ def validate_schema(connection: sqlite3.Connection) -> None:
     names = {
         row[0] for row in connection.execute("SELECT name FROM sqlite_schema WHERE type='table'")
     }
-    if names != set(V12_COLUMNS):
+    if names != set(V13_COLUMNS):
         raise HostedStorageError(StorageFailure.SCHEMA)
-    for name, columns in V12_COLUMNS.items():
+    for name, columns in V13_COLUMNS.items():
         actual = [row[1] for row in connection.execute(f'PRAGMA table_info("{name}")')]
         if actual != columns:
             raise HostedStorageError(StorageFailure.SCHEMA)
@@ -286,7 +288,7 @@ def validate_structural_sanitization(connection: sqlite3.Connection, *, seed: bo
                 or any(ord(char) < 32 for char in value)
             ):
                 raise HostedStorageError(StorageFailure.SANITATION)
-    # Actual v12 has no deletion/quarantine/backup/restore table. Their manifests
+    # Actual v13 has no deletion/quarantine/backup/restore table. Their manifests
     # are Local files. import_records and persisted processing errors are Local state.
     if connection.execute("SELECT 1 FROM import_records LIMIT 1").fetchone():
         raise HostedStorageError(StorageFailure.SANITATION)

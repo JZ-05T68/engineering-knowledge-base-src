@@ -217,11 +217,11 @@ def _seeded_v10_path(tmp_path: Path) -> Path:
 # --- fresh database ---------------------------------------------------------
 
 
-def test_fresh_database_migrates_1_to_12(tmp_path: Path) -> None:
+def test_fresh_database_migrates_1_to_13(tmp_path: Path) -> None:
     database = Database(tmp_path / "knowledge.db")
 
-    assert SCHEMA_VERSION == 12
-    assert database.SCHEMA_VERSION == 12
+    assert SCHEMA_VERSION == 13
+    assert database.SCHEMA_VERSION == 13
     with sqlite3.connect(database.database_path) as connection:
         versions = [
             row[0]
@@ -249,7 +249,7 @@ def test_fresh_database_migrates_1_to_12(tmp_path: Path) -> None:
         }
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     assert KNOWLEDGE_TRIGGERS <= triggers
     assert virtual_tables == ALL_VIRTUAL_TABLES
 
@@ -273,7 +273,7 @@ def test_v10_to_v11_preserves_knowledge_data_and_backfills(tmp_path: Path) -> No
         ).fetchone()[0]
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert version == 12
+    assert version == 13
     assert before == after
 
 
@@ -523,7 +523,7 @@ def test_migration_is_idempotent_and_backup_unique(tmp_path: Path) -> None:
                 " search_lesson FROM knowledge_memory_search ORDER BY rowid"
             ).fetchall(),
         ) == fts_snapshot
-    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    assert versions == [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
     backups = list((database_path.parent / "backups").glob("knowledge.v10.*.db"))
     assert len(backups) == 1
 
@@ -564,7 +564,7 @@ def test_v11_failure_injection_rolls_back_everything(
 
     # A re-run must succeed once the injection is cleared.
     migrate_database(database_path)
-    assert _read_schema_version(database_path) == 12
+    assert _read_schema_version(database_path) == 13
 
 
 # --- existing page FTS stability -------------------------------------------

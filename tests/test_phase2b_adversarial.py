@@ -194,7 +194,7 @@ def test_v10_migration_failure_injection_rolls_back_everything(
 
     # A re-run of the migration must succeed once the injection is cleared.
     migrate_database(database_path)
-    assert _read_schema_version(database_path) == 12
+    assert _read_schema_version(database_path) == 13
 
 
 # ------------------------------------------------------- mandatory area two
@@ -252,7 +252,7 @@ def test_non_empty_migration_creates_verified_v9_backup(tmp_path: Path) -> None:
     post_sha256 = hashlib.sha256(database_path.read_bytes()).hexdigest()
     backup_sha256 = hashlib.sha256(backup_path.read_bytes()).hexdigest()
     assert backup_sha256 != post_sha256  # 备份不是迁移后的副本
-    assert _read_schema_version(database_path) == 12
+    assert _read_schema_version(database_path) == 13
     assert pre_sha256  # 记录迁移前强指纹（报告引用）
 
     # 重复启动（无待迁移版本）不得再覆盖/新增备份。

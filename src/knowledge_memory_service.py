@@ -205,6 +205,75 @@ class KnowledgeMemoryService:
         except (ValueError, DatabaseError) as exc:
             raise KnowledgeMemoryValidationError(str(exc)) from exc
 
+    def promote_raw_qa_to_experience(
+        self,
+        raw_qa_id: int,
+        *,
+        title: str,
+        content: str,
+        root_cause: str = "",
+        lesson: str = "",
+        outcome: str = "",
+        context_conditions: str = "",
+        root_cause_confirmed: bool = False,
+    ) -> KnowledgeMemoryEntry:
+        """Turn one user-confirmed raw Q&A into a structured personal experience.
+
+        Boundary semantics (v0.7.0 Experience Capture):
+
+        - the source must be an *active* ``raw_qa`` entry; the raw copy itself
+          is never modified — promotion only adds a new structured record;
+        - ``citation_snapshot`` is copied verbatim from the source, so the
+          experience keeps the frozen citation history of the original save;
+        - ``creation_origin='agent_assisted'`` records that an AI
+          transformation produced the first draft; it is independent of
+          ``root_cause_confirmed``, which is only set through the explicit
+          user confirmation gesture and never flips automatically;
+        - ``source_entry_id`` / ``source_title`` keep the traceable link back
+          to the raw Q&A (Experience → Raw Q&A → citations → original page);
+        - no silent truncation: oversized fields are refused with clear
+          messages, exactly like the raw-QA save path.
+        """
+
+        source = self.get(raw_qa_id)
+        if source is None:
+            raise KnowledgeMemoryEntryNotFoundError(f"记忆条目不存在：{raw_qa_id}")
+        if source.kind is not KnowledgeMemoryEntryKind.RAW_QA:
+            raise KnowledgeMemoryValidationError(
+                "只有保存的问答才能整理成经验。"
+            )
+        if source.status is not KnowledgeMemoryStatus.ACTIVE:
+            raise KnowledgeMemoryValidationError(
+                "这条内容已被删除或归档，不能整理成经验。"
+            )
+        normalized_title = title.strip()
+        if not normalized_title:
+            raise KnowledgeMemoryValidationError("经验标题不能为空。")
+        normalized_content = content.strip()
+        if not normalized_content:
+            raise KnowledgeMemoryValidationError("经验内容不能为空。")
+        try:
+            return self._database.create_knowledge_memory_entry(
+                kind=KnowledgeMemoryEntryKind.EXPERIENCE,
+                title=normalized_title,
+                content=normalized_content,
+                root_cause=root_cause.strip(),
+                lesson=lesson.strip(),
+                knowledge_object_id=source.knowledge_object_id,
+                document_id=source.document_id,
+                page_id=source.page_id,
+                status=KnowledgeMemoryStatus.ACTIVE,
+                outcome=outcome.strip(),
+                context_conditions=context_conditions.strip(),
+                creation_origin="agent_assisted",
+                citation_snapshot=source.citation_snapshot,
+                source_entry_id=source.id,
+                source_title=source.title,
+                root_cause_confirmed=root_cause_confirmed,
+            )
+        except (ValueError, DatabaseError) as exc:
+            raise KnowledgeMemoryValidationError(str(exc)) from exc
+
     def create_raw_qa_entry(
         self,
         *,
