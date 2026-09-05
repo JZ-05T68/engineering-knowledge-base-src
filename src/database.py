@@ -2980,6 +2980,8 @@ class Database:
                     SELECT me.id, me.kind, me.title, me.content, me.root_cause,
                            me.lesson, me.status, me.updated_at,
                            me.knowledge_object_id, me.document_id, me.page_id,
+                           me.creation_origin, me.outcome, me.context_conditions,
+                           me.root_cause_confirmed,
                            bm25(knowledge_memory_search, 1.0, 1.0, 1.0, 1.0)
                                AS search_rank
                     FROM knowledge_memory_search
@@ -3050,6 +3052,14 @@ class Database:
                             ),
                             document_id=_optional_int(row["document_id"]),
                             page_id=_optional_int(row["page_id"]),
+                            creation_origin=(
+                                str(row["creation_origin"])
+                                if row["creation_origin"] is not None
+                                else None
+                            ),
+                            outcome=str(row["outcome"]),
+                            context_conditions=str(row["context_conditions"]),
+                            root_cause_confirmed=bool(row["root_cause_confirmed"]),
                         )
                     )
                 return results

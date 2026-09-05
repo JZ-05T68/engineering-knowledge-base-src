@@ -1513,6 +1513,13 @@ class KnowledgeSearchResult:
     document_id: int | None = None
     page_id: int | None = None
     source_anchors: tuple[tuple[str, int], ...] = ()
+    # v0.7.1 Experience Recall: memory-only recall semantics. Knowledge-object
+    # results keep the defaults; these fields let the agent express the
+    # authority boundary and applicability conditions of a recalled memory.
+    creation_origin: str | None = None
+    outcome: str = ""
+    context_conditions: str = ""
+    root_cause_confirmed: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -114,6 +114,9 @@ class ToolResultContextMapper:
         content = _first_text(data, *_CONTENT_KEYS) or _structured_summary(data)
         if not content:
             return None
+        note = _recall_presentation_note(data)
+        if note:
+            content = f"【表述要求】{note}\n\n{content}"
         anchors = _anchors_from_data(data) or _default_anchor(
             reference, context_type, local_id, title
         )
@@ -157,6 +160,9 @@ class ToolResultContextMapper:
         content = _first_text(row, *_CONTENT_KEYS)
         if not content:
             return None
+        note = _recall_presentation_note(row)
+        if note:
+            content = f"【表述要求】{note}\n\n{content}"
         anchors = _anchors_from_row(row) or _default_anchor(
             reference, context_type, local_id, title
         )
@@ -176,6 +182,36 @@ class ToolResultContextMapper:
             source_anchors=anchors,
             relation_refs=(),
         )
+
+
+def _recall_presentation_note(row: Mapping[str, object]) -> str | None:
+    """Return the recall phrasing rule for one memory row (v0.7.1).
+
+    Memory entries carry an authority boundary that must survive into the
+    answer-model context: the note is prepended to the projected content so
+    the phrasing rule is literally attached to the text it governs.
+    """
+
+    note = _optional_text(row.get("presentation_note"))
+    if note:
+        return note
+    kind = _optional_text(row.get("kind"))
+    if kind == "experience":
+        if row.get("root_cause_confirmed") is True:
+            return (
+                "这是用户整理过的经验：引用时必须先说明"
+                "“你之前整理过一条经验”，可以说“你确认过这个原因”。"
+            )
+        return (
+            "这是用户整理过的经验：引用时必须先说明"
+            "“你之前整理过一条经验”，并说明其中的原因判断“未经你确认”。"
+        )
+    if kind == "raw_qa":
+        return (
+            "这是用户保存过的问答副本，不是经验：引用时必须写"
+            "“你保存过的问答”，语气弱于经验，不得与经验并列成同等权威的依据。"
+        )
+    return None
 
 
 def _context_type(stable_id: str) -> ContextItemType | None:

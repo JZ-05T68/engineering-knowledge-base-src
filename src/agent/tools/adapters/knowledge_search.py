@@ -143,7 +143,38 @@ def _knowledge_result_to_dict(result: KnowledgeSearchResult) -> dict[str, object
             {"source_type": source_type, "source_id": source_id}
             for source_type, source_id in result.source_anchors
         ],
+        # v0.7.1 Experience Recall semantics (memory results only): the agent
+        # must weigh applicability conditions and the authority boundary before
+        # presenting a recalled memory as personal experience.
+        "creation_origin": result.creation_origin,
+        "outcome": result.outcome,
+        "context_conditions": result.context_conditions,
+        "root_cause_confirmed": result.root_cause_confirmed,
+        "presentation_note": _recall_presentation_note(result),
     }
+
+
+def _recall_presentation_note(result: KnowledgeSearchResult) -> str | None:
+    """Return the per-item phrasing rule the answer must follow."""
+
+    if result.result_type.value != "knowledge_memory":
+        return None
+    if result.kind == "experience":
+        if result.root_cause_confirmed:
+            return (
+                "这是用户整理过的经验：引用时必须先说明"
+                "“你之前整理过一条经验”，可以说“你确认过这个原因”。"
+            )
+        return (
+            "这是用户整理过的经验：引用时必须先说明"
+            "“你之前整理过一条经验”，并说明其中的原因判断“未经你确认”。"
+        )
+    if result.kind == "raw_qa":
+        return (
+            "这是用户保存过的问答副本，不是经验：引用时必须写"
+            "“你保存过的问答”，语气弱于经验，不得与经验并列成同等权威的依据。"
+        )
+    return None
 
 
 def _iso_or_none(value: datetime | None) -> str | None:
