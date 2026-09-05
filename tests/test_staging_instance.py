@@ -91,7 +91,7 @@ def test_staging_topology_is_fully_separate(tmp_path: Path) -> None:
     production = _production_settings(tmp_path / "prod")
     staging = staging_settings(tmp_path / "staging")
 
-    assert staging.port == STAGING_PORT == 8502
+    assert staging.port == STAGING_PORT == 8511
     assert production.port == OFFICIAL_PORT == 8501
     assert staging.host == production.host == "127.0.0.1"
     for field in PRODUCTION_LIKE_PATHS:

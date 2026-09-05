@@ -46,7 +46,7 @@ def active_settings() -> Settings:
 
     Production callers see ``get_settings()`` exactly as before; with
     ``--staging`` the manager operates on the isolated staging instance
-    (port 8502, staging pid/log/runtime paths) instead.
+    (port 8511, staging pid/log/runtime paths) instead.
     """
 
     return _ACTIVE_SETTINGS if _ACTIVE_SETTINGS is not None else get_settings()
@@ -501,7 +501,7 @@ def build_parser() -> argparse.ArgumentParser:
     start_parser = subparsers.add_parser("start", help="启动后台服务")
     start_parser.add_argument("--no-browser", action="store_true")
     start_parser.add_argument(
-        "--staging", action="store_true", help="管理隔离的 staging 实例（8502）"
+        "--staging", action="store_true", help="管理隔离的 staging 实例（8511）"
     )
     stop_parser = subparsers.add_parser("stop", help="停止本项目服务")
     stop_parser.add_argument(

@@ -15,7 +15,7 @@ from src.runtime_profile import RuntimeProfile, require_runtime_profile
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 OFFICIAL_HOST: Final[str] = "127.0.0.1"
 OFFICIAL_PORT: Final[int] = 8501
-STAGING_PORT: Final[int] = 8502
+STAGING_PORT: Final[int] = 8511
 DEFAULT_STAGING_ROOT: Final[Path] = PROJECT_ROOT / "staging-data"
 #: Environment flag selecting the staging instance inside an app process.
 STAGING_ENV_VAR: Final[str] = "EKB_STAGING_INSTANCE"
@@ -147,7 +147,7 @@ def staging_settings(root: Path | None = None) -> Settings:
 
     Every writable path (data / raw / pages / markdown / database / backups /
     logs / runtime) is derived under ``root`` — never the production
-    locations — and the staging endpoint is loopback ``STAGING_PORT`` (8502).
+    locations — and the staging endpoint is loopback ``STAGING_PORT`` (8511).
     Explicit constructor arguments outrank any ``EKB_*`` value in ``.env``,
     so a stray path override in the environment cannot break isolation; the
     AI credentials and model settings still resolve from ``.env`` as usual.

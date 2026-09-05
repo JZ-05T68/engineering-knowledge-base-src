@@ -404,7 +404,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--staging",
         action="store_true",
-        help="使用完全隔离的 AI staging 实例（独立数据根目录，端口 8502）",
+        help="使用完全隔离的 AI staging 实例（独立数据根目录，端口 8511）",
     )
     arguments = parser.parse_args(argv)
 

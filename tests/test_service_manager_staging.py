@@ -52,7 +52,7 @@ def _write_record(pid_path: Path, pid: int) -> None:
                 "pid": pid,
                 "project_root": str(manager.PROJECT_ROOT),
                 "python": str(manager.expected_python()),
-                "port": 8502,
+                "port": 8511,
                 "started_at": time.time(),
             }
         ),
@@ -86,7 +86,7 @@ def test_parser_accepts_staging_flag_on_lifecycle_commands() -> None:
 def test_runtime_settings_resolver(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(STAGING_ENV_VAR, "1")
     staging = config.runtime_settings()
-    assert staging.port == 8502
+    assert staging.port == 8511
     assert "staging-data" in str(staging.database_path)
 
     monkeypatch.delenv(STAGING_ENV_VAR)
@@ -103,7 +103,7 @@ def test_application_settings_uses_staging_when_flagged(
     try:
         runtime.application_settings.cache_clear()
         settings = runtime.application_settings()
-        assert settings.port == 8502
+        assert settings.port == 8511
         assert "staging-data" in str(settings.database_path)
     finally:
         runtime.application_settings.cache_clear()
@@ -127,7 +127,7 @@ def test_staging_pid_record_is_separate_from_production(
     assert staging.pid_path.is_file()
     record = json.loads(staging.pid_path.read_text(encoding="utf-8"))
     assert record["pid"] == 12345
-    assert record["port"] == 8502
+    assert record["port"] == 8511
     assert not production_pid.exists()
 
 
@@ -141,7 +141,7 @@ def test_stop_staging_never_touches_production_process(
         _write_record(production_pid, child.pid)
         staging = staging_settings(tmp_path / "staging")
         monkeypatch.setattr(manager, "_ACTIVE_SETTINGS", staging)
-        # 本机 8502 可能有真实 staging 服务；本测试只关心 stop 的进程作用域
+        # 本机 8511 可能有真实 staging 服务；本测试只关心 stop 的进程作用域
         monkeypatch.setattr(manager, "is_port_open", lambda port: False)
 
         # staging 无 PID 记录：stop 不得触碰 production 记录指向的进程
@@ -201,7 +201,7 @@ def test_instances_probe_independent_ports(
     staging = staging_settings(tmp_path / "staging")
     monkeypatch.setattr(manager, "_ACTIVE_SETTINGS", staging)
     manager.detect_state()
-    assert probed == [8502]
+    assert probed == [8511]
 
     probed.clear()
     monkeypatch.setattr(manager, "_ACTIVE_SETTINGS", None)

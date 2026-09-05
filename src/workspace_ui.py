@@ -82,7 +82,7 @@ def render_workspace(current: str) -> None:
         path: label for _, entries in _NAVIGATION for path, label, _ in entries
     }
     title = visible_titles.get(current, _HIDDEN_PAGE_TITLES.get(current, "当前页面"))
-    status = "预览环境" if os.environ.get("EKB_STAGING_INSTANCE") == "1" else "仅在本机运行"
+    status = "测试服 · 8511" if os.environ.get("EKB_STAGING_INSTANCE") == "1" else "仅在本机运行"
     st.markdown(
         '<div class="ekb-topbar"><span>我的 EKB'
         f'<span class="ekb-slash">/</span><b>{html.escape(title)}</b></span>'
